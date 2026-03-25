@@ -3,25 +3,76 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --app-bg: #e7ebf3;
+  --panel-blue: #3f4e77;
+  --panel-blue-hover: #354265;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  overscroll-behavior: none;
+  background: var(--app-bg);
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+/* Symbol cell animations */
+.symbol-cell {
+  transition: transform 120ms ease, box-shadow 140ms ease, border-color 140ms ease, filter 140ms ease;
+  transform-origin: center center;
+  will-change: transform;
+}
+.symbol-cell:active {
+  transform: scale(0.96);
+  filter: brightness(0.98);
+}
+
+/* Scanner highlight */
+.scanner-active {
+  outline: 4px solid #f59e0b;
+  outline-offset: 2px;
+}
+.scanner-selected {
+  background-color: #fbbf24 !important;
+}
+
+/* Phrase bar */
+.phrase-bar {
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+}
+
+.aac-top-button {
+  background: var(--panel-blue);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background-color 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+}
+
+.aac-top-button:hover {
+  background: var(--panel-blue-hover);
+  box-shadow: 0 6px 14px rgba(34, 43, 69, 0.22);
+}
+
+.aac-top-button:active {
+  transform: translateY(1px);
+}
+
+.aac-grid-surface {
+  background: #dfe5f0;
 }

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//private/tmp/**)",
+      "Bash(npx create-next-app@14 luma-grid --typescript --tailwind --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Bash(rm -rf luma-grid)",
+      "Bash(npx --yes create-next-app@14 luma-grid --typescript --tailwind --app --no-src-dir --import-alias \"@/*\" --eslint --no-git --yes)"
+    ]
+  }
+}
