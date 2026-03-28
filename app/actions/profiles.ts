@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import type { Profile } from '@/lib/supabase/types'
+import { effectiveSubscriptionPlan, getMaxProfiles } from '@/lib/subscription/plans'
 
 const DEFAULT_PROFILE_COLOR = '#6366f1'
 
@@ -42,6 +43,19 @@ export async function getProfiles() {
 export async function createProfile(data: { name: string, gender: string }) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
+
+    const owner = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { email: true, plan: true },
+    })
+    const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
+    const maxP = getMaxProfiles(plan)
+    const existing = await prisma.profile.count({ where: { userId: session.user.id } })
+    if (existing >= maxP) {
+        throw new Error(
+            `Tu plan permite hasta ${maxP} tablero(s). Actualiza el plan para crear más perfiles.`,
+        )
+    }
 
     const profile = await prisma.profile.create({
         data: {

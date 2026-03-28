@@ -54,7 +54,8 @@ export async function POST(req: Request) {
 
         const hashedPassword = await bcrypt.hash(password, 10)
 
-        const seed = [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES]
+        /** Plan Libre: máximo 60 botones totales (incl. carpetas). */
+        const seed = [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES].slice(0, 60)
 
         // Usuario + perfil en una transacción; símbolos con createMany (un INSERT masivo, más rápido que cientos de INSERT anidados).
         const user = await prisma.$transaction(async (tx) => {
@@ -63,6 +64,7 @@ export async function POST(req: Request) {
                     email,
                     password: hashedPassword,
                     name: name || null,
+                    planSelectionCompletedAt: null,
                     profiles: {
                         create: {
                             name: 'Demo Profile',

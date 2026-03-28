@@ -22,9 +22,12 @@ model User {
   charactersUsed         Int       @default(0) @map("characters_used")
   /// YYYY-MM para reset mensual del contador
   ttsBillingMonth        String    @default("") @map("tts_billing_month")
-  /// "free" | "pro"
-  plan                   String    @default("free") @map("plan")
-  profiles               Profile[]
+  /// "free" | "voice" | "identity" (legacy "pro" migrado a identity)
+  plan                     String    @default("free") @map("plan")
+  stripeCustomerId         String?   @map("stripe_customer_id")
+  /// null = debe elegir plan tras login/registro
+  planSelectionCompletedAt DateTime? @map("plan_selection_completed_at")
+  profiles                 Profile[]
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 }

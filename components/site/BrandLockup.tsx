@@ -8,6 +8,7 @@ type BrandLockupProps = {
   wordmarkWidth?: number
   subtitle?: string
   priority?: boolean
+  /** Clases del PNG del logo: nunca usar border-radius en el logo (marca con esquinas rectas). */
   iconClassName?: string
 }
 
@@ -18,7 +19,7 @@ export default function BrandLockup({
   wordmarkWidth = 172,
   subtitle,
   priority = false,
-  iconClassName = 'rounded-[18px] shadow-[var(--card-shadow)]',
+  iconClassName = 'rounded-none shadow-[var(--card-shadow)]',
 }: BrandLockupProps) {
   const content = (
     <div className={`flex items-center gap-3 ${className}`.trim()}>

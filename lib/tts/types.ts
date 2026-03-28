@@ -1,6 +1,7 @@
 export type TtsMode = 'browser' | 'preset' | 'custom'
 
-export type UserPlan = 'free' | 'pro'
+/** @deprecated use SubscriptionPlan from @/lib/subscription/plans */
+export type UserPlan = 'free' | 'voice' | 'identity'
 
 export type VoiceGender = 'male' | 'female'
 

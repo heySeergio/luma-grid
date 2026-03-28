@@ -7,16 +7,17 @@ import { getCachedTtsAudio, setCachedTtsAudio, ttsCacheKey } from '@/lib/tts/ser
 import { currentBillingMonth } from '@/lib/tts/billing'
 import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import { computeTtsPhraseKey, MAX_PHRASE_CACHE_CHARS, normalizePhraseForCache } from '@/lib/tts/phraseNormalize'
-import type { TtsMode, UserPlan } from '@/lib/tts/types'
+import type { TtsMode } from '@/lib/tts/types'
+import {
+  canUseElevenLabsPresets,
+  canUseVoiceCloning,
+  effectiveSubscriptionPlan,
+} from '@/lib/subscription/plans'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const MAX_TEXT_LEN = 8_000
-
-function normalizePlan(value: string | null | undefined): UserPlan {
-  return value === 'pro' ? 'pro' : 'free'
-}
 
 function normalizeTtsMode(value: string | null | undefined): TtsMode {
   if (value === 'preset' || value === 'custom' || value === 'browser') return value
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
       where: { id: session.user.id },
       select: {
         id: true,
+        email: true,
         ttsMode: true,
         voiceId: true,
         plan: true,
@@ -71,9 +73,18 @@ export async function POST(req: Request) {
       )
     }
 
-    const plan = normalizePlan(user.plan)
-    if (ttsMode === 'custom' && plan !== 'pro') {
-      return NextResponse.json({ error: 'Voz clonada solo en plan Pro' }, { status: 403 })
+    const plan = effectiveSubscriptionPlan(user.email, user.plan)
+    if (ttsMode === 'preset' && !canUseElevenLabsPresets(plan)) {
+      return NextResponse.json(
+        { error: 'Las voces naturales requieren plan Voz o Identidad.' },
+        { status: 403 },
+      )
+    }
+    if (ttsMode === 'custom' && !canUseVoiceCloning(plan)) {
+      return NextResponse.json(
+        { error: 'La voz clonada requiere plan Identidad.' },
+        { status: 403 },
+      )
     }
 
     const voiceId = user.voiceId

@@ -1,5 +1,7 @@
 import Link from 'next/link'
+import PricingCards from '@/components/plan/PricingCards'
 import BrandLockup from '@/components/site/BrandLockup'
+import PwaInstallButtons from '@/components/site/PwaInstallButtons'
 import SiteFooter from '@/components/site/SiteFooter'
 
 const features = [
@@ -44,7 +46,6 @@ export default function RootPage() {
               wordmarkWidth={148}
               subtitle="Comunicación Aumentativa y Alternativa"
               priority
-              iconClassName="rounded-none shadow-[var(--card-shadow)]"
             />
 
             <div className="flex items-center gap-2">
@@ -148,21 +149,34 @@ export default function RootPage() {
         </div>
       </section>
 
+      <section id="precios" className="border-y border-slate-200 bg-white/80 dark:border-white/10 dark:bg-slate-950/40">
+        <div className="mx-auto w-full max-w-6xl px-6 py-16 md:px-10">
+          <div className="mb-10 text-center md:text-left">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Planes y precios</p>
+            <h2 className="mt-3 text-2xl font-black text-slate-950 dark:text-white md:text-4xl">Elige cómo quieres hablar con Luma Grid</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-600 dark:text-slate-400 md:text-base">
+              Empieza gratis sin tarjeta. Escala a voces naturales ElevenLabs y más tableros cuando lo necesites.
+            </p>
+          </div>
+          <PricingCards variant="landing" />
+        </div>
+      </section>
+
       <section className="mx-auto w-full max-w-6xl px-6 py-16 md:px-10">
         <div className="rounded-3xl border border-indigo-300/30 bg-indigo-500/10 p-8 md:p-10 dark:border-indigo-300/30">
-          <h2 className="text-2xl font-black text-slate-950 dark:text-white md:text-4xl">Listo para usar en tablet, movil o escritorio</h2>
+          <h2 className="text-2xl font-black text-slate-950 dark:text-white md:text-4xl">Úsala como app en tu dispositivo</h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-700 dark:text-indigo-100/90 md:text-base">
-            Instalable como PWA, optimizada para uso diario y preparada para evolucionar con perfiles personalizados,
-            analitica de uso y gestion remota desde el panel de administracion.
+            Luma Grid es una PWA: puedes instalarla en la pantalla de inicio y abrirla como una aplicación. Los pasos dependen del sistema; lo
+            importante es hacerlos desde la página del <strong className="font-semibold text-slate-900 dark:text-white">tablero</strong> (
+            <Link href="/tablero" className="font-semibold underline decoration-indigo-400/80 underline-offset-2 hover:text-indigo-900 dark:hover:text-white">
+              /tablero
+            </Link>
+            ).
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/tablero" className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-100">
-              Entrar en la app
-            </Link>
-            <Link href="/admin" className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-white/60 dark:border-white/40 dark:text-white dark:hover:bg-white/10">
-              Ir al panel admin
-            </Link>
-          </div>
+          <p className="mt-3 max-w-3xl text-sm text-slate-600 dark:text-indigo-100/80">
+            Elige tu plataforma para ver la guía paso a paso.
+          </p>
+          <PwaInstallButtons />
         </div>
       </section>
 

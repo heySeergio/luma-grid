@@ -3,17 +3,17 @@ import { getSubscriptionGateState } from '@/app/actions/plan'
 import PlanGateClient from '@/components/plan/PlanGateClient'
 
 export const metadata: Metadata = {
-  title: 'Luma Grid',
+  title: 'Panel admin — Luma Grid',
 }
 
-export default async function TableroLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const initialGate = await getSubscriptionGateState()
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-[var(--app-bg)]">
       <PlanGateClient initialGate={initialGate}>{children}</PlanGateClient>
     </div>
   )

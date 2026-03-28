@@ -10,6 +10,10 @@ const pwaConfig = withPWA({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /** Evita errores MODULE_NOT_FOUND ./vendor-chunks/jose.js con NextAuth en build (Windows / PWA). */
+  experimental: {
+    serverComponentsExternalPackages: ['jose'],
+  },
   images: {
     remotePatterns: [
       {

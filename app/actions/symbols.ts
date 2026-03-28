@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+import { effectiveSubscriptionPlan, FREE_MAX_TOTAL_SYMBOLS } from '@/lib/subscription/plans'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
@@ -321,6 +322,27 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
     })
 
     if (!profile) throw new Error('Perfil no encontrado')
+
+    const owner = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { email: true, plan: true },
+    })
+    const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
+    if (plan === 'free') {
+        const symbolsOnOtherProfiles = await prisma.symbol.count({
+            where: {
+                profile: {
+                    userId: session.user.id,
+                    id: { not: profileId },
+                },
+            },
+        })
+        if (symbolsOnOtherProfiles + symbols.length > FREE_MAX_TOTAL_SYMBOLS) {
+            throw new Error(
+                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total (incluidas carpetas). Actualiza el plan o reduce símbolos.`,
+            )
+        }
+    }
 
     // Simplest way to sync: delete all and recreate, OR upsert.
     // Since we have IDs, we can update existing and create new ones.

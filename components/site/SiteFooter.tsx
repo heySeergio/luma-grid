@@ -9,6 +9,7 @@ import { updateThemePreference } from '@/app/actions/account'
 import BrandLockup from '@/components/site/BrandLockup'
 
 const FOOTER_LINKS = [
+  { href: '/instalar', label: 'Instalar app' },
   { href: '/branding', label: 'Branding' },
   { href: '/terminos', label: 'Términos y Condiciones' },
   { href: '/privacidad', label: 'Privacidad' },
@@ -74,7 +75,6 @@ export default function SiteFooter() {
           iconSize={40}
           wordmarkWidth={146}
           subtitle="Comunicación Aumentativa y Alternativa con una base visual, lingüística y accesible."
-          iconClassName="rounded-none shadow-[var(--card-shadow)]"
         />
 
         <nav className="flex flex-wrap gap-3 text-sm">

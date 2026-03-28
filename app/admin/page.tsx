@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { LayoutGrid, List, LockKeyhole, Mail, Monitor, Moon, Pencil, Play, Plus, Save, Settings, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { LayoutGrid, List, LockKeyhole, Mail, Mic, Monitor, Moon, Pencil, Play, Plus, Save, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
+import { createCustomerPortalSession, getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { previewLexemeDetection } from '@/app/actions/lexicon'
@@ -16,7 +17,9 @@ import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/action
 import { setProfileGender } from '@/lib/profileGender'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import BrandLockup from '@/components/site/BrandLockup'
+import type { SubscriptionPlan } from '@/lib/subscription/plans'
 import type { Symbol as BoardSymbol } from '@/lib/supabase/types'
 import {
   DEFAULT_SYMBOL_COLOR,
@@ -29,6 +32,27 @@ import {
 import { getSpanishPosLabel } from '@/lib/lexicon/posLabels'
 import { femaleVoices, maleVoices } from '@/lib/voice/elevenlabsPresets'
 import type { TtsMode } from '@/lib/tts/types'
+import {
+  blobToCloneFile,
+  CLONE_RECORD_MAX_MS,
+  CLONE_RECORD_MIN_MS,
+  pickRecorderMimeType,
+} from '@/lib/voice/cloneRecording'
+
+const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
+
+function subscriptionPlanLabel(plan: SubscriptionPlan): string {
+  switch (plan) {
+    case 'free':
+      return 'Libre'
+    case 'voice':
+      return 'Voz'
+    case 'identity':
+      return 'Identidad'
+    default:
+      return 'Libre'
+  }
+}
 
 type AdminProfile = {
   id: string
@@ -301,10 +325,20 @@ export default function AdminPage() {
   const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
   const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
   const [voiceMonthlyLimit, setVoiceMonthlyLimit] = useState(10_000)
-  const [voicePlan, setVoicePlan] = useState<'free' | 'pro'>('free')
+  const [voicePlan, setVoicePlan] = useState<SubscriptionPlan>('free')
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null)
+  const [showPlanPickerModal, setShowPlanPickerModal] = useState(false)
+  const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
+  const [subscriptionPortalBusy, setSubscriptionPortalBusy] = useState(false)
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
   const [cloneVoiceName, setCloneVoiceName] = useState('Mi voz AAC')
+  const [cloneRecording, setCloneRecording] = useState(false)
+  const [recordElapsedSec, setRecordElapsedSec] = useState(0)
   const cloneFileRef = useRef<HTMLInputElement | null>(null)
+  const cloneMediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const cloneMediaStreamRef = useRef<MediaStream | null>(null)
+  const cloneRecordChunksRef = useRef<Blob[]>([])
+  const cloneRecordStartedAtRef = useRef<number>(0)
   const [voicePreviewBusy, setVoicePreviewBusy] = useState(false)
   const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null)
   const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
@@ -322,10 +356,11 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     setLoadingData(true)
     try {
-      const [fetchedProfiles, fetchedAccountSettings, voiceSettings] = await Promise.all([
+      const [fetchedProfiles, fetchedAccountSettings, voiceSettings, gateState] = await Promise.all([
         getProfiles(),
         getAccountSettings(),
         getVoiceSettings(),
+        getSubscriptionGateState(),
       ])
       const normalizedAccountSettings = fetchedAccountSettings
         ? {
@@ -333,6 +368,10 @@ export default function AdminPage() {
             preferredTheme: normalizeThemePreference(fetchedAccountSettings.preferredTheme),
           }
         : null
+      if (gateState.signedIn) {
+        setStripeCustomerId(gateState.stripeCustomerId)
+      }
+
       setProfiles(fetchedProfiles)
       setAccountSettings(normalizedAccountSettings)
       setAccountName(normalizedAccountSettings?.name ?? '')
@@ -380,7 +419,85 @@ export default function AdminPage() {
     setAccountConfirmPassword('')
   }, [])
 
+  const abortCloneRecording = useCallback(() => {
+    const mr = cloneMediaRecorderRef.current
+    const stream = cloneMediaStreamRef.current
+    if (mr && mr.state !== 'inactive') {
+      mr.onstop = null
+      try {
+        mr.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+    stream?.getTracks().forEach((t) => t.stop())
+    cloneMediaRecorderRef.current = null
+    cloneMediaStreamRef.current = null
+    cloneRecordChunksRef.current = []
+    setCloneRecording(false)
+    setRecordElapsedSec(0)
+  }, [])
+
+  const openCustomVoiceMode = useCallback(() => {
+    if (voicePlan !== 'identity') {
+      setVoiceTtsMode('custom')
+      return
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        if (window.localStorage.getItem(VOICE_CLONE_DISCLAIMER_STORAGE_KEY) === '1') {
+          setVoiceTtsMode('custom')
+          return
+        }
+      } catch {
+        /* private mode / storage blocked */
+      }
+    }
+    setVoiceCloneDisclaimerOpen(true)
+  }, [voicePlan])
+
+  const acceptVoiceCloneDisclaimer = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(VOICE_CLONE_DISCLAIMER_STORAGE_KEY, '1')
+      }
+    } catch {
+      /* ignore */
+    }
+    setVoiceCloneDisclaimerOpen(false)
+    setVoiceTtsMode('custom')
+  }, [])
+
+  const cancelVoiceCloneDisclaimer = useCallback(() => {
+    setVoiceCloneDisclaimerOpen(false)
+  }, [])
+
+  const openSubscriptionPortal = useCallback(async () => {
+    setSubscriptionPortalBusy(true)
+    try {
+      const r = await createCustomerPortalSession()
+      if ('error' in r && r.error === 'no_customer') {
+        setShowPlanPickerModal(true)
+        return
+      }
+      if ('url' in r && r.url) {
+        window.location.href = r.url
+      }
+    } finally {
+      setSubscriptionPortalBusy(false)
+    }
+  }, [])
+
+  const handleSubscriptionClick = useCallback(() => {
+    if (stripeCustomerId) {
+      void openSubscriptionPortal()
+    } else {
+      setShowPlanPickerModal(true)
+    }
+  }, [stripeCustomerId, openSubscriptionPortal])
+
   const closeAccountSettingsModal = useCallback(() => {
+    abortCloneRecording()
     previewAudioRef.current?.pause()
     previewAudioRef.current = null
     if (previewBlobUrlRef.current) {
@@ -390,7 +507,7 @@ export default function AdminPage() {
     setPreviewPlayingVoiceId(null)
     resetPasswordFields()
     setShowAccountSettingsModal(false)
-  }, [resetPasswordFields])
+  }, [abortCloneRecording, resetPasswordFields])
 
   useEffect(() => {
     if (voiceTtsMode !== 'preset') return
@@ -471,32 +588,121 @@ export default function AdminPage() {
     }
   }, [])
 
-  const handleVoiceCloneUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || voicePlan !== 'pro') return
-    setVoiceCloneBusy(true)
+  const submitVoiceClone = useCallback(
+    async (file: File) => {
+      if (voicePlan !== 'identity') return
+      setVoiceCloneBusy(true)
+      setStatus('')
+      try {
+        const fd = new FormData()
+        fd.append('name', cloneVoiceName || 'Mi voz AAC')
+        fd.append('file', file)
+        const res = await fetch('/api/voice/clone', { method: 'POST', body: fd })
+        const data = (await res.json()) as { error?: string }
+        if (!res.ok) throw new Error(data.error || 'Error al clonar voz')
+        setVoiceTtsMode('custom')
+        setStatus('✅ Voz clonada. Ya puedes usarla en el tablero.')
+        await loadData()
+      } catch (err) {
+        setStatus(err instanceof Error ? `❌ ${err.message}` : '❌ Error al clonar')
+      } finally {
+        setVoiceCloneBusy(false)
+      }
+    },
+    [cloneVoiceName, voicePlan, loadData],
+  )
+
+  const handleVoiceCloneUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file || voicePlan !== 'identity') return
+      e.target.value = ''
+      await submitVoiceClone(file)
+    },
+    [submitVoiceClone, voicePlan],
+  )
+
+  const startCloneRecording = useCallback(async () => {
+    if (voicePlan !== 'identity') return
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setStatus('❌ Tu navegador no permite grabar audio. Usa «Subir archivo».')
+      return
+    }
     setStatus('')
     try {
-      const fd = new FormData()
-      fd.append('name', cloneVoiceName || 'Mi voz AAC')
-      fd.append('file', file)
-      const res = await fetch('/api/voice/clone', { method: 'POST', body: fd })
-      const data = (await res.json()) as { error?: string }
-      if (!res.ok) throw new Error(data.error || 'Error al clonar voz')
-      setVoiceTtsMode('custom')
-      setStatus('✅ Voz clonada. Ya puedes usarla en el tablero.')
-      await loadData()
-    } catch (err) {
-      setStatus(err instanceof Error ? `❌ ${err.message}` : '❌ Error al clonar')
-    } finally {
-      setVoiceCloneBusy(false)
-      e.target.value = ''
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      cloneMediaStreamRef.current = stream
+      cloneRecordChunksRef.current = []
+      const mime = pickRecorderMimeType()
+      const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+      cloneMediaRecorderRef.current = mr
+      mr.ondataavailable = (ev) => {
+        if (ev.data.size) cloneRecordChunksRef.current.push(ev.data)
+      }
+      mr.onerror = () => setStatus('❌ Error al grabar.')
+      cloneRecordStartedAtRef.current = Date.now()
+      mr.start(200)
+      setCloneRecording(true)
+      setRecordElapsedSec(0)
+    } catch {
+      setStatus('❌ No se pudo usar el micrófono. Permite el permiso o usa «Subir archivo».')
     }
-  }, [cloneVoiceName, voicePlan, loadData])
+  }, [voicePlan])
+
+  const stopCloneRecordingAndUpload = useCallback(async () => {
+    const mr = cloneMediaRecorderRef.current
+    const stream = cloneMediaStreamRef.current
+    if (!mr || mr.state === 'inactive') {
+      stream?.getTracks().forEach((t) => t.stop())
+      cloneMediaRecorderRef.current = null
+      cloneMediaStreamRef.current = null
+      setCloneRecording(false)
+      return
+    }
+    const duration = Date.now() - cloneRecordStartedAtRef.current
+
+    await new Promise<void>((resolve) => {
+      mr.onstop = () => resolve()
+      mr.stop()
+    })
+    stream?.getTracks().forEach((t) => t.stop())
+    cloneMediaRecorderRef.current = null
+    cloneMediaStreamRef.current = null
+    setCloneRecording(false)
+    setRecordElapsedSec(0)
+
+    if (duration < CLONE_RECORD_MIN_MS) {
+      cloneRecordChunksRef.current = []
+      setStatus('❌ Graba al menos 5 segundos (habla con claridad).')
+      return
+    }
+    if (duration > CLONE_RECORD_MAX_MS) {
+      cloneRecordChunksRef.current = []
+      setStatus('❌ Grabación demasiado larga (máx. 5 min).')
+      return
+    }
+    const chunks = cloneRecordChunksRef.current
+    cloneRecordChunksRef.current = []
+    const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' })
+    if (blob.size < 500) {
+      setStatus('❌ Grabación demasiado corta.')
+      return
+    }
+    const file = blobToCloneFile(blob)
+    await submitVoiceClone(file)
+  }, [submitVoiceClone])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    if (!cloneRecording) return
+    const id = window.setInterval(() => {
+      setRecordElapsedSec(Math.floor((Date.now() - cloneRecordStartedAtRef.current) / 1000))
+    }, 500)
+    return () => window.clearInterval(id)
+  }, [cloneRecording])
 
   useEffect(() => {
     if (!selectedProfileId) {
@@ -587,6 +793,11 @@ export default function AdminPage() {
 
     if (accountNewPassword && accountNewPassword !== accountConfirmPassword) {
       setStatus('❌ La nueva contraseña y su confirmación no coinciden.')
+      return
+    }
+
+    if (voiceTtsMode === 'custom' && voicePlan !== 'identity') {
+      setStatus('❌ La voz clonada requiere plan Pro. Elige otro modo de voz o actualiza tu plan.')
       return
     }
 
@@ -1434,6 +1645,25 @@ export default function AdminPage() {
 
               <form onSubmit={handleSaveAccountSettings} className="max-h-[calc(90vh-88px)] overflow-y-auto p-6">
                 <div className="grid gap-6 md:grid-cols-2">
+                  <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {stripeCustomerId
+                          ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
+                          : 'Activa un plan de pago o continúa con el plan Libre.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={subscriptionPortalBusy}
+                      onClick={() => handleSubscriptionClick()}
+                      className="shrink-0 rounded-2xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+                    >
+                      {subscriptionPortalBusy ? 'Abriendo…' : stripeCustomerId ? 'Gestionar suscripción' : 'Actualizar plan'}
+                    </button>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
@@ -1618,7 +1848,7 @@ export default function AdminPage() {
                       Voz (texto a voz)
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Plan {voicePlan === 'pro' ? 'Pro' : 'Gratis'} · Uso ElevenLabs este mes:{' '}
+                      Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
                       <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
                         {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
                       </span>
@@ -1646,14 +1876,14 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={voicePlan !== 'pro'}
-                        onClick={() => voicePlan === 'pro' && setVoiceTtsMode('custom')}
-                        title={voicePlan !== 'pro' ? 'Disponible en plan Pro' : undefined}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        onClick={() => openCustomVoiceMode()}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                         style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
                       >
                         Crear mi voz
-                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">Premium · clonación</span>
+                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">
+                          {voicePlan === 'identity' ? 'Plan Identidad · clonación' : 'Requiere plan Identidad'}
+                        </span>
                       </button>
                     </div>
 
@@ -1722,7 +1952,18 @@ export default function AdminPage() {
                       </div>
                     ) : null}
 
-                    {voiceTtsMode === 'custom' && voicePlan === 'pro' ? (
+                    {voiceTtsMode === 'custom' && voicePlan !== 'identity' ? (
+                      <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                        <p className="font-semibold">Plan Identidad necesario</p>
+                        <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                          La clonación de voz con ElevenLabs está incluida en el plan Identidad. Mientras tanto puedes usar «Voces naturales» (plan
+                          Voz o superior) o «Voz del sistema». Si ya tienes Identidad y ves este mensaje, comprueba tu suscripción o contacta con
+                          soporte.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {voiceTtsMode === 'custom' && voicePlan === 'identity' ? (
                       <div className="space-y-3">
                         <div className="space-y-1.5">
                           <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre de la voz clonada</label>
@@ -1741,16 +1982,55 @@ export default function AdminPage() {
                           className="hidden"
                           onChange={handleVoiceCloneUpload}
                         />
-                        <button
-                          type="button"
-                          disabled={voiceCloneBusy}
-                          onClick={() => cloneFileRef.current?.click()}
-                          className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
-                        >
-                          {voiceCloneBusy ? 'Creando voz…' : 'Subir audio'}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {!cloneRecording ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={voiceCloneBusy}
+                                onClick={() => void startCloneRecording()}
+                                className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                              >
+                                <Mic className="h-4 w-4" />
+                                {voiceCloneBusy ? 'Creando voz…' : 'Grabar con el micrófono'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={voiceCloneBusy}
+                                onClick={() => cloneFileRef.current?.click()}
+                                className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                              >
+                                <FolderOpen className="h-4 w-4" />
+                                Subir archivo
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex min-w-[8rem] items-center gap-2 rounded-2xl border border-red-400/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-700 dark:text-red-200">
+                                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
+                                Grabando {recordElapsedSec}s
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void stopCloneRecordingAndUpload()}
+                                className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                              >
+                                <Square className="h-4 w-4 fill-current" />
+                                Detener y crear voz
+                              </button>
+                              <button
+                                type="button"
+                                onClick={abortCloneRecording}
+                                className="ui-secondary-button rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                              >
+                                Cancelar
+                              </button>
+                            </>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Sube un clip claro (p. ej. MP3 o WAV). Tras crear la voz, pulsa &quot;Guardar configuración&quot; si cambias el modo.
+                          Grabación: mínimo 5 segundos, máximo 5 minutos. Habla en un sitio silencioso. También puedes subir MP3/WAV. Tras crear la
+                          voz, pulsa &quot;Guardar configuración&quot; si cambias el modo.
                         </p>
                       </div>
                     ) : null}
@@ -2382,6 +2662,76 @@ export default function AdminPage() {
           </div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {voiceCloneDisclaimerOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={cancelVoiceCloneDisclaimer}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="ui-modal-panel relative w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-200 dark:border-slate-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="border-b border-slate-200 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                    <ShieldAlert className="h-5 w-5" aria-hidden />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Clonación de voz con ElevenLabs</h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Solo se muestra la primera vez</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4 p-6 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                <p>
+                  Para crear tu voz personalizada, las <strong className="text-slate-900 dark:text-slate-100">grabaciones o archivos de audio</strong>{' '}
+                  que envíes se envían de forma segura a <strong className="text-slate-900 dark:text-slate-100">ElevenLabs</strong>, que los utiliza
+                  para entrenar y generar tu modelo de voz.
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Al continuar confirmas que has leído este aviso. El tratamiento de datos por parte de ElevenLabs se rige por sus condiciones y
+                  política de privacidad.
+                </p>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={cancelVoiceCloneDisclaimer}
+                    className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={acceptVoiceCloneDisclaimer}
+                    className="rounded-2xl bg-indigo-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400"
+                  >
+                    Entendido, continuar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <PlanPickerModal
+        open={showPlanPickerModal}
+        dismissable
+        onClose={() => setShowPlanPickerModal(false)}
+        onCompleted={() => {
+          setShowPlanPickerModal(false)
+          void loadData()
+        }}
+      />
     </div>
   )
 }

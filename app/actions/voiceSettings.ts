@@ -7,12 +7,14 @@ import { prisma } from '@/lib/prisma'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { ELEVENLABS_PRESET_VOICES } from '@/lib/voice/elevenlabsPresets'
 import { getMonthlyCharLimit } from '@/lib/tts/limits'
-import type { TtsMode, UserPlan } from '@/lib/tts/types'
+import type { TtsMode } from '@/lib/tts/types'
+import type { SubscriptionPlan } from '@/lib/subscription/plans'
+import { canUseElevenLabsPresets, canUseVoiceCloning, effectiveSubscriptionPlan } from '@/lib/subscription/plans'
 
 export type VoiceSettingsDto = {
   ttsMode: TtsMode
   voiceId: string | null
-  plan: UserPlan
+  plan: SubscriptionPlan
   charactersUsed: number
   ttsBillingMonth: string
   monthlyCharLimit: number
@@ -32,10 +34,6 @@ function normalizeTtsMode(value: string | null | undefined): TtsMode {
   return 'browser'
 }
 
-function normalizePlan(value: string | null | undefined): UserPlan {
-  return value === 'pro' ? 'pro' : 'free'
-}
-
 export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return null
@@ -44,6 +42,7 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
+        email: true,
         ttsMode: true,
         voiceId: true,
         plan: true,
@@ -54,7 +53,7 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
 
     if (!user) return null
 
-    const plan = normalizePlan(user.plan)
+    const plan = effectiveSubscriptionPlan(user.email, user.plan)
     return {
       ttsMode: normalizeTtsMode(user.ttsMode),
       voiceId: user.voiceId,
@@ -87,6 +86,7 @@ export async function updateVoiceSettings(data: {
     where: { id: session.user.id },
     select: {
       id: true,
+      email: true,
       plan: true,
       voiceId: true,
     },
@@ -94,10 +94,14 @@ export async function updateVoiceSettings(data: {
 
   if (!user) throw new Error('Usuario no encontrado')
 
-  const plan = normalizePlan(user.plan)
+  const plan = effectiveSubscriptionPlan(user.email, user.plan)
 
-  if (ttsMode === 'custom' && plan !== 'pro') {
-    throw new Error('La voz clonada requiere plan Pro.')
+  if (ttsMode === 'preset' && !canUseElevenLabsPresets(plan)) {
+    throw new Error('Las voces naturales requieren plan Voz o Identidad.')
+  }
+
+  if (ttsMode === 'custom' && !canUseVoiceCloning(plan)) {
+    throw new Error('La voz clonada requiere plan Identidad.')
   }
 
   let nextVoiceId: string | null =
