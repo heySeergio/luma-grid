@@ -24,6 +24,7 @@ import {
   normalizeSymbolColor,
   resolveSymbolColor,
 } from '@/lib/ui/symbolColors'
+import { getSpanishPosLabel } from '@/lib/lexicon/posLabels'
 
 type AdminProfile = {
   id: string
@@ -1175,7 +1176,7 @@ export default function AdminPage() {
                                     </div>
                                     <div>
                                       <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">{symbol.posType || 'Sin tipo'}</p>
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">{getSpanishPosLabel(symbol.posType)}</p>
                                     </div>
                                   </div>
                                 </td>
@@ -1526,7 +1527,7 @@ export default function AdminPage() {
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200">
-                                {lexemePreview.primaryPos ?? lexemePreview.symbolPosType}
+                                {getSpanishPosLabel(lexemePreview.primaryPos ?? lexemePreview.symbolPosType)}
                               </span>
                               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                                 {Math.round(lexemePreview.confidence * 100)}%
@@ -1563,7 +1564,7 @@ export default function AdminPage() {
                                       onClick={() => applyLexemeAlternative(alternative)}
                                       className="ui-chip rounded-full px-3 py-1 text-[11px] font-medium text-slate-700 transition hover:text-indigo-700 dark:text-slate-200 dark:hover:text-indigo-200"
                                     >
-                                      {alternative.lemma} · {alternative.primaryPos}
+                                      {alternative.lemma} · {getSpanishPosLabel(alternative.primaryPos)}
                                     </button>
                                   ))}
                                 </div>
@@ -1685,7 +1686,7 @@ export default function AdminPage() {
                       ) : (
                         <div className="space-y-1">
                           <p className="text-sm text-slate-600 dark:text-slate-300">
-                            Tipo actual: <span className="font-semibold">{lexemePreview?.symbolPosType ?? editingSymbol.posType ?? 'other'}</span>
+                            Tipo actual: <span className="font-semibold">{getSpanishPosLabel(lexemePreview?.symbolPosType ?? editingSymbol.posType ?? 'other')}</span>
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {lexemePreview
