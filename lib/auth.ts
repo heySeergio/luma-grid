@@ -1,6 +1,5 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "@/lib/prisma"
 import bcrypt from "bcrypt"
 
 function normalizeEmail(email: string) {
@@ -20,6 +19,7 @@ export const authOptions: NextAuthOptions = {
                     return null
                 }
 
+                const { prisma } = await import("@/lib/prisma")
                 const email = normalizeEmail(credentials.email)
                 const user = await prisma.user.findUnique({
                     where: { email }
