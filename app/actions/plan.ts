@@ -5,6 +5,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
+import { priceIdForCheckout } from '@/lib/stripe/plan-mapping'
+import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
 import { effectiveSubscriptionPlan, isSuperuserSubscriptionEmail, type SubscriptionPlan } from '@/lib/subscription/plans'
 
 export type SubscriptionGateState =
@@ -53,7 +55,7 @@ export async function completeFreePlanSelection() {
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
-      plan: 'free',
+      plan: 'libre',
       planSelectionCompletedAt: new Date(),
     },
   })
@@ -62,24 +64,11 @@ export async function completeFreePlanSelection() {
   revalidatePath('/admin')
 }
 
-function priceIdFor(planTier: 'voice' | 'identity', interval: 'month' | 'year'): string | null {
-  const m = interval === 'month'
-  const raw =
-    planTier === 'voice'
-      ? m
-        ? process.env.STRIPE_PRICE_VOICE_MONTHLY
-        : process.env.STRIPE_PRICE_VOICE_YEARLY
-      : m
-        ? process.env.STRIPE_PRICE_IDENTITY_MONTHLY
-        : process.env.STRIPE_PRICE_IDENTITY_YEARLY
-  return raw ?? null
-}
-
 export async function startSubscriptionCheckout(planTier: 'voice' | 'identity', interval: 'month' | 'year') {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) throw new Error('No autorizado')
 
-  const priceId = priceIdFor(planTier, interval)?.trim()
+  const priceId = priceIdForCheckout(planTier, interval)
   if (!priceId) {
     throw new Error('Precios Stripe no configurados (variables STRIPE_PRICE_*).')
   }
@@ -96,8 +85,8 @@ export async function startSubscriptionCheckout(planTier: 'voice' | 'identity', 
     mode: 'subscription',
     customer_email: user?.email ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/tablero?checkout=success`,
-    cancel_url: `${origin}/tablero?checkout=cancel`,
+    success_url: `${origin}/tablero?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/plan?cancel=1`,
     metadata: {
       userId: session.user.id,
       planTier,
@@ -122,22 +111,9 @@ export async function createCustomerPortalSession() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) throw new Error('No autorizado')
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { stripeCustomerId: true },
-  })
-
-  if (!user?.stripeCustomerId) {
+  const result = await createStripePortalSessionUrl(session.user.id)
+  if ('error' in result) {
     return { error: 'no_customer' as const }
   }
-
-  const origin = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '')
-  const stripe = getStripe()
-
-  const portal = await stripe.billingPortal.sessions.create({
-    customer: user.stripeCustomerId,
-    return_url: `${origin}/admin`,
-  })
-
-  return { url: portal.url }
+  return { url: result.url }
 }

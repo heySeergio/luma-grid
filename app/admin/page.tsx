@@ -7,7 +7,7 @@ import { LayoutGrid, List, LockKeyhole, Mail, Mic, Monitor, Moon, Pencil, Play, 
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
-import { createCustomerPortalSession, getSubscriptionGateState } from '@/app/actions/plan'
+import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { previewLexemeDetection } from '@/app/actions/lexicon'
@@ -475,13 +475,16 @@ export default function AdminPage() {
   const openSubscriptionPortal = useCallback(async () => {
     setSubscriptionPortalBusy(true)
     try {
-      const r = await createCustomerPortalSession()
-      if ('error' in r && r.error === 'no_customer') {
-        setShowPlanPickerModal(true)
+      const res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'include' })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok) {
+        if (data.error === 'no_customer') {
+          setShowPlanPickerModal(true)
+        }
         return
       }
-      if ('url' in r && r.url) {
-        window.location.href = r.url
+      if (data.url) {
+        window.location.href = data.url
       }
     } finally {
       setSubscriptionPortalBusy(false)
@@ -1649,9 +1652,11 @@ export default function AdminPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {stripeCustomerId
-                          ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
-                          : 'Activa un plan de pago o continúa con el plan Libre.'}
+                        {voicePlan === 'free'
+                          ? 'Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.'
+                          : stripeCustomerId
+                            ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
+                            : 'Completa el pago o elige un plan desde el selector para activar las prestaciones.'}
                       </p>
                     </div>
                     <button
@@ -1660,7 +1665,11 @@ export default function AdminPage() {
                       onClick={() => handleSubscriptionClick()}
                       className="shrink-0 rounded-2xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
                     >
-                      {subscriptionPortalBusy ? 'Abriendo…' : stripeCustomerId ? 'Gestionar suscripción' : 'Actualizar plan'}
+                      {subscriptionPortalBusy
+                        ? 'Abriendo…'
+                        : voicePlan === 'voice' || voicePlan === 'identity'
+                          ? 'Gestionar suscripción'
+                          : 'Actualizar plan'}
                     </button>
                   </div>
 

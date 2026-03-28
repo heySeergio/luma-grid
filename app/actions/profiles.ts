@@ -53,7 +53,7 @@ export async function createProfile(data: { name: string, gender: string }) {
     const existing = await prisma.profile.count({ where: { userId: session.user.id } })
     if (existing >= maxP) {
         throw new Error(
-            `Tu plan permite hasta ${maxP} tablero(s). Actualiza el plan para crear más perfiles.`,
+            `Tu plan permite hasta ${maxP} tablero(s). Visita /plan para elegir otro plan o, desde el admin, Configuración de la cuenta → Actualizar plan.`,
         )
     }
 

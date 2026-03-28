@@ -56,7 +56,7 @@ export default function InstalarPage() {
         <h1 className="text-3xl font-black text-slate-950 dark:text-white md:text-4xl">Instalar Luma Grid</h1>
         <p className="mt-4 text-base leading-relaxed text-slate-600 dark:text-slate-300">
           Luma Grid es una <strong className="font-semibold text-slate-800 dark:text-slate-200">aplicación web progresiva (PWA)</strong>.
-          Para añadirla a tu pantalla de inicio o instalarla como app, los pasos debes hacerlos estando en la{' '}
+          Para añadirla a tu pantalla de inicio o instalarla como app, debes seguir los pasos estando en la{' '}
           <strong className="font-semibold text-slate-800 dark:text-slate-200">página del tablero</strong>, no solo en la portada del sitio.
         </p>
 

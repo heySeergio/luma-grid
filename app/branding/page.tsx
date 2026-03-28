@@ -8,7 +8,7 @@ const primaryPalette = [
     name: 'Luma Indigo',
     token: '--accent',
     value: '#6366F1',
-    usage: 'Color principal de accion, llamadas primarias y elementos de identidad.',
+    usage: 'Color principal de acción, llamadas primarias y elementos de identidad.',
   },
   {
     name: 'Luma Indigo Light',
@@ -38,7 +38,7 @@ const semanticPalette = [
   {
     name: 'Foreground',
     token: '--app-foreground',
-    usage: 'Texto principal, iconografia y contraste base.',
+    usage: 'Texto principal, iconografía y contraste base.',
   },
   {
     name: 'Muted Foreground',
@@ -48,7 +48,7 @@ const semanticPalette = [
   {
     name: 'Border',
     token: '--app-border',
-    usage: 'Separadores, bordes suaves y contencion visual.',
+    usage: 'Separadores, bordes suaves y contención visual.',
   },
   {
     name: 'Predicted',
@@ -73,7 +73,7 @@ const symbolPalette = [
 ]
 
 const principles = [
-  'Claro primero: la interfaz debe entenderse sin explicacion previa.',
+  'Claro primero: la interfaz debe entenderse sin explicación previa.',
   'Calma visual: pocas capas, bordes suaves y movimiento sutil.',
   'Accesibilidad real: contraste alto y lectura inmediata.',
   'Consistencia: un mismo sistema visual para tablero, admin y marketing.',
@@ -267,7 +267,7 @@ export default function BrandingPage() {
             <h2 className="mt-2 text-3xl font-black text-[var(--app-foreground)]">Colores nucleares de marca</h2>
           </div>
           <p className="max-w-2xl text-sm text-[var(--app-muted-foreground)]">
-            Esta es la capa mas identitaria: accion, reconocimiento y consistencia visual en todo el ecosistema.
+            Esta es la capa más identitaria: acción, reconocimiento y consistencia visual en todo el ecosistema.
           </p>
         </div>
 
@@ -297,7 +297,7 @@ export default function BrandingPage() {
         <div className="mx-auto grid w-full max-w-7xl gap-8 px-6 py-16 md:px-10 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">
-              Sistema semantico
+              Sistema semántico
             </p>
             <h2 className="mt-2 text-3xl font-black text-[var(--app-foreground)]">
               Tokens preparados para claro y oscuro
@@ -330,14 +330,14 @@ export default function BrandingPage() {
         <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">
-              Paleta de simbolos
+              Paleta de símbolos
             </p>
             <h2 className="mt-2 text-3xl font-black text-[var(--app-foreground)]">
               Colores adaptativos para el sistema AAC
             </h2>
           </div>
           <p className="max-w-2xl text-sm text-[var(--app-muted-foreground)]">
-            Estos colores se adaptan automaticamente al modo claro y oscuro y son la base visual del tablero y del editor.
+            Estos colores se adaptan automáticamente al modo claro y oscuro y son la base visual del tablero y del editor.
           </p>
         </div>
 
@@ -365,7 +365,7 @@ export default function BrandingPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">
               Principios
             </p>
-            <h2 className="mt-2 text-2xl font-black text-[var(--app-foreground)]">Como debe sentirse Luma Grid</h2>
+            <h2 className="mt-2 text-2xl font-black text-[var(--app-foreground)]">Cómo debe sentirse Luma Grid</h2>
             <ul className="mt-5 space-y-3">
               {principles.map((principle) => (
                 <li

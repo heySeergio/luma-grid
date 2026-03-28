@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { Heart } from 'lucide-react'
 import PricingCards from '@/components/plan/PricingCards'
 import BrandLockup from '@/components/site/BrandLockup'
+import DonationPartnerLogos from '@/components/site/DonationPartnerLogos'
 import PwaInstallButtons from '@/components/site/PwaInstallButtons'
 import SiteFooter from '@/components/site/SiteFooter'
 
@@ -34,7 +36,7 @@ const modules = [
 
 export default function RootPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <main className="min-h-screen select-none bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 [&_a]:select-text [&_button]:select-text [&_input]:select-text [&_select]:select-text [&_textarea]:select-text">
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.12),transparent_35%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.32),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.2),transparent_35%)]" />
 
@@ -67,15 +69,15 @@ export default function RootPage() {
           <div className="grid items-center gap-10 md:grid-cols-2">
             <div className="space-y-6">
               <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-300/25 dark:text-emerald-200">
-                PWA pensada para comunicacion asistida
+                PWA pensada para comunicación asistida
               </p>
 
               <h1 className="text-4xl font-black leading-tight text-slate-950 dark:text-white md:text-6xl">
-                La voz digital que acompana cada conversacion.
+                La voz digital que acompaña cada conversación.
               </h1>
 
               <p className="max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300 md:text-lg">
-                Luma Grid ayuda a personas con dificultades de comunicacion verbal a construir frases con simbolos,
+                Luma Grid ayuda a personas con dificultades de comunicación verbal a construir frases con símbolos,
                 conjugarlas en lenguaje natural y reproducirlas al instante con una voz clara.
               </p>
 
@@ -98,7 +100,7 @@ export default function RootPage() {
             <div className="rounded-3xl border border-slate-200 bg-white/60 p-4 backdrop-blur dark:border-white/15 dark:bg-white/5">
               <div className="grid gap-3 rounded-2xl bg-white/80 p-4 dark:bg-slate-900/80">
                 <div className="grid grid-cols-3 gap-2">
-                  {['Yo', 'Querer', 'Agua', 'Tu', 'Ir', 'Parque', 'Feliz', 'No', 'Ahora'].map(item => (
+                  {['Yo', 'Querer', 'Agua', 'Tú', 'Ir', 'Parque', 'Feliz', 'No', 'Ahora'].map(item => (
                     <div
                       key={item}
                       className="rounded-xl border border-slate-200 bg-white px-2 py-3 text-center text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
@@ -119,8 +121,8 @@ export default function RootPage() {
 
       <section className="mx-auto w-full max-w-6xl px-6 py-16 md:px-10">
         <div className="mb-8 flex items-end justify-between gap-4">
-          <h2 className="text-2xl font-bold text-slate-950 dark:text-white md:text-3xl">Por que Luma Grid</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Diseo limpio, alto contraste, enfoque en autonomia</p>
+          <h2 className="text-2xl font-bold text-slate-950 dark:text-white md:text-3xl">Por qué Luma Grid</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Diseño limpio, alto contraste, enfoque en autonomía</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -136,7 +138,7 @@ export default function RootPage() {
       <section className="border-y border-slate-200 bg-slate-100/80 dark:border-white/10 dark:bg-slate-900/60">
         <div className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-16 md:grid-cols-2 md:px-10">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Modulos principales</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Módulos principales</p>
             <h2 className="mt-3 text-2xl font-bold text-slate-950 dark:text-white md:text-3xl">Todo el flujo AAC en una sola app</h2>
           </div>
           <ul className="space-y-3">
@@ -159,6 +161,15 @@ export default function RootPage() {
             </p>
           </div>
           <PricingCards variant="landing" />
+          <div className="mx-auto mt-8 max-w-3xl md:mt-10">
+            <p className="flex items-start justify-center gap-2 text-left text-xs leading-relaxed text-slate-500 dark:text-slate-400 md:text-sm">
+              <Heart className="mt-0.5 h-4 w-4 shrink-0 text-rose-500/90 dark:text-rose-400/90" strokeWidth={2} aria-hidden />
+              <span>
+                El 1% del beneficio neto de Luma Grid se dona trimestralmente a ARASAAC, Confederación Autismo España y Protectora Huellas Ávila.
+              </span>
+            </p>
+            <DonationPartnerLogos className="mt-5" />
+          </div>
         </div>
       </section>
 

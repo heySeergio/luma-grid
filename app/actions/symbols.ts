@@ -339,7 +339,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         })
         if (symbolsOnOtherProfiles + symbols.length > FREE_MAX_TOTAL_SYMBOLS) {
             throw new Error(
-                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total (incluidas carpetas). Actualiza el plan o reduce símbolos.`,
+                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total (incluidas carpetas). Visita /plan para ampliar el plan o reduce símbolos.`,
             )
         }
     }

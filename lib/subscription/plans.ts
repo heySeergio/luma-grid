@@ -12,10 +12,13 @@ export function isSuperuserSubscriptionEmail(email: string | null | undefined): 
   return normalizeEmailForPlan(email) === SUPERUSER_EMAIL_NORMALIZED
 }
 
-/** Acepta legacy "pro" desde BD antes de migración. */
+/** Acepta valores en BD (libre/voz/identidad) y legacy en inglés. */
 export function normalizeSubscriptionPlan(raw: string | null | undefined): SubscriptionPlan {
-  if (raw === 'voice' || raw === 'identity') return raw
-  if (raw === 'pro') return 'identity'
+  if (!raw) return 'free'
+  const r = raw.toLowerCase().trim()
+  if (r === 'voice' || r === 'voz') return 'voice'
+  if (r === 'identity' || r === 'identidad' || r === 'pro') return 'identity'
+  if (r === 'free' || r === 'libre') return 'free'
   return 'free'
 }
 

@@ -89,6 +89,18 @@ export default function SiteFooter() {
           ))}
         </nav>
         </div>
+
+        <div className="border-t border-[var(--app-border)] pt-6">
+          <div className="flex flex-col gap-2 text-xs leading-relaxed text-[var(--app-muted-foreground)] sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3 sm:gap-y-1">
+            <span className="shrink-0">© {new Date().getFullYear()} Luma Grid</span>
+            <span className="hidden text-[var(--app-border)] sm:inline" aria-hidden>
+              ·
+            </span>
+            <span>
+              El 1% del beneficio neto de Luma Grid se dona trimestralmente a ARASAAC, Confederación Autismo España y Protectora Huellas Ávila.
+            </span>
+          </div>
+        </div>
       </div>
     </footer>
   )

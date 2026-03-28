@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       if (effectiveUsed + trimmed.length > limit) {
         return NextResponse.json(
           {
-            error: `Límite mensual de caracteres ElevenLabs alcanzado (${limit}).`,
+            error: `Límite mensual de caracteres ElevenLabs alcanzado (${limit}). Amplía el plan en /plan o desde el admin (Configuración de la cuenta).`,
             code: 'QUOTA_EXCEEDED',
           },
           { status: 429 },
