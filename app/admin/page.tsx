@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
+import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
 import BrandLockup from '@/components/site/BrandLockup'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
 import type { Symbol as BoardSymbol } from '@/lib/supabase/types'
@@ -42,6 +43,9 @@ import {
 
 const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
 const ADMIN_FREE_PLAN_UPSELL_SESSION_KEY = 'luma_admin_free_plan_upsell_session'
+
+/** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
+const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...', 'Guardando cambios en la nube...'])
 
 function subscriptionPlanLabel(plan: SubscriptionPlan): string {
   switch (plan) {
@@ -332,6 +336,7 @@ export default function AdminPage() {
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null)
   const [showPlanPickerModal, setShowPlanPickerModal] = useState(false)
   const [showFreePlanUpsell, setShowFreePlanUpsell] = useState(false)
+  const [showVoicePlanRequiredModal, setShowVoicePlanRequiredModal] = useState(false)
   const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
   const [subscriptionPortalBusy, setSubscriptionPortalBusy] = useState(false)
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
@@ -348,6 +353,9 @@ export default function AdminPage() {
   const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewBlobUrlRef = useRef<string | null>(null)
+
+  const canUsePresetVoices = voiceSubscriptionActive && (voicePlan === 'voice' || voicePlan === 'identity')
+  const canUseCustomVoice = voiceSubscriptionActive && voicePlan === 'identity'
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -705,6 +713,13 @@ export default function AdminPage() {
     loadData()
   }, [loadData])
 
+  useEffect(() => {
+    if (!status) return
+    if (ADMIN_STATUS_SKIP_AUTO_DISMISS.has(status)) return
+    const id = window.setTimeout(() => setStatus(''), 7000)
+    return () => window.clearTimeout(id)
+  }, [status])
+
   const dismissFreePlanUpsell = useCallback(() => {
     try {
       sessionStorage.setItem(ADMIN_FREE_PLAN_UPSELL_SESSION_KEY, '1')
@@ -726,6 +741,7 @@ export default function AdminPage() {
     } catch {
       return
     }
+    if (Math.random() >= 0.2) return
     setShowFreePlanUpsell(true)
   }, [loadingData, voicePlan])
 
@@ -1192,8 +1208,8 @@ export default function AdminPage() {
     previewGridCols * ADMIN_MIN_CELL_PX + (previewGridCols - 1) * ADMIN_GRID_GAP_PX
 
   return (
-    <div className="theme-page-shell min-h-screen overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
-      <div className="mx-auto max-w-7xl">
+    <div className="theme-page-shell min-h-screen min-w-0 overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
+      <div className="mx-auto min-w-0 max-w-7xl">
         <header className="app-panel mb-6 flex flex-col items-stretch gap-4 rounded-2xl p-4 sm:mb-8 sm:p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
             <BrandLockup
@@ -1225,8 +1241,16 @@ export default function AdminPage() {
         </header>
 
         {status && (
-          <div className="mb-6 rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
-            {status}
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 pl-4 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 sm:items-center sm:p-4">
+            <p className="min-w-0 flex-1 leading-relaxed">{status}</p>
+            <button
+              type="button"
+              onClick={() => setStatus('')}
+              className="ui-icon-button -mr-1 -mt-0.5 shrink-0 rounded-lg p-1.5 text-emerald-700/80 hover:bg-emerald-700/10 hover:text-emerald-900 dark:text-emerald-200/90 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-100"
+              aria-label="Cerrar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
@@ -1235,9 +1259,9 @@ export default function AdminPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-4">
             {/* Sidebar */}
-            <div className="space-y-6 lg:col-span-1">
+            <div className="min-w-0 space-y-6 lg:col-span-1">
               <div className="app-panel rounded-2xl p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1363,9 +1387,9 @@ export default function AdminPage() {
             </div>
 
             {/* Main Area */}
-            <div className="lg:col-span-3">
+            <div className="min-w-0 lg:col-span-3">
               {viewMode === 'grid' ? (
-                <div className="app-panel rounded-2xl p-4 sm:p-6">
+                <div className="app-panel min-w-0 overflow-hidden rounded-2xl p-4 sm:p-6">
                   <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -1384,7 +1408,7 @@ export default function AdminPage() {
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   >
-                    <div className="overflow-x-auto rounded-[1.8rem] pb-1">
+                    <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-[1.8rem] pb-1 [-webkit-overflow-scrolling:touch]">
                       <div
                         className="aac-grid-surface grid min-h-[min(500px,70dvh)] min-w-0 content-start gap-2 p-4 sm:min-h-[500px]"
                         style={{
@@ -1503,7 +1527,7 @@ export default function AdminPage() {
                   </DndContext>
                 </div>
               ) : (
-                <div className="app-panel overflow-hidden rounded-2xl">
+                <div className="app-panel min-w-0 overflow-hidden rounded-2xl">
                   <div className="border-b border-[var(--app-border)] px-6 py-5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
@@ -1694,7 +1718,21 @@ export default function AdminPage() {
                       <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {voicePlan === 'free'
-                          ? 'Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.'
+                          ? (
+                            <>
+                              {accountEmail ? (
+                                <span className="block font-medium text-slate-700 dark:text-slate-300">
+                                  Correo en plan Libre:{' '}
+                                  <span className="font-mono text-slate-900 dark:text-slate-100">{accountEmail}</span>
+                                </span>
+                              ) : (
+                                <span className="block font-medium text-slate-700 dark:text-slate-300">Tu cuenta está en el plan Libre.</span>
+                              )}
+                              <span className="mt-1 block">
+                                Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.
+                              </span>
+                            </>
+                          )
                           : stripeCustomerId
                             ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
                             : 'Completa el pago o elige un plan desde el selector para activar las prestaciones.'}
@@ -1925,9 +1963,14 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={!voiceSubscriptionActive}
-                        onClick={() => voiceSubscriptionActive && setVoiceTtsMode('preset')}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        onClick={() => {
+                          if (!canUsePresetVoices) {
+                            setShowVoicePlanRequiredModal(true)
+                            return
+                          }
+                          setVoiceTtsMode('preset')
+                        }}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                         style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
                       >
                         Voces naturales
@@ -1935,9 +1978,14 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={!voiceSubscriptionActive}
-                        onClick={() => voiceSubscriptionActive && openCustomVoiceMode()}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        onClick={() => {
+                          if (!canUseCustomVoice) {
+                            setShowVoicePlanRequiredModal(true)
+                            return
+                          }
+                          openCustomVoiceMode()
+                        }}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                         style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
                       >
                         Crear mi voz
@@ -2136,7 +2184,7 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,880px)] sm:max-w-2xl sm:rounded-[2rem] lg:max-w-3xl"
+              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,880px)] sm:max-w-2xl sm:rounded-[2rem] lg:max-w-5xl xl:max-w-6xl"
             >
               <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="pr-2 text-lg font-bold text-slate-800 sm:text-xl dark:text-slate-100">
@@ -2148,8 +2196,8 @@ export default function AdminPage() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  {/* Left Column */}
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  {/* Columna 1 — texto y gramática */}
                   <div className="space-y-4">
                     <div>
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Etiqueta</label>
@@ -2224,44 +2272,6 @@ export default function AdminPage() {
                             El sistema intentará detectar automáticamente el tipo de palabra al guardar.
                           </p>
                         )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Emoji / Icono texto</label>
-                      <input
-                        type="text"
-                        value={editingSymbol.emoji || ''}
-                        onChange={e => setEditingSymbol({ ...editingSymbol, emoji: e.target.value })}
-                        className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                        placeholder="🍎"
-                      />
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Selector de emoji</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditingSymbol({ ...editingSymbol, emoji: '' })}
-                          className="shrink-0 text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                        >
-                          Quitar emoji
-                        </button>
-                      </div>
-                      <div className="ui-floating-panel mt-2 grid max-h-56 grid-cols-5 gap-2 overflow-y-auto rounded-2xl p-3 sm:grid-cols-6 md:grid-cols-7">
-                        {EMOJI_OPTIONS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => setEditingSymbol({ ...editingSymbol, emoji })}
-                            className={`grid h-10 w-full place-items-center rounded-lg border text-xl leading-none transition ${
-                              editingSymbol.emoji === emoji
-                                ? 'border-indigo-500 bg-indigo-50 shadow-sm'
-                                : 'ui-icon-button border-transparent'
-                            }`}
-                            aria-label={`Seleccionar emoji ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
                       </div>
                     </div>
 
@@ -2361,8 +2371,46 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  {/* Right Column */}
+                  {/* Columna 2 — emoji e imagen */}
                   <div className="space-y-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Emoji / Icono texto</label>
+                      <input
+                        type="text"
+                        value={editingSymbol.emoji || ''}
+                        onChange={e => setEditingSymbol({ ...editingSymbol, emoji: e.target.value })}
+                        className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                        placeholder="🍎"
+                      />
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Selector de emoji</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSymbol({ ...editingSymbol, emoji: '' })}
+                          className="shrink-0 text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                          Quitar emoji
+                        </button>
+                      </div>
+                      <div className="ui-floating-panel mt-2 grid max-h-56 grid-cols-4 gap-2 overflow-y-auto rounded-2xl p-3 sm:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5">
+                        {EMOJI_OPTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => setEditingSymbol({ ...editingSymbol, emoji })}
+                            className={`grid h-10 w-full place-items-center rounded-lg border text-xl leading-none transition ${
+                              editingSymbol.emoji === emoji
+                                ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                                : 'ui-icon-button border-transparent'
+                            }`}
+                            aria-label={`Seleccionar emoji ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div>
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Imagen Personalizada</label>
                       <div className="ui-floating-panel flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-4 transition hover:border-indigo-400">
@@ -2379,7 +2427,10 @@ export default function AdminPage() {
                         </label>
                       </div>
                     </div>
+                  </div>
 
+                  {/* Columna 3 — color y estado en tablero */}
+                  <div className="space-y-4">
                     <div>
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Color de fondo</label>
                       <div className="mb-3 flex flex-wrap gap-2">
@@ -2786,7 +2837,11 @@ export default function AdminPage() {
       </AnimatePresence>
 
       {showFreePlanUpsell ? (
-        <AdminFreePlanUpsellModal open onDismiss={dismissFreePlanUpsell} />
+        <AdminFreePlanUpsellModal open={showFreePlanUpsell} onDismiss={dismissFreePlanUpsell} />
+      ) : null}
+
+      {showVoicePlanRequiredModal ? (
+        <VoicePlanRequiredModal open onDismiss={() => setShowVoicePlanRequiredModal(false)} />
       ) : null}
 
       <PlanPickerModal

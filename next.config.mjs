@@ -1,6 +1,11 @@
 import withPWA from 'next-pwa'
 
-const pwaConfig = withPWA({
+/**
+ * next-pwa solo en producción: en `next dev` el wrapper puede romper la generación de
+ * `.next/server/middleware-manifest.json` (MODULE_NOT_FOUND en Windows).
+ * En desarrollo se exporta la config plana de Next.
+ */
+const withPwaWrapped = withPWA({
   dest: 'public',
   register: true,
   skipWaiting: true,
@@ -28,4 +33,4 @@ const nextConfig = {
   },
 }
 
-export default pwaConfig(nextConfig)
+export default process.env.NODE_ENV === 'development' ? nextConfig : withPwaWrapped(nextConfig)

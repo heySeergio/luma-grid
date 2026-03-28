@@ -40,6 +40,11 @@ export default function PlanPickerModal({ open, dismissable = false, onClose, on
     setBusy(true)
     try {
       const r = await startSubscriptionCheckout(tier, interval)
+      if (!r.ok) {
+        setError(r.message)
+        setBusy(false)
+        return
+      }
       window.location.href = r.url
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo iniciar el pago.')
@@ -71,7 +76,9 @@ export default function PlanPickerModal({ open, dismissable = false, onClose, on
           </div>
 
           {error ? (
-            <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-100">{error}</p>
+            <p className="mb-4 max-w-2xl rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-100 break-words">
+              {error}
+            </p>
           ) : null}
 
           <div className="rounded-3xl border border-white/10 bg-white/95 p-6 shadow-2xl dark:bg-slate-900/95">

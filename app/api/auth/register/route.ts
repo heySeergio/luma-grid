@@ -40,6 +40,13 @@ export async function POST(req: Request) {
         const email = typeof body.email === 'string' ? normalizeEmail(body.email) : ''
         const password = typeof body.password === 'string' ? body.password : ''
         const name = typeof body.name === 'string' ? body.name.trim() : ''
+        const genderRaw =
+            typeof body.communicationGender === 'string'
+                ? body.communicationGender.trim().toLowerCase()
+                : typeof body.gender === 'string'
+                  ? body.gender.trim().toLowerCase()
+                  : ''
+        const profileGender: 'male' | 'female' = genderRaw === 'female' ? 'female' : 'male'
 
         if (!email || !password) {
             return NextResponse.json({ error: 'Email y contraseña requeridos' }, { status: 400 })
@@ -84,7 +91,7 @@ export async function POST(req: Request) {
                         create: {
                             name: 'Demo Profile',
                             isDemo: true,
-                            gender: 'male',
+                            gender: profileGender,
                         },
                     },
                 },

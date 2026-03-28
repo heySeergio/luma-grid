@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { elevenLabsTextToSpeech } from '@/lib/elevenlabs/server'
 import { getCachedTtsAudio, setCachedTtsAudio, ttsCacheKey } from '@/lib/tts/serverAudioCache'
 import { currentBillingMonth } from '@/lib/tts/billing'
-import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import { computeTtsPhraseKey, MAX_PHRASE_CACHE_CHARS, normalizePhraseForCache } from '@/lib/tts/phraseNormalize'
 import type { TtsMode } from '@/lib/tts/types'
 import {
@@ -141,19 +140,11 @@ export async function POST(req: Request) {
 
     if (!buffer) {
       const month = currentBillingMonth()
-      const limit = getMonthlyCharLimit(plan)
       const effectiveUsed =
         user.ttsBillingMonth === month ? user.charactersUsed : 0
 
-      if (effectiveUsed + trimmed.length > limit) {
-        return NextResponse.json(
-          {
-            error: `Límite mensual de caracteres ElevenLabs alcanzado (${limit}). Amplía el plan en /plan o desde el admin (Configuración de la cuenta).`,
-            code: 'QUOTA_EXCEEDED',
-          },
-          { status: 429 },
-        )
-      }
+      // No bloqueamos por cuota mensual: planes Voz/Identidad pueden superar la cifra informada en el admin.
+      // El contador sigue sumando para estadísticas.
 
       const audio = await elevenLabsTextToSpeech(apiKey, { voiceId, text: trimmed })
       buffer = Buffer.from(audio)

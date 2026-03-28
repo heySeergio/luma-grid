@@ -62,13 +62,30 @@ export async function completeFreePlanSelection() {
   revalidatePath('/admin')
 }
 
-export async function startSubscriptionCheckout(planTier: 'voice' | 'identity', interval: 'month' | 'year') {
+export type StartSubscriptionCheckoutResult =
+  | { ok: true; url: string }
+  | { ok: false; message: string }
+
+/**
+ * Inicia Checkout de Stripe. No lanza por configuración ausente: devuelve `{ ok: false, message }`
+ * para que el cliente muestre el aviso sin error 500.
+ */
+export async function startSubscriptionCheckout(
+  planTier: 'voice' | 'identity',
+  interval: 'month' | 'year',
+): Promise<StartSubscriptionCheckoutResult> {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) throw new Error('No autorizado')
+  if (!session?.user?.id) {
+    return { ok: false, message: 'No autorizado.' }
+  }
 
   const priceId = priceIdForCheckout(planTier, interval)
   if (!priceId) {
-    throw new Error('Precios Stripe no configurados (variables STRIPE_PRICE_*).')
+    return {
+      ok: false,
+      message:
+        'Los precios de Stripe no están configurados en el servidor. Añade en .env.local los IDs de precio (price_…) de Stripe: STRIPE_PRICE_VOZ_MONTHLY, STRIPE_PRICE_VOZ_YEARLY, STRIPE_PRICE_IDENTIDAD_MONTHLY y STRIPE_PRICE_IDENTIDAD_YEARLY. Consulta .env.example.',
+    }
   }
 
   const user = await prisma.user.findUnique({
@@ -77,32 +94,38 @@ export async function startSubscriptionCheckout(planTier: 'voice' | 'identity', 
   })
 
   const origin = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '')
-  const stripe = getStripe()
 
-  const checkoutSession = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer_email: user?.email ?? undefined,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/tablero?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/plan?cancel=1`,
-    metadata: {
-      userId: session.user.id,
-      planTier,
-      billingInterval: interval,
-    },
-    subscription_data: {
+  try {
+    const stripe = getStripe()
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      allow_promotion_codes: true,
+      customer_email: user?.email ?? undefined,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/tablero?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/plan?cancel=1`,
       metadata: {
         userId: session.user.id,
         planTier,
+        billingInterval: interval,
       },
-    },
-  })
+      subscription_data: {
+        metadata: {
+          userId: session.user.id,
+          planTier,
+        },
+      },
+    })
 
-  if (!checkoutSession.url) {
-    throw new Error('Stripe no devolvió URL de checkout.')
+    if (!checkoutSession.url) {
+      return { ok: false, message: 'Stripe no devolvió URL de checkout.' }
+    }
+
+    return { ok: true, url: checkoutSession.url }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error al crear la sesión de pago.'
+    return { ok: false, message: msg }
   }
-
-  return { url: checkoutSession.url }
 }
 
 export async function createCustomerPortalSession() {

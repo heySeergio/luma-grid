@@ -14,6 +14,8 @@ export default function RegisterPage() {
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    /** Género de comunicación del usuario del tablero (voces TTS, predicciones, etc.) */
+    const [communicationGender, setCommunicationGender] = useState<'male' | 'female'>('male')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -28,7 +30,12 @@ export default function RegisterPage() {
             const res = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name.trim(), email: normalizedEmail, password }),
+                body: JSON.stringify({
+                    name: name.trim(),
+                    email: normalizedEmail,
+                    password,
+                    communicationGender,
+                }),
             })
 
             const raw = await res.text()
@@ -137,6 +144,41 @@ export default function RegisterPage() {
                                 placeholder="••••••••"
                             />
                         </div>
+
+                        <fieldset className="space-y-2">
+                            <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                ¿La persona que usará el tablero debe tratarse en masculino o en femenino?
+                            </legend>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Se usa para la voz de apoyo, sugerencias y coherencia gramatical en el comunicador.
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setCommunicationGender('male')}
+                                    className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold transition ${
+                                        communicationGender === 'male'
+                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                            : 'border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200'
+                                    }`}
+                                >
+                                    Masculino
+                                    <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">él, su…</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCommunicationGender('female')}
+                                    className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold transition ${
+                                        communicationGender === 'female'
+                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                            : 'border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200'
+                                    }`}
+                                >
+                                    Femenino
+                                    <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">ella, su…</span>
+                                </button>
+                            </div>
+                        </fieldset>
 
                         <div className="flex gap-3 rounded-xl border border-indigo-100/50 bg-indigo-50/50 p-4 text-xs text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200">
                             <Info className="shrink-0 mt-0.5" size={16} />
