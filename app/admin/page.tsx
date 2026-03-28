@@ -792,6 +792,10 @@ export default function AdminPage() {
               wordmarkWidth={156}
               priority
             />
+            <div
+              aria-hidden="true"
+              className="hidden h-12 w-px bg-slate-200/80 dark:bg-slate-700/80 sm:block"
+            />
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Panel de Administración</h1>
               <p className="mt-1 text-slate-500 dark:text-slate-400">Personaliza el comunicador para cada perfil.</p>
