@@ -7,13 +7,15 @@ export type TextToSpeechOptions = {
   stability?: number
   /** Por defecto 0.8 (recomendado; mapea a `similarity_boost` en la API). */
   similarityBoost?: number
+  /** Cancelación / timeout (p. ej. AbortSignal.timeout(7000)). */
+  signal?: AbortSignal
 }
 
 export async function elevenLabsTextToSpeech(
   apiKey: string,
   options: TextToSpeechOptions,
 ): Promise<ArrayBuffer> {
-  const { voiceId, text, stability = 0.7, similarityBoost = 0.8 } = options
+  const { voiceId, text, stability = 0.7, similarityBoost = 0.8, signal } = options
 
   const response = await fetch(`${ELEVEN_BASE}/text-to-speech/${encodeURIComponent(voiceId)}`, {
     method: 'POST',
@@ -30,6 +32,7 @@ export async function elevenLabsTextToSpeech(
         similarity_boost: similarityBoost,
       },
     }),
+    signal,
   })
 
   if (!response.ok) {

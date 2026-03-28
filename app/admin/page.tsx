@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { LayoutGrid, List, LockKeyhole, Mail, Mic, Monitor, Moon, Pencil, Play, Plus, Save, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { Columns2, LayoutGrid, List, LockKeyhole, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Save, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
@@ -20,6 +20,11 @@ import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
+import {
+  ProfileGridDimensionPicker,
+  PROFILE_GRID_PICKER_MAX_COLS,
+  PROFILE_GRID_PICKER_MAX_ROWS,
+} from '@/components/admin/ProfileGridDimensionPicker'
 import BrandLockup from '@/components/site/BrandLockup'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
 import type { Symbol as BoardSymbol } from '@/lib/supabase/types'
@@ -43,6 +48,11 @@ import {
 
 const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
 const ADMIN_FREE_PLAN_UPSELL_SESSION_KEY = 'luma_admin_free_plan_upsell_session'
+
+const ADMIN_GRID_DIM_MIN = 1
+const ADMIN_GRID_DIM_MAX = 20
+/** Ancho fijo de celda en vista previa admin; la altura sigue aspect-video (16/9). */
+const ADMIN_PREVIEW_CELL_COL_WIDTH = '7.25rem'
 
 /** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
 const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...', 'Guardando cambios en la nube...'])
@@ -217,6 +227,34 @@ function updateSymbolCoordinates(symbol: AdminSymbol, x: number, y: number): Adm
   }
 }
 
+/** Firma estable del grid para detectar cambios sin guardar (mismos campos que importan al persistir). */
+function stableGridSnapshot(symbols: AdminSymbol[]): string {
+  const rows = [...symbols]
+    .map((s) => {
+      const pos = getSymbolPosition(s)
+      return {
+        id: s.id,
+        label: typeof s.label === 'string' ? s.label.trim() : '',
+        normalizedLabel: typeof s.normalizedLabel === 'string' ? s.normalizedLabel.trim() : '',
+        emoji: s.emoji ?? null,
+        imageUrl: s.imageUrl ?? s.image_url ?? null,
+        category: s.category ?? '',
+        posType: s.posType ?? s.pos_type ?? 'other',
+        posConfidence: s.posConfidence ?? null,
+        manualGrammarOverride: Boolean(s.manualGrammarOverride),
+        lexemeId: s.lexemeId ?? s.lexeme_id ?? null,
+        positionX: pos.x,
+        positionY: pos.y,
+        color: normalizeSymbolColor(s.color ?? DEFAULT_SYMBOL_COLOR),
+        state: s.state ?? 'visible',
+        gridId: s.gridId ?? s.grid_id ?? 'main',
+        hidden: Boolean(s.hidden),
+      }
+    })
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+  return JSON.stringify(rows)
+}
+
 function sortSymbolsByPosition(a: AdminSymbol, b: AdminSymbol) {
   const aPos = getSymbolPosition(a)
   const bPos = getSymbolPosition(b)
@@ -272,7 +310,7 @@ function DraggableGridItem({
       style={style}
       {...attributes}
       {...listeners}
-      className={isMovableSymbol(symbol) ? 'touch-none cursor-grab active:cursor-grabbing' : undefined}
+      className={`flex min-h-0 min-w-0 h-full w-full ${isMovableSymbol(symbol) ? 'touch-none cursor-grab active:cursor-grabbing' : ''}`.trim()}
     >
       {children}
     </div>
@@ -302,8 +340,12 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState<AdminProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
   const [symbols, setSymbols] = useState<AdminSymbol[]>([])
+  const [symbolsBaselineJson, setSymbolsBaselineJson] = useState('')
+  const symbolsProfileLoadGen = useRef(0)
+  const [savingSymbols, setSavingSymbols] = useState(false)
   const [status, setStatus] = useState('')
   const [loadingData, setLoadingData] = useState(false)
+  const [symbolsLoadPending, setSymbolsLoadPending] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
   const [savingGrid, setSavingGrid] = useState(false)
   const [editingSymbol, setEditingSymbol] = useState<AdminSymbol | null>(null)
@@ -316,7 +358,10 @@ export default function AdminPage() {
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
   const [showCreateProfileModal, setShowCreateProfileModal] = useState(false)
   const [showAccountSettingsModal, setShowAccountSettingsModal] = useState(false)
+  const [showLumaGridSettingsModal, setShowLumaGridSettingsModal] = useState(false)
   const [newProfileName, setNewProfileName] = useState('')
+  const [newProfileGridCols, setNewProfileGridCols] = useState(14)
+  const [newProfileGridRows, setNewProfileGridRows] = useState(8)
   const [creatingProfile, setCreatingProfile] = useState(false)
   const [profileBeingEdited, setProfileBeingEdited] = useState<AdminProfile | null>(null)
   const [editProfileName, setEditProfileName] = useState('')
@@ -365,6 +410,9 @@ export default function AdminPage() {
     })
   )
 
+  const selectedProfileIdRef = useRef(selectedProfileId)
+  selectedProfileIdRef.current = selectedProfileId
+
   const loadData = useCallback(async () => {
     setLoadingData(true)
     try {
@@ -390,18 +438,23 @@ export default function AdminPage() {
       setAccountEmail(normalizedAccountSettings?.email ?? '')
       setAccountPreferredTheme(normalizedAccountSettings?.preferredTheme ?? 'system')
       setAccountPreferredDyslexiaFont(Boolean(normalizedAccountSettings?.preferredDyslexiaFont))
+
+      const currentPid = selectedProfileIdRef.current
+      let effectiveProfileId = currentPid
       if (fetchedProfiles.length === 0) {
+        effectiveProfileId = ''
         setSelectedProfileId('')
-      } else if (!selectedProfileId || !fetchedProfiles.some(profile => profile.id === selectedProfileId)) {
-        setSelectedProfileId(fetchedProfiles[0].id)
+      } else if (!currentPid || !fetchedProfiles.some((profile) => profile.id === currentPid)) {
+        effectiveProfileId = fetchedProfiles[0].id
+        setSelectedProfileId(effectiveProfileId)
       }
 
       if (voiceSettings) {
         setVoiceTtsMode(voiceSettings.ttsMode)
         const profilesList = fetchedProfiles
         const activePid =
-          selectedProfileId && profilesList.some((p) => p.id === selectedProfileId)
-            ? selectedProfileId
+          effectiveProfileId && profilesList.some((p) => p.id === effectiveProfileId)
+            ? effectiveProfileId
             : profilesList[0]?.id ?? ''
         const profileForVoice = profilesList.find((p) => p.id === activePid)
         const genderForVoice = profileForVoice?.gender === 'female' ? 'female' : 'male'
@@ -423,7 +476,7 @@ export default function AdminPage() {
       setStatus('Error al cargar perfiles')
     }
     setLoadingData(false)
-  }, [selectedProfileId])
+  }, [])
 
   const resetPasswordFields = useCallback(() => {
     setShowChangePasswordFields(false)
@@ -513,7 +566,7 @@ export default function AdminPage() {
     }
   }, [stripeCustomerId, openSubscriptionPortal])
 
-  const closeAccountSettingsModal = useCallback(() => {
+  const stopVoicePreviewAndCloneCleanup = useCallback(() => {
     abortCloneRecording()
     previewAudioRef.current?.pause()
     previewAudioRef.current = null
@@ -522,9 +575,18 @@ export default function AdminPage() {
       previewBlobUrlRef.current = null
     }
     setPreviewPlayingVoiceId(null)
+  }, [abortCloneRecording])
+
+  const closeAccountSettingsModal = useCallback(() => {
+    stopVoicePreviewAndCloneCleanup()
     resetPasswordFields()
     setShowAccountSettingsModal(false)
-  }, [abortCloneRecording, resetPasswordFields])
+  }, [stopVoicePreviewAndCloneCleanup, resetPasswordFields])
+
+  const closeLumaGridSettingsModal = useCallback(() => {
+    stopVoicePreviewAndCloneCleanup()
+    setShowLumaGridSettingsModal(false)
+  }, [stopVoicePreviewAndCloneCleanup])
 
   useEffect(() => {
     if (voiceTtsMode !== 'preset') return
@@ -535,8 +597,10 @@ export default function AdminPage() {
     })
   }, [accountGender, voiceTtsMode])
 
+  const voiceSettingsModalOpen = showAccountSettingsModal || showLumaGridSettingsModal
+
   useEffect(() => {
-    if (!showAccountSettingsModal || voiceTtsMode !== 'preset') return
+    if (!voiceSettingsModalOpen || voiceTtsMode !== 'preset') return
     let cancelled = false
     setVoicePreviewError(null)
     setVoicePreviewBusy(true)
@@ -551,7 +615,7 @@ export default function AdminPage() {
     return () => {
       cancelled = true
     }
-  }, [showAccountSettingsModal, voiceTtsMode])
+  }, [voiceSettingsModalOpen, voiceTtsMode])
 
   const playPresetPreview = useCallback(async (voiceId: string) => {
     try {
@@ -755,20 +819,33 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!selectedProfileId) {
+      setSymbols([])
+      setSymbolsBaselineJson('')
+      setSymbolsLoadPending(false)
       return
     }
+    const gen = ++symbolsProfileLoadGen.current
+    setSymbolsLoadPending(true)
+    setSymbols([])
+    setSymbolsBaselineJson('')
+    setStatus('Cargando...')
     const fetchSymbols = async () => {
-      setStatus('Cargando...')
       try {
         const syms = await getProfileSymbols(selectedProfileId)
+        if (symbolsProfileLoadGen.current !== gen) return
         setSymbols(syms)
+        setSymbolsBaselineJson(stableGridSnapshot(syms))
+        setSymbolsLoadPending(false)
         setStatus('Datos cargados.')
       } catch (error) {
         console.error(error)
-        setStatus('Error al cargar datos léxicos del perfil.')
+        if (symbolsProfileLoadGen.current === gen) {
+          setSymbolsLoadPending(false)
+          setStatus('Error al cargar datos léxicos del perfil.')
+        }
       }
     }
-    fetchSymbols()
+    void fetchSymbols()
   }, [selectedProfileId])
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId)
@@ -832,8 +909,10 @@ export default function AdminPage() {
     }
   }
 
-  const handleSaveAccountSettings = async (e: React.FormEvent) => {
+  const handleSaveAccountSettings = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const settingsModalTarget =
+      (e.currentTarget.dataset.settingsModal as 'account' | 'luma' | undefined) ?? 'account'
 
     if (!accountName.trim() || !accountEmail.trim()) {
       setStatus('❌ El nombre y el correo electrónico son obligatorios.')
@@ -897,8 +976,13 @@ export default function AdminPage() {
         },
       })
       await loadData()
-      closeAccountSettingsModal()
-      setStatus('✅ Configuración de la cuenta actualizada correctamente.')
+      if (settingsModalTarget === 'luma') {
+        closeLumaGridSettingsModal()
+        setStatus('✅ Voz y género de comunicación actualizados.')
+      } else {
+        closeAccountSettingsModal()
+        setStatus('✅ Configuración de la cuenta actualizada correctamente.')
+      }
     } catch (error) {
       console.error(error)
       setStatus(error instanceof Error ? `❌ ${error.message}` : '❌ No se pudo actualizar la cuenta.')
@@ -908,16 +992,23 @@ export default function AdminPage() {
   }
 
   const handleSaveAll = async () => {
-    if (!selectedProfileId) return
+    if (!selectedProfileId || savingSymbols) return
+    if (symbolsBaselineJson === '' || stableGridSnapshot(symbols) === symbolsBaselineJson) return
+
+    setSavingSymbols(true)
     setStatus('Guardando cambios en la nube...')
     try {
+      // El servidor solo hace UPDATE/CREATE de filas que cambiaron (ver saveSymbols).
       await saveSymbols(selectedProfileId, symbols)
       const freshSymbols = await getProfileSymbols(selectedProfileId)
       setSymbols(freshSymbols)
+      setSymbolsBaselineJson(stableGridSnapshot(freshSymbols))
       setStatus('✅ Cambios guardados correctamente.')
     } catch (err) {
       console.error(err)
       setStatus('❌ Error al guardar.')
+    } finally {
+      setSavingSymbols(false)
     }
   }
 
@@ -928,7 +1019,11 @@ export default function AdminPage() {
     }
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
-      setSymbols(prev => prev.filter(s => s.id !== symbolId))
+      setSymbols((prev) => {
+        const next = prev.filter((s) => s.id !== symbolId)
+        setSymbolsBaselineJson(stableGridSnapshot(next))
+        return next
+      })
       setStatus('Símbolo eliminado.')
     } catch {
       setStatus('Error al eliminar símbolo.')
@@ -965,7 +1060,11 @@ export default function AdminPage() {
 
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
-      setSymbols(prev => prev.filter(s => s.id !== editingSymbol.id))
+      setSymbols((prev) => {
+        const next = prev.filter((s) => s.id !== editingSymbol.id)
+        setSymbolsBaselineJson(stableGridSnapshot(next))
+        return next
+      })
       setEditingSymbol(null)
       setStatus('Símbolo eliminado.')
     } catch (error) {
@@ -980,11 +1079,23 @@ export default function AdminPage() {
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setEditingSymbol({ ...editingSymbol, imageUrl: reader.result })
+        // Prioridad a la imagen: evita guardar emoji + imagen a la vez y estados incoherentes tras el POST.
+        setEditingSymbol({ ...editingSymbol, imageUrl: reader.result, emoji: null })
       }
     }
     reader.readAsDataURL(file)
   }
+
+  const resetCreateProfileModal = useCallback(() => {
+    setNewProfileName('')
+    setNewProfileGridCols(14)
+    setNewProfileGridRows(8)
+  }, [])
+
+  const handleNewProfileGridSize = useCallback((c: number, r: number) => {
+    setNewProfileGridCols(c)
+    setNewProfileGridRows(r)
+  }, [])
 
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -996,11 +1107,13 @@ export default function AdminPage() {
       const profile = await createProfile({
         name: newProfileName,
         gender: 'male',
+        gridCols: newProfileGridCols,
+        gridRows: newProfileGridRows,
       })
       await loadData()
       setSelectedProfileId(profile.id)
       setShowCreateProfileModal(false)
-      setNewProfileName('')
+      resetCreateProfileModal()
       setStatus('✅ Perfil creado correctamente.')
     } catch (error) {
       console.error(error)
@@ -1201,11 +1314,22 @@ export default function AdminPage() {
     })
   }
 
+  const hasUnsavedGridChanges = useMemo(() => {
+    if (!selectedProfileId) return false
+    if (symbolsBaselineJson === '') return false
+    return stableGridSnapshot(symbols) !== symbolsBaselineJson
+  }, [symbols, symbolsBaselineJson, selectedProfileId])
+
   const previewGridCols = selectedProfile?.gridCols || 14
-  const ADMIN_GRID_GAP_PX = 8
-  const ADMIN_MIN_CELL_PX = 72
-  const adminPreviewGridMinWidth =
-    previewGridCols * ADMIN_MIN_CELL_PX + (previewGridCols - 1) * ADMIN_GRID_GAP_PX
+  const previewGridRows = selectedProfile?.gridRows || 8
+  const canAddPreviewColumn = (previewGridCols < ADMIN_GRID_DIM_MAX)
+  const canAddPreviewRow = (previewGridRows < ADMIN_GRID_DIM_MAX)
+  const canDecDimRows = previewGridRows > ADMIN_GRID_DIM_MIN && !savingGrid && !symbolsLoadPending
+  const canIncDimRows = (previewGridRows < ADMIN_GRID_DIM_MAX) && !savingGrid && !symbolsLoadPending
+  const canDecDimCols = previewGridCols > ADMIN_GRID_DIM_MIN && !savingGrid && !symbolsLoadPending
+  const canIncDimCols = (previewGridCols < ADMIN_GRID_DIM_MAX) && !savingGrid && !symbolsLoadPending
+  const dimStepperBtnClass =
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white transition hover:bg-white/10 disabled:pointer-events-none disabled:opacity-35'
 
   return (
     <div className="theme-page-shell min-h-screen min-w-0 overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
@@ -1232,10 +1356,20 @@ export default function AdminPage() {
               <ArrowLeft className="mr-2 h-4 w-4" /> VOLVER AL TABLERO
             </Link>
             <button
-              onClick={handleSaveAll}
-              className="ui-primary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-6 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              type="button"
+              onClick={() => void handleSaveAll()}
+              disabled={!selectedProfileId || !hasUnsavedGridChanges || savingSymbols || loadingData || symbolsLoadPending}
+              title={
+                !selectedProfileId
+                  ? 'Selecciona un perfil'
+                  : !hasUnsavedGridChanges
+                    ? 'No hay cambios en el tablero del perfil seleccionado'
+                    : undefined
+              }
+              className="ui-primary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-6 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45"
             >
-              <Save className="mr-2 h-4 w-4" /> Guardar Cambios
+              <Save className="mr-2 h-4 w-4" />
+              {savingSymbols ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
         </header>
@@ -1254,18 +1388,19 @@ export default function AdminPage() {
           </div>
         )}
 
-        {loadingData ? (
-          <div className="flex justify-center p-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
-          </div>
-        ) : (
-          <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-4">
             {/* Sidebar */}
             <div className="min-w-0 space-y-6 lg:col-span-1">
               <div className="app-panel rounded-2xl p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <User size={16} /> Perfiles
+                    {loadingData ? (
+                      <span
+                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
+                        aria-hidden
+                      />
+                    ) : null}
                   </h2>
                   <button
                     onClick={() => setShowCreateProfileModal(true)}
@@ -1321,16 +1456,32 @@ export default function AdminPage() {
                   <Settings size={16} /> Configuración
                 </h2>
 
-                <button
-                  type="button"
-                  onClick={() => setShowAccountSettingsModal(true)}
-                  className="ui-secondary-button flex w-full rounded-2xl px-4 py-3 text-left transition"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--app-foreground)]">Configuración de la cuenta</p>
-                    <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">Nombre, correo, contraseña, género y tema.</p>
-                  </div>
-                </button>
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAccountSettingsModal(true)}
+                    className="ui-secondary-button flex w-full rounded-2xl px-4 py-3 text-left transition"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--app-foreground)]">Configuración de la cuenta</p>
+                      <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
+                        Nombre, correo, contraseña, suscripción, tema y tipografía.
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLumaGridSettingsModal(true)}
+                    className="ui-secondary-button flex w-full rounded-2xl px-4 py-3 text-left transition"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--app-foreground)]">Configuración de Luma Grid</p>
+                      <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
+                        Personaliza la voz y el género de tus tableros.
+                      </p>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               <div className="app-panel rounded-2xl p-5">
@@ -1356,30 +1507,63 @@ export default function AdminPage() {
               {selectedProfile && !selectedProfile.isDemo && (
                 <div className="app-panel rounded-2xl p-5">
                   <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Dimensiones</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Filas</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
-                        value={selectedProfile.gridRows || 8}
-                        onChange={(e) => handleGridSizeUpdate(parseInt(e.target.value) || 1, selectedProfile.gridCols || 14)}
-                        disabled={savingGrid}
-                        className="app-input w-16 rounded-md py-1 text-center text-sm disabled:opacity-50"
-                      />
+                  <div className="overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 text-white shadow-inner dark:border-slate-700/90">
+                    <div className="border-b border-white/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Tamaño del grid
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Columnas</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
-                        value={selectedProfile.gridCols || 14}
-                        onChange={(e) => handleGridSizeUpdate(selectedProfile.gridRows || 8, parseInt(e.target.value) || 1)}
-                        disabled={savingGrid}
-                        className="app-input w-16 rounded-md py-1 text-center text-sm disabled:opacity-50"
-                      />
+                    <div className="divide-y divide-white/10">
+                      <div className="flex items-stretch gap-2 px-1 py-1 sm:px-2">
+                        <span className="flex w-20 shrink-0 items-center pl-2 text-xs font-medium text-slate-400">Filas</span>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pr-1">
+                          <button
+                            type="button"
+                            aria-label="Restar una fila"
+                            title="Restar una fila"
+                            disabled={!canDecDimRows}
+                            className={dimStepperBtnClass}
+                            onClick={() => void handleGridSizeUpdate(previewGridRows - 1, previewGridCols)}
+                          >
+                            <Minus size={18} strokeWidth={2.25} />
+                          </button>
+                          <span className="min-w-[2.5ch] text-center text-lg font-semibold tabular-nums tracking-tight">{previewGridRows}</span>
+                          <button
+                            type="button"
+                            aria-label="Sumar una fila"
+                            title="Sumar una fila"
+                            disabled={!canIncDimRows}
+                            className={dimStepperBtnClass}
+                            onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
+                          >
+                            <Plus size={18} strokeWidth={2.25} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-stretch gap-2 px-1 py-1 sm:px-2">
+                        <span className="flex w-20 shrink-0 items-center pl-2 text-xs font-medium text-slate-400">Columnas</span>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pr-1">
+                          <button
+                            type="button"
+                            aria-label="Restar una columna"
+                            title="Restar una columna"
+                            disabled={!canDecDimCols}
+                            className={dimStepperBtnClass}
+                            onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols - 1)}
+                          >
+                            <Minus size={18} strokeWidth={2.25} />
+                          </button>
+                          <span className="min-w-[2.5ch] text-center text-lg font-semibold tabular-nums tracking-tight">{previewGridCols}</span>
+                          <button
+                            type="button"
+                            aria-label="Sumar una columna"
+                            title="Sumar una columna"
+                            disabled={!canIncDimCols}
+                            className={dimStepperBtnClass}
+                            onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
+                          >
+                            <Plus size={18} strokeWidth={2.25} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1408,18 +1592,30 @@ export default function AdminPage() {
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   >
-                    <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-[1.8rem] pb-1 [-webkit-overflow-scrolling:touch]">
+                    <div className="grid w-full max-w-full grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_auto]">
+                      <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
                       <div
-                        className="aac-grid-surface grid min-h-[min(500px,70dvh)] min-w-0 content-start gap-2 p-4 sm:min-h-[500px]"
+                        className={`aac-grid-surface grid w-max max-w-none content-start gap-4 p-4 sm:p-6 ${symbolsLoadPending ? 'pointer-events-none' : ''}`}
                         style={{
-                          gridTemplateColumns: `repeat(${previewGridCols}, minmax(${ADMIN_MIN_CELL_PX}px, 1fr))`,
-                          minWidth: adminPreviewGridMinWidth,
+                          gridTemplateColumns: `repeat(${previewGridCols}, ${ADMIN_PREVIEW_CELL_COL_WIDTH})`,
+                          gridAutoRows: 'auto',
                         }}
                       >
-                      {Array.from({ length: previewGridCols * (selectedProfile?.gridRows || 8) }).map((_, index) => {
+                      {Array.from({ length: previewGridCols * previewGridRows }).map((_, index) => {
                         const gridCols = previewGridCols
                         const x = index % gridCols
                         const y = Math.floor(index / gridCols)
+
+                        if (symbolsLoadPending) {
+                          return (
+                            <div
+                              key={`sk-${x}-${y}`}
+                              className="aspect-video w-full rounded-xl border-2 border-dashed border-slate-300/50 bg-gradient-to-br from-slate-200/50 via-slate-200/30 to-slate-300/40 animate-pulse dark:border-slate-600/55 dark:from-slate-700/50 dark:via-slate-800/35 dark:to-slate-700/45"
+                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                              aria-hidden
+                            />
+                          )
+                        }
 
                         const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
 
@@ -1428,13 +1624,13 @@ export default function AdminPage() {
                             <DroppableGridCell
                               key={`cell-${x}-${y}`}
                               cellId={`cell-${x}-${y}`}
-                              className="h-20"
+                              className="flex min-h-0 min-w-0 w-full"
                               style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                             >
                               <motion.div
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                className="group relative h-20"
+                                className="group relative flex aspect-video w-full min-h-0 min-w-0 flex-col"
                               >
                                 <DraggableGridItem symbol={symbol}>
                                   <button
@@ -1446,7 +1642,7 @@ export default function AdminPage() {
                                       state: symbol.state || 'visible'
                                     })}
                                     type="button"
-                                    className={`symbol-cell flex h-full w-full flex-col items-center justify-center rounded-[1.35rem] border p-1 transition ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''}`}
+                                    className={`symbol-cell flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''}`}
                                     style={{
                                       backgroundColor: resolveSymbolColor(symbol.color),
                                       borderColor: 'var(--app-border)',
@@ -1486,20 +1682,73 @@ export default function AdminPage() {
                           <DroppableGridCell
                             key={`cell-${x}-${y}`}
                             cellId={`cell-${x}-${y}`}
-                            className="h-20"
+                            className="flex min-h-0 min-w-0 w-full"
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
                             <button
                               onClick={() => setEditingSymbol({ id: `draft-${Date.now()}`, ...EMPTY_SYMBOL, positionX: x, positionY: y })}
                               type="button"
-                            className="ui-empty-slot group flex h-20 w-full items-center justify-center rounded-[1.35rem] transition hover:border-[var(--app-predicted-border)] hover:bg-[var(--app-predicted)]"
+                              className="group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15"
                             >
-                              <Plus size={14} className="text-slate-300 group-hover:text-indigo-400 dark:text-slate-600" />
+                              <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
                             </button>
                           </DroppableGridCell>
                         )
                       })}
                       </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
+                        disabled={
+                          !selectedProfile ||
+                          savingGrid ||
+                          symbolsLoadPending ||
+                          Boolean(activeFolder) ||
+                          !canAddPreviewColumn
+                        }
+                        title={
+                          symbolsLoadPending
+                            ? 'Cargando tablero…'
+                            : !canAddPreviewColumn
+                              ? 'Máximo 20 columnas'
+                              : activeFolder
+                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
+                                : 'Añadir una columna a la derecha'
+                        }
+                        className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
+                      >
+                        <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
+                        <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
+                          Añadir columna
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
+                        disabled={
+                          !selectedProfile ||
+                          savingGrid ||
+                          symbolsLoadPending ||
+                          Boolean(activeFolder) ||
+                          !canAddPreviewRow
+                        }
+                        title={
+                          symbolsLoadPending
+                            ? 'Cargando tablero…'
+                            : !canAddPreviewRow
+                              ? 'Máximo 20 filas'
+                              : activeFolder
+                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
+                                : 'Añadir una fila abajo'
+                        }
+                        className="col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-span-2 md:col-start-1 md:row-start-2 md:py-5"
+                      >
+                        <Rows className="h-7 w-7 shrink-0" aria-hidden />
+                        <span>Añadir fila</span>
+                      </button>
                     </div>
 
                     <DragOverlay>
@@ -1548,12 +1797,13 @@ export default function AdminPage() {
 
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="ui-chip rounded-full px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                          {listSymbols.length} símbolo{listSymbols.length === 1 ? '' : 's'}
+                          {symbolsLoadPending ? '…' : `${listSymbols.length} símbolo${listSymbols.length === 1 ? '' : 's'}`}
                         </span>
                         <button
                           type="button"
                           onClick={handleCreateSymbolFromList}
-                          className="ui-primary-button inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition"
+                          disabled={symbolsLoadPending}
+                          className="ui-primary-button inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition disabled:pointer-events-none disabled:opacity-45"
                         >
                           <Plus className="mr-2 h-4 w-4" />
                           Añadir símbolo
@@ -1583,7 +1833,15 @@ export default function AdminPage() {
                     </select>
                   </div>
 
-                  {listSymbols.length === 0 ? (
+                  {symbolsLoadPending ? (
+                    <div className="flex flex-col items-center justify-center px-6 py-16">
+                      <div
+                        className="h-9 w-9 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
+                        aria-hidden
+                      />
+                      <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Cargando símbolos del perfil…</p>
+                    </div>
+                  ) : listSymbols.length === 0 ? (
                     <div className="px-6 py-12 text-center">
                       <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
                         No hay símbolos que coincidan con los filtros actuales.
@@ -1673,7 +1931,6 @@ export default function AdminPage() {
               )}
             </div>
           </div>
-        )}
       </div>
 
       <AnimatePresence>
@@ -1699,7 +1956,9 @@ export default function AdminPage() {
               <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Configuración de la cuenta</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Gestiona tus datos, la voz gramatical y la preferencia visual.</p>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Gestiona tus datos, la suscripción y la preferencia visual.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -1711,7 +1970,11 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveAccountSettings} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6">
+              <form
+                data-settings-modal="account"
+                onSubmit={handleSaveAccountSettings}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6"
+              >
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1841,31 +2104,6 @@ export default function AdminPage() {
                         </div>
                       </div>
                     )}
-
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Género de comunicación</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setAccountGender('male')}
-                          className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                          style={{ borderColor: accountGender === 'male' ? 'var(--app-predicted-border)' : undefined }}
-                        >
-                          Masculino
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAccountGender('female')}
-                          className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                          style={{ borderColor: accountGender === 'female' ? 'var(--app-predicted-border)' : undefined }}
-                        >
-                          Femenino
-                        </button>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Se aplica al perfil seleccionado{selectedProfile ? `: ${selectedProfile.name}` : ''}.
-                      </p>
-                    </div>
                   </div>
 
                   <div className="space-y-4">
@@ -1929,8 +2167,100 @@ export default function AdminPage() {
                     </div>
 
                   </div>
+                </div>
 
-                  <div className="md:col-span-2 space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={closeAccountSettingsModal}
+                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                    disabled={savingAccountSettings}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingAccountSettings || !accountSettings}
+                    className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
+                  >
+                    {savingAccountSettings ? 'Guardando...' : 'Guardar configuración'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showLumaGridSettingsModal && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+              onClick={() => {
+                if (!savingAccountSettings) {
+                  closeLumaGridSettingsModal()
+                }
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,920px)] sm:rounded-[2rem]"
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Configuración de Luma Grid</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Personaliza la voz y el género de tus tableros.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeLumaGridSettingsModal}
+                  className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                  disabled={savingAccountSettings}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form
+                data-settings-modal="luma"
+                onSubmit={handleSaveAccountSettings}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6"
+              >
+                <div className="space-y-6">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Género de comunicación</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAccountGender('male')}
+                        className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        style={{ borderColor: accountGender === 'male' ? 'var(--app-predicted-border)' : undefined }}
+                      >
+                        Masculino
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAccountGender('female')}
+                        className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        style={{ borderColor: accountGender === 'female' ? 'var(--app-predicted-border)' : undefined }}
+                      >
+                        Femenino
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Se aplica al perfil seleccionado{selectedProfile ? `: ${selectedProfile.name}` : ''}.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
                       <Volume2 size={16} className="shrink-0" />
                       Voz (texto a voz)
@@ -2138,7 +2468,7 @@ export default function AdminPage() {
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Grabación: mínimo 5 segundos, máximo 5 minutos. Habla en un sitio silencioso. También puedes subir MP3/WAV. Tras crear la
-                          voz, pulsa &quot;Guardar configuración&quot; si cambias el modo.
+                          voz, pulsa &quot;Guardar cambios&quot; si cambias el modo.
                         </p>
                       </div>
                     ) : null}
@@ -2148,7 +2478,7 @@ export default function AdminPage() {
                 <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
-                    onClick={closeAccountSettingsModal}
+                    onClick={closeLumaGridSettingsModal}
                     className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={savingAccountSettings}
                   >
@@ -2159,7 +2489,7 @@ export default function AdminPage() {
                     disabled={savingAccountSettings || !accountSettings}
                     className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
                   >
-                    {savingAccountSettings ? 'Guardando...' : 'Guardar configuración'}
+                    {savingAccountSettings ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 </div>
               </form>
@@ -2522,7 +2852,7 @@ export default function AdminPage() {
               onClick={() => {
                 if (!creatingProfile) {
                   setShowCreateProfileModal(false)
-                  setNewProfileName('')
+                  resetCreateProfileModal()
                 }
               }}
             />
@@ -2530,15 +2860,15 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative max-h-[100dvh] w-full max-w-md overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,640px)] sm:rounded-[2rem]"
+              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,720px)] sm:rounded-[2rem]"
             >
-              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear perfil</h3>
                 <button
                   onClick={() => {
                     if (!creatingProfile) {
                       setShowCreateProfileModal(false)
-                      setNewProfileName('')
+                      resetCreateProfileModal()
                     }
                   }}
                   className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
@@ -2548,7 +2878,10 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateProfile} className="max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain p-4 sm:max-h-none sm:overflow-visible sm:p-6">
+              <form
+                onSubmit={handleCreateProfile}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 sm:p-6 sm:pb-8"
+              >
                 <div>
                   <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Nombre del perfil</label>
                   <input
@@ -2566,12 +2899,24 @@ export default function AdminPage() {
                   Se creará un perfil nuevo vacío para personalizar su grid desde este panel.
                 </p>
 
+                <div className="mt-5 rounded-2xl border border-slate-200/80 bg-[var(--app-surface-muted)] p-4 dark:border-slate-700">
+                  <ProfileGridDimensionPicker
+                    cols={newProfileGridCols}
+                    rows={newProfileGridRows}
+                    onChange={handleNewProfileGridSize}
+                  />
+                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                    Hasta {PROFILE_GRID_PICKER_MAX_COLS} columnas y {PROFILE_GRID_PICKER_MAX_ROWS} filas aquí; si necesitas
+                    más, ajústalas después en Dimensiones (hasta 20×20).
+                  </p>
+                </div>
+
                 <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       setShowCreateProfileModal(false)
-                      setNewProfileName('')
+                      resetCreateProfileModal()
                     }}
                     className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={creatingProfile}

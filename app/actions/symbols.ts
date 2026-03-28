@@ -11,6 +11,9 @@ import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
 import type { PosType, Symbol as AppSymbol } from '@/lib/supabase/types'
 
+/** Prisma interactive tx default timeout is 5s; large grids exceed it and fail with "Transaction not found". */
+const SYMBOL_PERSIST_TX = { maxWait: 15_000, timeout: 60_000 } as const
+
 function mapPrismaSymbolToClient(
     s: {
         id: string
@@ -78,6 +81,104 @@ type SymbolInput = {
     state?: string | null
     gridId?: string | null
     grid_id?: string | null
+}
+
+/** Alineado con `persistSymbols`: creación de fila nueva vs actualización de existente. */
+function isPersistCreate(sym: SymbolInput): boolean {
+    const id = sym.id
+    if (!id || typeof id !== 'string') return true
+    if (id.startsWith('new-') || id.startsWith('template') || id.startsWith('fixed-left')) return true
+    return false
+}
+
+type SymbolRowForDiff = {
+    id: string
+    label: string
+    emoji: string | null
+    imageUrl: string | null
+    category: string
+    posType: string
+    posConfidence: number | null
+    manualGrammarOverride: boolean
+    lexemeId: string | null
+    positionX: number
+    positionY: number
+    color: string
+    state: string
+    gridId: string
+    normalizedLabel: string
+}
+
+/** Si devuelve true, el payload coincide con la fila: no hace falta enrich ni UPDATE. */
+function symbolInputMatchesDb(sym: SymbolInput, db: SymbolRowForDiff): boolean {
+    const label = typeof sym.label === 'string' ? sym.label.trim() : ''
+    if (label !== db.label) return false
+    if (normalizeTextForLexicon(label) !== db.normalizedLabel) return false
+
+    const emoji = sym.emoji ?? null
+    if (emoji !== db.emoji) return false
+
+    const imageUrl = (sym.imageUrl ?? sym.image_url) ?? null
+    if (imageUrl !== db.imageUrl) return false
+
+    if ((sym.category ?? 'General') !== db.category) return false
+
+    const px = sym.positionX ?? sym.position_x ?? 0
+    const py = sym.positionY ?? sym.position_y ?? 0
+    if (px !== db.positionX || py !== db.positionY) return false
+
+    if (normalizeSymbolColor(sym.color ?? DEFAULT_SYMBOL_COLOR) !== normalizeSymbolColor(db.color)) return false
+
+    if ((sym.state ?? 'visible') !== db.state) return false
+
+    const gridId = sym.gridId ?? sym.grid_id ?? 'main'
+    if (gridId !== db.gridId) return false
+
+    const manual = Boolean(sym.manualGrammarOverride ?? sym.manual_grammar_override)
+    if (manual !== db.manualGrammarOverride) return false
+
+    if (manual) {
+        const pt = sym.posType ?? sym.pos_type ?? 'other'
+        if (pt !== db.posType) return false
+        const pc = sym.posConfidence ?? sym.pos_confidence ?? null
+        if (pc !== db.posConfidence) return false
+        const lx = sym.lexemeId ?? sym.lexeme_id ?? null
+        if (lx !== db.lexemeId) return false
+    } else {
+        const pt = sym.posType ?? sym.pos_type
+        if (pt !== undefined && pt !== db.posType) return false
+        const pc = sym.posConfidence ?? sym.pos_confidence
+        if (pc !== undefined && pc !== db.posConfidence) return false
+        const lx = sym.lexemeId ?? sym.lexeme_id
+        if (lx !== undefined && lx !== db.lexemeId) return false
+    }
+
+    return true
+}
+
+function computeIndicesToWrite(symbols: SymbolInput[], existingById: Map<string, SymbolRowForDiff>): Set<number> {
+    const indices = new Set<number>()
+    for (let i = 0; i < symbols.length; i += 1) {
+        const sym = symbols[i]
+        if (isPersistCreate(sym)) {
+            indices.add(i)
+            continue
+        }
+        const id = sym.id
+        if (!id || typeof id !== 'string') {
+            indices.add(i)
+            continue
+        }
+        const row = existingById.get(id)
+        if (!row) {
+            indices.add(i)
+            continue
+        }
+        if (!symbolInputMatchesDb(sym, row)) {
+            indices.add(i)
+        }
+    }
+    return indices
 }
 
 function shouldBackfillLexicalMetadata(symbol: {
@@ -199,19 +300,22 @@ async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
 
         const enrichedSymbols = await Promise.all(symbolsToBackfill.map(enrichSymbolInput))
 
-        await prisma.$transaction(
-            enrichedSymbols.map((enriched, index) => prisma.symbol.update({
-                where: { id: symbolsToBackfill[index].id },
-                data: {
-                    normalizedLabel: enriched.normalizedLabel,
-                    posType: enriched.posType,
-                    posConfidence: enriched.posConfidence,
-                    manualGrammarOverride: enriched.manualGrammarOverride,
-                    lexemeId: enriched.lexemeId,
-                    color: enriched.color,
-                },
-            })),
-        )
+        await prisma.$transaction(async (tx) => {
+            for (let index = 0; index < enrichedSymbols.length; index += 1) {
+                const enriched = enrichedSymbols[index]
+                await tx.symbol.update({
+                    where: { id: symbolsToBackfill[index].id },
+                    data: {
+                        normalizedLabel: enriched.normalizedLabel,
+                        posType: enriched.posType,
+                        posConfidence: enriched.posConfidence,
+                        manualGrammarOverride: enriched.manualGrammarOverride,
+                        lexemeId: enriched.lexemeId,
+                        color: enriched.color,
+                    },
+                })
+            }
+        }, SYMBOL_PERSIST_TX)
 
         return new Map(
             symbolsToBackfill.map((symbol, index) => [
@@ -259,13 +363,15 @@ function buildSymbolWriteData(
 async function persistSymbols(
     profileId: string,
     symbols: SymbolInput[],
-    enrichedSymbols: Array<Awaited<ReturnType<typeof enrichSymbolInput>>>,
+    enrichedSymbols: Array<Awaited<ReturnType<typeof enrichSymbolInput>> | null>,
     includeLexicalFields: boolean,
 ) {
     await prisma.$transaction(async (tx) => {
         for (let index = 0; index < symbols.length; index += 1) {
-            const sym = symbols[index]
             const enriched = enrichedSymbols[index]
+            if (!enriched) continue
+
+            const sym = symbols[index]
             const data = buildSymbolWriteData(enriched, includeLexicalFields)
 
             if (sym.id && !sym.id.startsWith('new-') && !sym.id.startsWith('template') && !sym.id.startsWith('fixed-left')) {
@@ -282,7 +388,7 @@ async function persistSymbols(
                 })
             }
         }
-    })
+    }, SYMBOL_PERSIST_TX)
 }
 
 export async function getProfileSymbols(profileId: string) {
@@ -328,27 +434,53 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         select: { email: true, plan: true },
     })
     const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
-    if (plan === 'free') {
-        const symbolsOnOtherProfiles = await prisma.symbol.count({
+    // Cuota Plan Libre: solo al añadir botones/carpetas nuevos (ids new- / template / fixed-left).
+    // Cambiar imagen, texto, posición, etc. en símbolos ya guardados no aplica límite.
+    if (plan === 'free' && !profile.isDemo && symbols.some(isPersistCreate)) {
+        const symbolsOnOtherNonDemoProfiles = await prisma.symbol.count({
             where: {
                 profile: {
                     userId: session.user.id,
                     id: { not: profileId },
+                    isDemo: false,
                 },
             },
         })
-        if (symbolsOnOtherProfiles + symbols.length > FREE_MAX_TOTAL_SYMBOLS) {
+        if (symbolsOnOtherNonDemoProfiles + symbols.length > FREE_MAX_TOTAL_SYMBOLS) {
             throw new Error(
-                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total (incluidas carpetas). Visita /plan para ampliar el plan o reduce símbolos.`,
+                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total en tus perfiles (el tablero Demo no cuenta). Incluye carpetas. Visita /plan para ampliar el plan o reduce símbolos.`,
             )
         }
     }
 
-    // Simplest way to sync: delete all and recreate, OR upsert.
-    // Since we have IDs, we can update existing and create new ones.
-    // We'll use a transaction for safety.
+    const existingRows = await prisma.symbol.findMany({
+        where: { profileId },
+        select: {
+            id: true,
+            label: true,
+            emoji: true,
+            imageUrl: true,
+            category: true,
+            posType: true,
+            posConfidence: true,
+            manualGrammarOverride: true,
+            lexemeId: true,
+            positionX: true,
+            positionY: true,
+            color: true,
+            state: true,
+            gridId: true,
+            normalizedLabel: true,
+        },
+    })
+    const existingById = new Map<string, SymbolRowForDiff>(existingRows.map((r) => [r.id, r]))
+    const indicesToWrite = computeIndicesToWrite(symbols, existingById)
 
-    const enrichedSymbols = await Promise.all(symbols.map(enrichSymbolInput))
+    const enrichedSymbols = await Promise.all(
+        symbols.map((sym, i) =>
+            indicesToWrite.has(i) ? enrichSymbolInput(sym) : Promise.resolve(null),
+        ),
+    )
 
     try {
         await persistSymbols(profileId, symbols, enrichedSymbols, true)

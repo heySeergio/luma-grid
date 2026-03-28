@@ -18,6 +18,12 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const MAX_TEXT_LEN = 8_000
+/** Si ElevenLabs no responde a tiempo, el cliente usa Web Speech. */
+const ELEVENLABS_TTS_TIMEOUT_MS = 7_000
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'AbortError'
+}
 
 function normalizeTtsMode(value: string | null | undefined): TtsMode {
   if (value === 'preset' || value === 'custom' || value === 'browser') return value
@@ -146,7 +152,27 @@ export async function POST(req: Request) {
       // No bloqueamos por cuota mensual: planes Voz/Identidad pueden superar la cifra informada en el admin.
       // El contador sigue sumando para estadísticas.
 
-      const audio = await elevenLabsTextToSpeech(apiKey, { voiceId, text: trimmed })
+      const ac = new AbortController()
+      const timeoutId = setTimeout(() => ac.abort(), ELEVENLABS_TTS_TIMEOUT_MS)
+      let audio: ArrayBuffer
+      try {
+        audio = await elevenLabsTextToSpeech(apiKey, {
+          voiceId,
+          text: trimmed,
+          signal: ac.signal,
+        })
+      } catch (err) {
+        if (isAbortError(err)) {
+          return NextResponse.json(
+            { error: 'ElevenLabs no respondió a tiempo', code: 'ELEVENLABS_TIMEOUT' },
+            { status: 504 },
+          )
+        }
+        throw err
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       buffer = Buffer.from(audio)
       setCachedTtsAudio(phraseKey, buffer)
 

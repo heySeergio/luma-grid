@@ -47,8 +47,8 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
       onClick={handleClick}
       disabled={isLocked}
       className={`
-        symbol-cell relative flex flex-col items-center justify-center rounded-[1.35rem] border
-        ${sizeClass} w-full p-1.5 select-none
+        symbol-cell relative flex h-full min-h-0 w-full flex-col items-stretch rounded-[1.35rem] border
+        ${sizeClass} p-1.5 select-none
         ${isPopping ? 'animate-pop' : ''}
         ${isPredicted && !isLocked
           ? 'ring-1'
@@ -70,26 +70,34 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
       aria-label={symbol.label}
     >
       {isFolder && (
-        <span className="ui-chip absolute right-1.5 top-1.5 rounded-lg p-1" style={{ color: textColor }}>
+        <span className="ui-chip absolute right-1.5 top-1.5 z-[1] rounded-lg p-1" style={{ color: textColor }}>
           <Folder size={10} />
         </span>
       )}
-      <div className={`${emojiSize[sizeClass] || 'text-3xl'} mb-1 leading-none`} style={{ color: textColor }}>
+      {/* Imagen o emoji arriba; etiqueta siempre debajo (layout fijo en columna) */}
+      <div
+        className="flex min-h-0 flex-1 flex-col items-center justify-center px-0.5 pt-0.5"
+        style={{ color: textColor }}
+      >
         {symbol.imageUrl ? (
-          <Image
-            src={symbol.imageUrl}
-            alt={symbol.label}
-            width={64}
-            height={64}
-            className="object-contain w-full h-full"
-            unoptimized
-          />
+          <div className="flex h-full max-h-full w-full flex-1 items-center justify-center">
+            <Image
+              src={symbol.imageUrl}
+              alt={symbol.label}
+              width={64}
+              height={64}
+              className="max-h-full max-w-full object-contain"
+              unoptimized
+            />
+          </div>
         ) : (
-          symbol.emoji || '❓'
+          <span className={`${emojiSize[sizeClass] || 'text-3xl'} leading-none`}>
+            {symbol.emoji || '❓'}
+          </span>
         )}
       </div>
       <span
-        className={`${labelSize[sizeClass] || 'text-xs'} w-full text-center font-semibold leading-tight line-clamp-2`}
+        className={`${labelSize[sizeClass] || 'text-xs'} shrink-0 px-0.5 pb-0.5 text-center font-semibold leading-tight line-clamp-2`}
         style={{ color: textColor }}
       >
         {symbol.label}

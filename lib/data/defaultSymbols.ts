@@ -6,16 +6,39 @@ import {
   DEFAULT_TEMPLATE_COLOR,
 } from '@/lib/ui/symbolColors'
 
+/** URL pública para archivos en `public/DEMO ICONS/` (espacio en carpeta + nombres con tildes). */
+export function demoIconsAssetUrl(filename: string): string {
+  return `/DEMO%20ICONS/${encodeURIComponent(filename)}`
+}
+
 /** Campos mínimos para sembrar símbolos por defecto (registro / plantilla). */
 type PartialSymbol = Pick<
   Symbol,
   'label' | 'category' | 'posType' | 'positionX' | 'positionY' | 'color' | 'hidden'
-> & { emoji?: Symbol['emoji'] }
+> & { emoji?: Symbol['emoji']; imageUrl?: string }
 
 export const DEFAULT_SYMBOLS: PartialSymbol[] = [
   // Pronombres
-  { label: 'Yo', emoji: '👤', category: 'Yo/Tú', posType: 'pronoun', positionX: 0, positionY: 0, color: 'preset:sky', hidden: false },
-  { label: 'Tú', emoji: '👥', category: 'Yo/Tú', posType: 'pronoun', positionX: 1, positionY: 0, color: 'preset:sky', hidden: false },
+  {
+    label: 'Yo',
+    imageUrl: demoIconsAssetUrl('Yo.png'),
+    category: 'Yo/Tú',
+    posType: 'pronoun',
+    positionX: 0,
+    positionY: 0,
+    color: 'preset:sky',
+    hidden: false,
+  },
+  {
+    label: 'Tú',
+    imageUrl: demoIconsAssetUrl('Tú.png'),
+    category: 'Yo/Tú',
+    posType: 'pronoun',
+    positionX: 1,
+    positionY: 0,
+    color: 'preset:sky',
+    hidden: false,
+  },
   { label: 'Él', emoji: '🧑', category: 'Yo/Tú', posType: 'pronoun', positionX: 2, positionY: 0, color: 'preset:sky', hidden: false },
   { label: 'Ella', emoji: '👩', category: 'Yo/Tú', posType: 'pronoun', positionX: 3, positionY: 0, color: 'preset:sky', hidden: false },
   { label: 'Nosotros', emoji: '👨‍👩‍👧', category: 'Yo/Tú', posType: 'pronoun', positionX: 4, positionY: 0, color: 'preset:sky', hidden: false },
@@ -1225,22 +1248,25 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
   const occupiedCells = new Set(customSymbols.map((symbol) => `${symbol.positionX}:${symbol.positionY}`))
 
   const folderSymbols: Symbol[] = activeFolder
-    ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => ({
-      id: `folder-item-${activeFolder}-${i}`,
-      gridId: 'demo',
-      label,
-      emoji: symbols.find(s => s.label.toLowerCase() === label.toLowerCase())?.emoji || '🧩',
-      category: activeFolder,
-      posType: 'noun',
-      positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
-      positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
-      color: DEFAULT_SYMBOL_COLOR,
-      hidden: false,
-      imageUrl: undefined,
-      state: 'visible',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }))
+    ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => {
+      const match = symbols.find((s) => s.label.toLowerCase() === label.toLowerCase())
+      return {
+        id: `folder-item-${activeFolder}-${i}`,
+        gridId: 'demo',
+        label,
+        emoji: match?.emoji || '🧩',
+        category: activeFolder,
+        posType: 'noun',
+        positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
+        positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
+        color: DEFAULT_SYMBOL_COLOR,
+        hidden: false,
+        imageUrl: match?.imageUrl,
+        state: 'visible',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    })
     : []
 
   const fixedLeftPanel: Symbol[] = []
@@ -1273,7 +1299,7 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
           positionY: y,
           color: fallbackSymbol.color,
           hidden: fallbackSymbol.hidden,
-          imageUrl: undefined,
+          imageUrl: fallbackSymbol.imageUrl,
           state: 'visible',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -1334,7 +1360,7 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
           positionY: y,
           color: fallbackSymbol.color,
           hidden: fallbackSymbol.hidden,
-          imageUrl: undefined,
+          imageUrl: fallbackSymbol.imageUrl,
           state: 'visible',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

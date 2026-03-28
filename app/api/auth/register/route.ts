@@ -110,6 +110,7 @@ export async function POST(req: Request) {
                     label: symbol.label,
                     normalizedLabel: normalizeTextForLexicon(symbol.label),
                     emoji: symbol.emoji ?? null,
+                    imageUrl: symbol.imageUrl ?? null,
                     category: symbol.category,
                     posType: symbol.posType,
                     positionX: symbol.positionX,

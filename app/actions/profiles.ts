@@ -40,7 +40,17 @@ export async function getProfiles() {
     }))
 }
 
-export async function createProfile(data: { name: string, gender: string }) {
+function clampGridDimension(value: number | undefined, fallback: number) {
+    const n = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback
+    return Math.min(20, Math.max(1, n))
+}
+
+export async function createProfile(data: {
+    name: string
+    gender: string
+    gridRows?: number
+    gridCols?: number
+}) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
@@ -50,12 +60,18 @@ export async function createProfile(data: { name: string, gender: string }) {
     })
     const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
     const maxP = getMaxProfiles(plan)
-    const existing = await prisma.profile.count({ where: { userId: session.user.id } })
-    if (existing >= maxP) {
+    /** El perfil DEMO (isDemo) no cuenta en el cupo del plan. */
+    const existingNonDemo = await prisma.profile.count({
+        where: { userId: session.user.id, isDemo: false },
+    })
+    if (existingNonDemo >= maxP) {
         throw new Error(
-            `Tu plan permite hasta ${maxP} tablero(s). Visita /plan para elegir otro plan o, desde el admin, Configuración de la cuenta → Actualizar plan.`,
+            `Tu plan permite hasta ${maxP} tablero(s) personalizado(s); el perfil DEMO no cuenta. Visita /plan para elegir otro plan o, desde el admin, Configuración de la cuenta → Actualizar plan.`,
         )
     }
+
+    const gridRows = clampGridDimension(data.gridRows, 8)
+    const gridCols = clampGridDimension(data.gridCols, 14)
 
     const profile = await prisma.profile.create({
         data: {
@@ -63,6 +79,8 @@ export async function createProfile(data: { name: string, gender: string }) {
             gender: data.gender,
             userId: session.user.id,
             isDemo: false,
+            gridRows,
+            gridCols,
         }
     })
 
