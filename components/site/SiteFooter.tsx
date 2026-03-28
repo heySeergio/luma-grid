@@ -74,7 +74,7 @@ export default function SiteFooter() {
           iconSize={40}
           wordmarkWidth={146}
           subtitle="Comunicación Aumentativa y Alternativa con una base visual, lingüística y accesible."
-          iconClassName="rounded-none"
+          iconClassName="rounded-none shadow-[var(--card-shadow)]"
         />
 
         <nav className="flex flex-wrap gap-3 text-sm">

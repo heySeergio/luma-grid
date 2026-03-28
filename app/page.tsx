@@ -44,7 +44,7 @@ export default function RootPage() {
               wordmarkWidth={148}
               subtitle="Comunicación Aumentativa y Alternativa"
               priority
-              iconClassName="rounded-none"
+              iconClassName="rounded-none shadow-[var(--card-shadow)]"
             />
 
             <div className="flex items-center gap-2">

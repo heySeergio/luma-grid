@@ -52,12 +52,15 @@ export default function LoginPage() {
             <div className="w-full max-w-md p-6">
                 <div className="glass-panel overflow-hidden rounded-3xl p-8 shadow-xl">
                     <div className="mb-8 flex flex-col items-center text-center">
-                        <BrandLockup
-                            href="/"
-                            iconSize={56}
-                            wordmarkWidth={190}
-                            priority
-                        />
+                        <div className="mb-10 w-full flex justify-center">
+                            <BrandLockup
+                                href="/"
+                                iconSize={40}
+                                wordmarkWidth={148}
+                                priority
+                                iconClassName="rounded-none shadow-none"
+                            />
+                        </div>
                         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Bienvenido de nuevo</h1>
                         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Inicia sesión en Luma Grid</p>
                     </div>

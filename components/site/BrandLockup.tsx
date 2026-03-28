@@ -18,7 +18,7 @@ export default function BrandLockup({
   wordmarkWidth = 172,
   subtitle,
   priority = false,
-  iconClassName = 'rounded-[18px]',
+  iconClassName = 'rounded-[18px] shadow-[var(--card-shadow)]',
 }: BrandLockupProps) {
   const content = (
     <div className={`flex items-center gap-3 ${className}`.trim()}>
@@ -28,7 +28,7 @@ export default function BrandLockup({
         width={iconSize}
         height={iconSize}
         priority={priority}
-        className={`${iconClassName} shadow-[var(--card-shadow)]`.trim()}
+        className={iconClassName}
       />
       <div className="min-w-0">
         <Image
