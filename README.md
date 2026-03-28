@@ -45,7 +45,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
 - `Framer Motion`
 - `dnd-kit`
 - `next-themes`
-- `bcrypt`
+- `bcryptjs` (hash de contraseñas, compatible con Vercel sin binario nativo)
 
 ## Estructura importante
 

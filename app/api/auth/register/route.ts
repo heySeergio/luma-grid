@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import { Prisma } from '@prisma/client'
-import { PrismaClientInitializationError } from '@prisma/client/runtime/library'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +16,15 @@ function isMissingDatabaseUrlError(error: unknown) {
     return (
         error instanceof Error &&
         error.message.includes('Environment variable not found: DATABASE_URL')
+    )
+}
+
+function isPrismaClientInitializationError(error: unknown): boolean {
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        'name' in error &&
+        (error as Error).name === 'PrismaClientInitializationError'
     )
 }
 
@@ -123,8 +131,8 @@ export async function POST(req: Request) {
                 { status: 500 },
             )
         }
-        if (error instanceof PrismaClientInitializationError) {
-            console.error('Prisma init:', error.message)
+        if (isPrismaClientInitializationError(error)) {
+            console.error('Prisma init:', error instanceof Error ? error.message : error)
             return NextResponse.json(
                 {
                     error:

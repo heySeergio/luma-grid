@@ -20,7 +20,7 @@ export const authOptions: NextAuthOptions = {
 
                 const [prismaMod, bcryptMod] = await Promise.all([
                     import("@/lib/prisma"),
-                    import("bcrypt"),
+                    import("bcryptjs"),
                 ])
                 const prisma = prismaMod.prisma
                 const email = normalizeEmail(credentials.email)
