@@ -1,0 +1,165 @@
+# Arquitectura Léxica AAC
+
+## 1. Ampliar el modelo de datos
+Primero ampliaría la base en Prisma para separar el botón visual del conocimiento lingüístico.
+
+- Añadir a `Symbol`:
+  - `normalizedLabel`
+  - `lexemeId`
+  - `posConfidence`
+  - `manualGrammarOverride`
+- Crear tablas nuevas:
+  - `Lexeme`
+  - `LexemeForm`
+  - `LexemeAlias`
+  - `PredictionTransition`
+  - `SymbolUsageEvent`
+
+Objetivo:
+Tener una arquitectura donde el símbolo AAC no sea el diccionario, sino una capa visual enlazada a un sistema lingüístico.
+
+## 2. Preparar un banco léxico inicial
+No intentaría cargar todo el español desde el primer momento. Empezaría con una base útil para AAC.
+
+- Incluir:
+  - verbos frecuentes
+  - pronombres
+  - determinantes
+  - preposiciones
+  - conectores
+  - sustantivos y adjetivos frecuentes
+  - verbos irregulares importantes
+- Cada entrada inicial debería tener:
+  - `lemma`
+  - `primaryPos`
+  - rasgos básicos
+  - formas conocidas en `LexemeForm`
+
+Objetivo:
+Disponer de un seed pequeño pero muy útil desde el día 1.
+
+## 3. Crear el normalizador
+Antes de detectar o conjugar nada, hace falta una capa de normalización coherente.
+
+- Implementar utilidades como:
+  - `normalizeTextForLexicon()`
+  - `normalizeLooseTextForSearch()`
+- Estas funciones deberían:
+  - hacer `trim`
+  - pasar a minúsculas
+  - limpiar espacios duplicados
+  - mantener tildes
+  - generar una variante flexible para búsquedas tolerantes
+
+Objetivo:
+Evitar que diferencias de formato rompan la detección léxica.
+
+## 4. Implementar el detector léxico
+Después haría una función central tipo `detectLexemeForLabel(label: string)`.
+
+Orden de resolución:
+1. Buscar en `LexemeAlias`
+2. Buscar en `LexemeForm.surface`
+3. Buscar en `Lexeme.lemma`
+4. Aplicar heurísticas
+5. Devolver `unknown` si no hay coincidencia fiable
+
+La salida debería incluir:
+- `lexemeId`
+- `lemma`
+- `primaryPos`
+- `confidence`
+- `alternatives`
+- `method`
+
+Objetivo:
+Que el sistema proponga automáticamente el análisis lingüístico al crear un botón.
+
+## 5. Integrarlo en el guardado de símbolos
+Una vez existe el detector, lo conectaría con el flujo de creación y edición de símbolos en `/admin`.
+
+Al guardar un símbolo:
+1. Normalizar `label`
+2. Llamar al detector
+3. Guardar:
+   - `normalizedLabel`
+   - `lexemeId`
+   - `posType`
+   - `posConfidence`
+   - `manualGrammarOverride = false`
+
+Si la confianza es baja:
+- Mostrar sugerencia editable al usuario
+
+Si el usuario corrige:
+- Guardar override manual
+
+Objetivo:
+Automatizar la clasificación sin quitarle control al usuario.
+
+## 6. Rehacer el predictor AAC sobre léxico
+Cuando los símbolos ya tengan `lexemeId` o `posType`, rehacería el predictor para que se base en información lingüística real.
+
+El predictor debería combinar:
+- reglas gramaticales
+- historial del perfil
+- prioridad AAC
+- frecuencia reciente
+
+Primera versión simple:
+- `pronoun -> verb`
+- `verb -> noun/adj`
+- `det -> noun`
+- `negation -> verb`
+
+Ejemplo de score:
+- 35% gramática
+- 35% transiciones reales del perfil
+- 15% prioridad AAC
+- 10% recencia
+- 5% contexto semántico
+
+Objetivo:
+Mejorar el iluminado de sugerencias con un sistema más útil y coherente.
+
+## 7. Registrar uso real del usuario
+Después haría que cada pulsación al construir frase deje rastro para que el predictor aprenda.
+
+En cada selección:
+- guardar `SymbolUsageEvent`
+- actualizar `PredictionTransition`
+
+Con esto el sistema aprende:
+- qué suele venir después de qué
+- qué secuencias usa cada perfil
+- qué vocabulario es más frecuente o reciente
+
+Objetivo:
+Hacer que el predictor no solo sea “correcto en español”, sino adaptado a cómo se comunica esa persona.
+
+## 8. Añadir conjugación y reverse lookup serio
+Cuando ya haya base léxica y predictor básico, entraría a fondo con los verbos.
+
+Haría dos piezas:
+- `LexemeForm` para reconocer formas ya conjugadas
+- un motor de conjugación para generar la forma correcta
+
+Ejemplos:
+- `quiero` se detecta como forma de `querer`
+- `yo + comer` permite proponer o generar `como`
+- `ella + ir` permite resolver una forma correcta según contexto
+
+Objetivo:
+Que la conjugación y la predicción compartan la misma base lingüística y no vivan como sistemas separados.
+
+## Orden de implementación recomendado
+1. Prisma: nuevas tablas y campos
+2. Seed léxico mínimo
+3. Normalizador
+4. `detectLexemeForLabel()`
+5. Integración en `/admin`
+6. Corrección manual en el modal del símbolo
+7. Registro de transiciones de uso
+8. Predictor por score
+9. Conjugación de verbos
+10. Ampliación progresiva del diccionario

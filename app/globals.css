@@ -4,10 +4,107 @@
 
 :root {
   --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --app-bg: #e7ebf3;
-  --panel-blue: #3f4e77;
-  --panel-blue-hover: #354265;
+  --accent-light: #818cf8;
+  --accent-dark: #4f46e5;
+  --app-bg: #eff4ff;
+  --app-bg-soft: #f8fafc;
+  --app-surface: rgba(255, 255, 255, 0.78);
+  --app-surface-muted: rgba(255, 255, 255, 0.66);
+  --app-surface-strong: #ffffff;
+  --app-surface-elevated: rgba(255, 255, 255, 0.92);
+  --app-surface-overlay: rgba(255, 255, 255, 0.74);
+  --app-foreground: #0f172a;
+  --app-muted-foreground: #64748b;
+  --app-border: rgba(148, 163, 184, 0.35);
+  --app-border-strong: rgba(148, 163, 184, 0.55);
+  --app-input: rgba(255, 255, 255, 0.9);
+  --app-input-border: rgba(148, 163, 184, 0.4);
+  --app-placeholder: #94a3b8;
+  --app-hover: rgba(148, 163, 184, 0.12);
+  --app-active: rgba(99, 102, 241, 0.12);
+  --app-focus-ring: rgb(99 102 241 / 0.14);
+  --app-toolbar: rgba(255, 255, 255, 0.55);
+  --app-toolbar-inner: rgba(255, 255, 255, 0.12);
+  --app-primary-button: linear-gradient(180deg, #7c83ff 0%, #6366f1 100%);
+  --app-primary-button-foreground: #ffffff;
+  --app-predicted: rgba(99, 102, 241, 0.16);
+  --app-predicted-border: rgba(99, 102, 241, 0.44);
+  --app-modal-backdrop: rgba(15, 23, 42, 0.42);
+  --symbol-color-surface: #f8fafc;
+  --symbol-color-sky: #dbeafe;
+  --symbol-color-green: #dcfce7;
+  --symbol-color-yellow: #fef3c7;
+  --symbol-color-violet: #ede9fe;
+  --symbol-color-rose: #fee2e2;
+  --symbol-color-cyan: #e0f2fe;
+  --symbol-color-pink: #fce7f3;
+  --symbol-color-amber: #fde68a;
+  --symbol-color-mint: #d1fae5;
+  --symbol-color-time: #f3e8ff;
+  --symbol-color-folder: #ead6c9;
+  --symbol-color-template: #f3f4f6;
+  --symbol-color-fixed: #e5f6e6;
+  --panel-blue: #334155;
+  --panel-blue-soft: #475569;
+  --panel-glass: rgba(255, 255, 255, 0.72);
+  --phrase-surface: rgba(48, 63, 102, 0.9);
+  --phrase-inner: rgba(28, 37, 66, 0.88);
+  --auth-overlay: rgba(255, 255, 255, 0.78);
+  --card-shadow: 0 10px 30px -18px rgb(15 23 42 / 0.22), 0 10px 18px -14px rgb(15 23 42 / 0.16);
+  --premium-shadow: 0 24px 40px -24px rgb(15 23 42 / 0.28), 0 18px 28px -20px rgb(15 23 42 / 0.2);
+  --floating-shadow: 0 18px 50px -28px rgb(15 23 42 / 0.38), 0 20px 35px -25px rgb(15 23 42 / 0.2);
+  --inner-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.dark {
+  --app-bg: #020617;
+  --app-bg-soft: #081120;
+  --app-surface: rgba(15, 23, 42, 0.76);
+  --app-surface-muted: rgba(15, 23, 42, 0.62);
+  --app-surface-strong: #0f172a;
+  --app-surface-elevated: rgba(15, 23, 42, 0.9);
+  --app-surface-overlay: rgba(15, 23, 42, 0.78);
+  --app-foreground: #e2e8f0;
+  --app-muted-foreground: #94a3b8;
+  --app-border: rgba(71, 85, 105, 0.65);
+  --app-border-strong: rgba(100, 116, 139, 0.8);
+  --app-input: rgba(15, 23, 42, 0.92);
+  --app-input-border: rgba(71, 85, 105, 0.9);
+  --app-placeholder: #64748b;
+  --app-hover: rgba(148, 163, 184, 0.1);
+  --app-active: rgba(129, 140, 248, 0.18);
+  --app-focus-ring: rgb(129 140 248 / 0.22);
+  --app-toolbar: rgba(15, 23, 42, 0.58);
+  --app-toolbar-inner: rgba(148, 163, 184, 0.08);
+  --app-primary-button: linear-gradient(180deg, #7c83ff 0%, #6366f1 100%);
+  --app-primary-button-foreground: #ffffff;
+  --app-predicted: rgba(129, 140, 248, 0.2);
+  --app-predicted-border: rgba(129, 140, 248, 0.44);
+  --app-modal-backdrop: rgba(2, 6, 23, 0.6);
+  --symbol-color-surface: #1d2736;
+  --symbol-color-sky: #17304b;
+  --symbol-color-green: #173729;
+  --symbol-color-yellow: #4a3d16;
+  --symbol-color-violet: #2d2452;
+  --symbol-color-rose: #4b2430;
+  --symbol-color-cyan: #153646;
+  --symbol-color-pink: #47243e;
+  --symbol-color-amber: #5a3c17;
+  --symbol-color-mint: #173a34;
+  --symbol-color-time: #35234a;
+  --symbol-color-folder: #4a362d;
+  --symbol-color-template: #202938;
+  --symbol-color-fixed: #19342c;
+  --panel-blue: #020617;
+  --panel-blue-soft: #1e293b;
+  --panel-glass: rgba(15, 23, 42, 0.78);
+  --phrase-surface: rgba(8, 15, 31, 0.86);
+  --phrase-inner: rgba(2, 6, 23, 0.84);
+  --auth-overlay: rgba(15, 23, 42, 0.72);
+  --card-shadow: 0 16px 44px -26px rgb(0 0 0 / 0.5), 0 14px 24px -18px rgb(2 6 23 / 0.5);
+  --premium-shadow: 0 24px 54px -32px rgb(0 0 0 / 0.58), 0 22px 36px -24px rgb(2 6 23 / 0.56);
+  --floating-shadow: 0 30px 64px -36px rgb(0 0 0 / 0.65), 0 24px 40px -26px rgb(2 6 23 / 0.58);
+  --inner-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 
 * {
@@ -15,64 +112,289 @@
 }
 
 body {
+  font-family: var(--font-app-sans), sans-serif;
   overscroll-behavior: none;
   background: var(--app-bg);
+  color: var(--app-foreground);
+  transition: background-color 0.28s ease, color 0.28s ease;
+}
+
+body.font-dyslexia-enabled,
+body.font-dyslexia-enabled button,
+body.font-dyslexia-enabled input,
+body.font-dyslexia-enabled textarea,
+body.font-dyslexia-enabled select {
+  font-family: var(--font-open-dyslexic), var(--font-app-sans), sans-serif;
+}
+
+.font-dyslexia-preview {
+  font-family: var(--font-open-dyslexic), var(--font-app-sans), sans-serif;
+}
+
+input,
+textarea,
+select,
+button {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--app-placeholder);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
 }
 
-/* Symbol cell animations */
-.symbol-cell {
-  transition: transform 120ms ease, box-shadow 140ms ease, border-color 140ms ease, filter 140ms ease;
-  transform-origin: center center;
-  will-change: transform;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-border-strong) 85%, transparent);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-border-strong) 100%, transparent);
+}
+
+/* Glassmorphism */
+.glass {
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--app-border);
+}
+
+.glass-panel {
+  background: var(--auth-overlay);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--floating-shadow);
+}
+
+.app-panel {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.app-input {
+  background: var(--app-input);
+  border: 1px solid var(--app-input-border);
+  color: var(--app-foreground);
+  box-shadow: var(--inner-shadow);
+}
+
+.app-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--app-focus-ring);
+  outline: none;
+}
+
+.app-subtle {
+  color: var(--app-muted-foreground);
+}
+
+.app-input:hover,
+.app-panel:hover {
+  border-color: var(--app-border-strong);
+}
+
+.ui-floating-panel {
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--floating-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.ui-modal-panel {
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--floating-shadow);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+.ui-toolbar-shell {
+  background: var(--app-toolbar);
+  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.ui-icon-button {
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  color: var(--app-foreground);
+  box-shadow: var(--inner-shadow);
+}
+
+.ui-icon-button:hover {
+  background: color-mix(in srgb, var(--app-surface-elevated) 86%, var(--app-hover));
+  border-color: var(--app-border-strong);
+  transform: translateY(-1px);
+}
+
+.ui-icon-button:active {
+  transform: scale(0.97);
+}
+
+.ui-primary-button {
+  background: var(--app-primary-button);
+  color: var(--app-primary-button-foreground);
+  box-shadow: var(--premium-shadow);
+}
+
+.ui-primary-button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.ui-secondary-button {
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  color: var(--app-foreground);
+}
+
+.ui-secondary-button:hover {
+  background: color-mix(in srgb, var(--app-surface-elevated) 85%, var(--app-hover));
+}
+
+.ui-chip {
+  background: var(--app-toolbar-inner);
+  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ui-soft-badge {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  color: color-mix(in srgb, var(--accent-dark) 88%, var(--app-foreground));
+}
+
+.dark .ui-soft-badge {
+  color: #c7d2fe;
+}
+
+.ui-key-button {
+  background: var(--app-surface-elevated);
+  border: 1px solid var(--app-border);
+  color: var(--app-foreground);
+  box-shadow: var(--card-shadow);
+}
+
+.ui-key-button:hover {
+  border-color: var(--app-border-strong);
+  background: color-mix(in srgb, var(--app-surface-elevated) 88%, var(--app-hover));
+  transform: translateY(-1px);
+}
+
+.ui-key-button:active {
+  transform: scale(0.985);
+}
+
+.ui-empty-slot {
+  background: color-mix(in srgb, var(--app-surface-muted) 78%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--app-border-strong) 75%, transparent);
+}
+
+/* Symbol cell premium look */
+.symbol-cell {
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.2s ease,
+    filter 0.18s ease,
+    background-color 0.2s ease;
+  transform-origin: center;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.symbol-cell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.symbol-cell:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--premium-shadow);
+  border-color: var(--accent-light);
+}
+
+.symbol-cell:hover::after {
+  opacity: 1;
+}
+
 .symbol-cell:active {
-  transform: scale(0.96);
-  filter: brightness(0.98);
+  transform: scale(0.97);
+  box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.06);
+}
+
+/* Layout improvements */
+.aac-grid-surface {
+  background: color-mix(in srgb, var(--app-surface-muted) 88%, transparent);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 2px 4px 0 rgb(0 0 0 / 0.04);
+  border: 1px solid var(--app-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* Micro-animations */
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-pop {
+  animation: pop 0.2s ease-out;
 }
 
 /* Scanner highlight */
 .scanner-active {
   outline: 4px solid #f59e0b;
-  outline-offset: 2px;
-}
-.scanner-selected {
-  background-color: #fbbf24 !important;
-}
-
-/* Phrase bar */
-.phrase-bar {
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+  outline-offset: 4px;
+  border-radius: 0.75rem;
+  z-index: 10;
 }
 
-.aac-top-button {
-  background: var(--panel-blue);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  transition: background-color 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+.theme-auth-shell {
+  background-color: var(--app-bg-soft);
 }
 
-.aac-top-button:hover {
-  background: var(--panel-blue-hover);
-  box-shadow: 0 6px 14px rgba(34, 43, 69, 0.22);
-}
-
-.aac-top-button:active {
-  transform: translateY(1px);
-}
-
-.aac-grid-surface {
-  background: #dfe5f0;
+.theme-page-shell {
+  background: linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-soft) 100%);
 }

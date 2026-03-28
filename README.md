@@ -1,36 +1,284 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Luma Grid
 
-## Getting Started
+Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y alternativa en español. Combina un tablero de símbolos, construcción de frases, voz, perfiles configurables, panel de administración y una capa léxica que ayuda a conjugar, clasificar palabras y mejorar la predicción contextual.
 
-First, run the development server:
+## Qué hace el proyecto
+
+- Permite comunicarse mediante un grid de símbolos y carpetas temáticas.
+- Construye frases naturales a partir de selecciones AAC.
+- Usa una capa léxica para detectar tipo de palabra, enlazar lexemas y mejorar predicción/conjugación.
+- Incluye administración por perfiles con edición visual del tablero.
+- Soporta tema claro/oscuro, branding propio y opción de tipografía adaptada a dislexia.
+- Está pensado para uso web tipo PWA y para evolucionar hacia flujos offline y accesibles.
+
+## Funcionalidades principales
+
+- `Tablero AAC`
+  Selección de símbolos, carpetas, frases rápidas, teclado y reproducción de voz.
+
+- `Panel de administración`
+  Gestión de perfiles, símbolos, posiciones, grid, categorías, colores, cuenta y revisión léxica.
+
+- `Autenticación`
+  Login y registro con `NextAuth` + credenciales.
+
+- `Sistema léxico`
+  Detección automática de lema, POS, confianza, overrides manuales, conjugación y predicción por contexto.
+
+- `Predicción AAC`
+  Aprende de secuencias de uso y combina reglas gramaticales con historial del perfil.
+
+- `Branding y páginas públicas`
+  Landing, branding, páginas legales y footer global.
+
+- `Accesibilidad visual`
+  Tema modular claro/oscuro y fuente OpenDyslexic opcional.
+
+## Stack técnico
+
+- `Next.js 14` con `App Router`
+- `React 18`
+- `TypeScript`
+- `Tailwind CSS`
+- `NextAuth`
+- `Prisma` + `SQLite`
+- `Framer Motion`
+- `dnd-kit`
+- `next-themes`
+- `bcrypt`
+
+## Estructura importante
+
+```text
+app/
+  page.tsx                Landing
+  tablero/                Interfaz AAC principal
+  admin/                  Panel de administración
+  branding/               Hub de branding
+  login/ register/        Auth
+  api/                    Rutas API y auth
+  actions/                Server actions
+
+components/
+  app/                    UI del comunicador
+  site/                   Branding, footer, páginas legales
+
+lib/
+  auth.ts                 Configuración NextAuth
+  prisma.ts               Cliente Prisma
+  data/defaultSymbols.ts  Grid y vocabulario base
+  lexicon/                Normalización, detección, preguntas, conjugación
+  ui/                     Tokens visuales y utilidades de color
+  voice/                  Adaptador de síntesis de voz
+
+prisma/
+  schema.prisma           Modelo de datos
+  migrations/             Migraciones
+  seed-lexicon.mjs        Banco léxico inicial
+```
+
+## Rutas principales
+
+- `/`
+  Landing pública del producto.
+
+- `/tablero`
+  Interfaz principal de comunicación AAC.
+
+- `/admin`
+  Panel de administración para perfiles y símbolos.
+
+- `/branding`
+  Página de sistema visual, logos, activos y paleta.
+
+- `/login`
+  Inicio de sesión.
+
+- `/register`
+  Registro de cuenta.
+
+- `/terminos`, `/privacidad`, `/cookies`
+  Páginas legales.
+
+## Modelo de datos resumido
+
+El proyecto separa muy claramente la parte visual AAC de la parte lingüística:
+
+- `User`
+  Cuenta, tema preferido y opción de tipografía adaptada a dislexia.
+
+- `Profile`
+  Perfil de uso del comunicador. Cada usuario puede tener varios.
+
+- `Symbol`
+  Botón visual del grid. Guarda etiqueta, emoji, color, posición y metadatos léxicos.
+
+- `Phrase`
+  Frases rápidas o fijadas.
+
+- `Lexeme`
+  Entrada lingüística base: lema, categoría gramatical y rasgos.
+
+- `LexemeForm`
+  Formas flexionadas o superficies reconocibles.
+
+- `LexemeAlias`
+  Alias o variantes toleradas.
+
+- `PredictionTransition`
+  Relación entre términos seleccionados para mejorar predicción.
+
+- `SymbolUsageEvent`
+  Registro real de uso para aprendizaje contextual.
+
+## Sistema léxico
+
+La capa léxica es uno de los núcleos del proyecto.
+
+Hace posible:
+
+- detectar automáticamente un lexema a partir de la etiqueta del símbolo
+- guardar `normalizedLabel`, `lexemeId`, `posType`, `posConfidence`
+- diferenciar entre análisis automático y corrección manual
+- mejorar la predicción AAC
+- aplicar conjugación con más contexto
+- tratar preguntas como `¿Qué?`, `¿Quién?`, `¿Dónde?`, etc.
+
+Flujo general:
+
+1. Se normaliza el texto.
+2. Se busca coincidencia en alias, formas y lema.
+3. Si no hay coincidencia buena, se aplican heurísticas.
+4. Se guarda el análisis en el símbolo.
+5. La predicción reutiliza esa información junto al historial del perfil.
+
+El plan original de esta arquitectura está documentado en [`.lexico`](./.lexico).
+
+## Interfaz AAC
+
+La interfaz principal vive en `components/app/AppInterface.tsx`.
+
+Incluye:
+
+- grid principal de símbolos
+- navegación por carpetas
+- teclado integrado
+- frases rápidas
+- sugerencias predictivas
+- lectura con voz
+- selector de perfil
+- lógica de seguimiento de secuencia para aprendizaje
+
+## Panel de administración
+
+El admin permite:
+
+- crear, editar y eliminar perfiles
+- cambiar dimensiones del grid
+- editar símbolos
+- cambiar color, emoji, categoría y tipo gramatical
+- guardar overrides gramaticales manuales
+- revisar cobertura léxica
+- cambiar preferencias de cuenta
+
+También incorpora:
+
+- vista grid
+- vista lista
+- drag and drop
+- branding del producto
+
+## Tema, branding y accesibilidad
+
+El proyecto usa un sistema visual modular basado en variables CSS.
+
+Incluye:
+
+- modo claro
+- modo oscuro
+- selector de tema
+- branding integrado en landing, footer, admin y páginas públicas
+- opción de `Tipografía adaptada a dislexia`
+
+La fuente de dislexia usa OpenDyslexic servida localmente.
+
+## Puesta en marcha
+
+### 1. Instalar dependencias
+
+```bash
+npm install
+```
+
+### 2. Configurar variables de entorno
+
+El proyecto usa `.env` / `.env.local`.
+
+Como mínimo conviene definir:
+
+```bash
+NEXTAUTH_SECRET=tu_secreto
+NEXTAUTH_URL=http://localhost:3000
+```
+
+Si ya existe `.env` en el proyecto, respeta esa configuración.
+
+### 3. Aplicar base de datos
+
+```bash
+npx prisma migrate dev
+```
+
+### 4. Sembrar banco léxico
+
+```bash
+npm run seed:lexicon
+```
+
+### 5. Arrancar en desarrollo
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts útiles
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run seed:lexicon
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Notas de desarrollo
 
-## Learn More
+- `middleware.ts` protege `admin`, `tablero` y algunas rutas API.
+- El proyecto usa `server actions` en `app/actions/`.
+- Algunas partes del código incluyen fallbacks defensivos para clientes Prisma desfasados durante desarrollo.
+- El banco léxico se puede ampliar de forma progresiva sin reestructurar el sistema.
 
-To learn more about Next.js, take a look at the following resources:
+## Estado actual del proyecto
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Luma Grid ya tiene:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- autenticación funcional
+- panel admin con perfiles
+- grid base por defecto
+- branding integrado
+- sistema léxico operativo
+- cobertura léxica completa para el panel default
+- predicción contextual AAC
+- adaptación visual claro/oscuro
 
-## Deploy on Vercel
+## Próximos pasos naturales
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- mejorar cobertura léxica de vocabulario no default
+- enriquecer aún más el diccionario de español AAC
+- ampliar analítica de uso por perfil
+- afinar accesibilidad y scanning
+- preparar despliegue de producción y PWA completa
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Licencia y uso
+
+Este repositorio no incluye todavía una licencia formal explícita en este README. Si el proyecto va a abrirse o compartirse públicamente, conviene añadir una licencia en raíz y documentar condiciones de uso.

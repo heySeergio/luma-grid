@@ -10,46 +10,52 @@ export interface Profile {
   name: string
   avatar?: string
   color: string
-  communication_gender?: ProfileGender
-  created_at: string
-  updated_at: string
+  communicationGender?: ProfileGender
+  createdAt: string
+  updatedAt: string
   archived: boolean
 }
 
 export interface Grid {
   id: string
-  profile_id: string
+  profileId: string
   name: string
-  is_shared: boolean
-  created_at: string
-  updated_at: string
+  isShared: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Symbol {
   id: string
-  grid_id: string
+  gridId: string
+  sourceSymbolId?: string
   label: string
+  normalizedLabel?: string
   emoji?: string
-  image_url?: string
+  imageUrl?: string
   category: string
-  pos_type: PosType
-  position_x: number
-  position_y: number
+  posType: PosType
+  posConfidence?: number | null
+  manualGrammarOverride?: boolean
+  lexemeId?: string | null
+  positionX: number
+  positionY: number
   color: string
   hidden: boolean
-  arasaac_id?: number
-  created_at: string
-  updated_at: string
+  state: string
+  arasaacId?: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Phrase {
   id: string
-  profile_id: string
+  profileId: string
   text: string
-  symbols_used: Array<{ id: string; label: string }>
-  created_at: string
-  is_pinned: boolean
-  use_count: number
+  symbolsUsed: Array<{ id: string; label: string }>
+  createdAt: string
+  isPinned: boolean
+  useCount: number
 }
 
 export interface VoiceConfig {

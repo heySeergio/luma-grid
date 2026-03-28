@@ -12,32 +12,36 @@ interface Props {
 
 export default function ProfileSelector({ profiles, currentProfile, onSelect, onClose }: Props) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-bold text-gray-900">Seleccionar perfil</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-xl" style={{ background: 'var(--app-modal-backdrop)' }}>
+      <div className="ui-modal-panel w-full max-w-sm rounded-[2rem]">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Seleccionar perfil</h2>
+          <button onClick={onClose} className="ui-icon-button rounded-xl p-2 dark:text-slate-200">
             <X size={20} />
           </button>
         </div>
-        <div className="p-4 space-y-2">
+        <div className="space-y-2 p-4">
           {profiles.map(profile => (
             <button
               key={profile.id}
               onClick={() => onSelect(profile)}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+              className={`flex w-full items-center gap-3 rounded-[1.35rem] border p-3 transition-all ${
                 currentProfile?.id === profile.id
-                  ? 'bg-indigo-50 border-2 border-indigo-400'
-                  : 'hover:bg-gray-50 border-2 border-transparent'
+                  ? 'bg-indigo-50/80 shadow-sm dark:bg-indigo-500/15'
+                  : 'hover:translate-y-[-1px]'
               }`}
+              style={{
+                borderColor: currentProfile?.id === profile.id ? 'var(--app-predicted-border)' : 'var(--app-border)',
+                background: currentProfile?.id === profile.id ? 'var(--app-predicted)' : 'var(--app-surface)',
+              }}
             >
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white"
                 style={{ backgroundColor: profile.color }}
               >
                 {profile.avatar || profile.name[0]}
               </div>
-              <span className="text-lg font-semibold text-gray-800">{profile.name}</span>
+              <span className="text-lg font-semibold text-gray-800 dark:text-slate-100">{profile.name}</span>
             </button>
           ))}
         </div>

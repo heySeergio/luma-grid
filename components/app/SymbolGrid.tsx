@@ -17,6 +17,8 @@ interface Props {
   onSymbolSelect: (symbol: Symbol) => void
   folders?: FolderItem[]
   onFolderSelect?: (folderName: string) => void
+  gridCols?: number
+  gridRows?: number
 }
 
 export default function SymbolGrid({
@@ -26,14 +28,10 @@ export default function SymbolGrid({
   onSymbolSelect,
   folders = [],
   onFolderSelect,
+  gridCols = 14,
+  gridRows = 8,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
-
-  const colsMap: Record<GridCellSize, string> = {
-    small: 'grid-cols-[repeat(14,minmax(0,1fr))]',
-    medium: 'grid-cols-[repeat(14,minmax(0,1fr))]',
-    large: 'grid-cols-[repeat(14,minmax(0,1fr))]',
-  }
 
   const sizeMap: Record<GridCellSize, string> = {
     small: 'h-full',
@@ -55,17 +53,17 @@ export default function SymbolGrid({
   }
 
   const folderColorMap: Record<string, string> = {
-    'Yo/Tú': 'from-blue-100 to-blue-50 border-blue-300 text-blue-900',
-    Acciones: 'from-violet-100 to-violet-50 border-violet-300 text-violet-900',
-    Comida: 'from-cyan-100 to-cyan-50 border-cyan-300 text-cyan-900',
-    Lugares: 'from-amber-100 to-amber-50 border-amber-300 text-amber-900',
-    Sentimientos: 'from-emerald-100 to-emerald-50 border-emerald-300 text-emerald-900',
-    Tiempo: 'from-fuchsia-100 to-fuchsia-50 border-fuchsia-300 text-fuchsia-900',
+    'Yo/Tú': 'from-blue-200/70 to-white/80 text-blue-950 dark:from-blue-500/20 dark:to-slate-950 dark:text-blue-100',
+    Acciones: 'from-violet-200/70 to-white/80 text-violet-950 dark:from-violet-500/20 dark:to-slate-950 dark:text-violet-100',
+    Comida: 'from-cyan-200/70 to-white/80 text-cyan-950 dark:from-cyan-500/20 dark:to-slate-950 dark:text-cyan-100',
+    Lugares: 'from-amber-200/75 to-white/80 text-amber-950 dark:from-amber-500/20 dark:to-slate-950 dark:text-amber-100',
+    Sentimientos: 'from-emerald-200/75 to-white/80 text-emerald-950 dark:from-emerald-500/20 dark:to-slate-950 dark:text-emerald-100',
+    Tiempo: 'from-fuchsia-200/70 to-white/80 text-fuchsia-950 dark:from-fuchsia-500/20 dark:to-slate-950 dark:text-fuchsia-100',
   }
 
   if (symbols.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-lg">
+      <div className="flex h-full items-center justify-center text-lg text-gray-400 dark:text-slate-500">
         No hay símbolos disponibles
       </div>
     )
@@ -73,16 +71,29 @@ export default function SymbolGrid({
 
   // Sort by position
   const sorted = [...symbols].sort((a, b) => {
-    if (a.position_y !== b.position_y) return a.position_y - b.position_y
-    return a.position_x - b.position_x
+    const aY = a.positionY !== undefined ? a.positionY : a.position_y
+    const bY = b.positionY !== undefined ? b.positionY : b.position_y
+    const aX = a.positionX !== undefined ? a.positionX : a.position_x
+    const bX = b.positionX !== undefined ? b.positionX : b.position_x
+    if (aY !== bY) return aY - bY
+    return aX - bX
   })
-  const maxRow = sorted.reduce((acc, symbol) => Math.max(acc, symbol.position_y), 0) + 1
+  const maxRow = Math.max(
+    gridRows,
+    sorted.reduce((acc, symbol) => {
+      const symY = symbol.positionY !== undefined ? symbol.positionY : symbol.position_y
+      return Math.max(acc, symY + 1)
+    }, 0)
+  )
 
   return (
     <div
       ref={gridRef}
-      className={`aac-grid-surface grid ${colsMap[cellSize]} gap-1.5 p-2 overflow-hidden h-full content-start`}
-      style={{ gridTemplateRows: `repeat(${Math.max(maxRow, 1)}, minmax(0, 1fr))` }}
+      className="aac-grid-surface grid h-full content-start gap-1.5 overflow-hidden p-2 md:p-3"
+      style={{
+        gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${Math.max(maxRow, 1)}, minmax(0, 1fr))`
+      }}
     >
       {folders.map(folder => {
         const FolderIcon = folderIconMap[folder.name] || Users
@@ -92,42 +103,53 @@ export default function SymbolGrid({
             key={`folder-${folder.name}`}
             onClick={() => onFolderSelect?.(folder.name)}
             className={`
-              flex flex-col items-center justify-center rounded-lg border-2
+              symbol-cell flex flex-col items-center justify-center rounded-[1.35rem] border
               bg-gradient-to-br ${folderColors}
-              ${sizeMap[cellSize]} w-full p-1 select-none shadow-sm
-              hover:shadow-md transition-all duration-100
+              ${sizeMap[cellSize]} w-full select-none p-1.5 shadow-sm
+              transition-all duration-150
             `}
+            style={{
+              borderColor: 'var(--app-border)',
+              boxShadow: 'var(--card-shadow)',
+            }}
             aria-label={`Abrir carpeta ${folder.name}`}
           >
-            <div className="mb-1 rounded-lg bg-white/70 p-1.5">
+            <div className="ui-chip mb-1 rounded-2xl p-2">
               <FolderIcon size={20} />
             </div>
-            <span className="text-[11px] md:text-xs font-bold text-center leading-tight line-clamp-2 w-full">
+            <span className="w-full text-center text-[11px] font-bold leading-tight line-clamp-2 md:text-xs">
               {folder.name}
             </span>
           </button>
         )
       })}
 
-      {sorted.map(symbol => (
-        <div
-          key={symbol.id}
-          style={{
-            gridColumnStart: symbol.position_x + 1,
-            gridRowStart: symbol.position_y + 1,
-          }}
-          className="h-full"
-        >
-          <SymbolCell
-            symbol={symbol}
-            isPredicted={predictedIds.includes(symbol.id)}
-            cellSize={cellSize}
-            sizeClass={sizeMap[cellSize]}
-            isFolder={symbol.id.startsWith('folder-')}
-            onSelect={handleSelect}
-          />
-        </div>
-      ))}
+      {sorted.map(symbol => {
+        const posX = symbol.positionX !== undefined ? symbol.positionX : symbol.position_x
+        const posY = symbol.positionY !== undefined ? symbol.positionY : symbol.position_y
+
+        return (
+          <div
+            key={symbol.id}
+            style={{
+              gridColumnStart: posX + 1,
+              gridRowStart: posY + 1,
+            }}
+            className="h-full"
+          >
+            {symbol.state !== 'hidden' && (
+              <SymbolCell
+                symbol={symbol}
+                isPredicted={predictedIds.includes(symbol.id)}
+                cellSize={cellSize}
+                sizeClass={sizeMap[cellSize]}
+                isFolder={symbol.id.startsWith('folder-')}
+                onSelect={handleSelect}
+              />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

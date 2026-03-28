@@ -1,3 +1,4 @@
+import { getProfileGender } from '../profileGender'
 import type { VoiceAdapter, Voice } from './VoiceAdapter'
 
 export class WebSpeechAdapter implements VoiceAdapter {
@@ -28,6 +29,23 @@ export class WebSpeechAdapter implements VoiceAdapter {
       if (this.voiceId) {
         const voices = window.speechSynthesis.getVoices()
         const voice = voices.find(v => v.voiceURI === this.voiceId || v.name === this.voiceId)
+        if (voice) utterance.voice = voice
+      } else {
+        // Auto-select based on gender
+        const gender = _profileId ? getProfileGender(_profileId) : 'male'
+        const voices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('es') || v.lang.startsWith('ES'))
+
+        let voice: SpeechSynthesisVoice | undefined
+        if (gender === 'female') {
+          // Look for common female names in Spanish (Elena, Monica, Paulina, etc.)
+          voice = voices.find(v => /elena|monica|paulina|sabina|victoria|luciana/i.test(v.name))
+        } else {
+          // Look for common male names (Jorge, Juan, Pablo, etc.)
+          voice = voices.find(v => /jorge|juan|pablo|diego|carlos/i.test(v.name))
+        }
+
+        // Fallback to first available Spanish voice
+        if (!voice && voices.length > 0) voice = voices[0]
         if (voice) utterance.voice = voice
       }
 

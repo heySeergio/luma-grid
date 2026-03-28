@@ -10,7 +10,7 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
       {children}
     </div>
   )

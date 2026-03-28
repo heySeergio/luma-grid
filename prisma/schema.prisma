@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  password               String
+  name                   String?
+  preferredTheme         String    @default("system") @map("preferred_theme")
+  preferredDyslexiaFont  Boolean   @default(false) @map("preferred_dyslexia_font")
+  profiles               Profile[]
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model Profile {
+  id          String               @id @default(cuid())
+  name        String
+  userId      String               @map("user_id")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gender      String               @default("male") // "male" | "female"
+  isDemo      Boolean              @default(false) @map("is_demo")
+  gridRows    Int                  @default(8) @map("grid_rows")
+  gridCols    Int                  @default(14) @map("grid_cols")
+  symbols     Symbol[]
+  transitions PredictionTransition[]
+  usageEvents SymbolUsageEvent[]
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  @@map("profiles")
+}
+
+model Symbol {
+  id                    String             @id @default(cuid())
+  profileId             String             @map("profile_id")
+  profile               Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  gridId                String             @map("grid_id")
+  label                 String
+  normalizedLabel       String             @default("") @map("normalized_label")
+  emoji                 String?
+  imageUrl              String?            @map("image_url")
+  category              String
+  posType               String             @map("pos_type")
+  posConfidence         Float?             @map("pos_confidence")
+  manualGrammarOverride Boolean            @default(false) @map("manual_grammar_override")
+  lexemeId              String?            @map("lexeme_id")
+  lexeme                Lexeme?            @relation(fields: [lexemeId], references: [id], onDelete: SetNull)
+  positionX             Int                @map("position_x")
+  positionY             Int                @map("position_y")
+  color                 String
+  hidden                Boolean            @default(false) // Deprecated, keeping for backwards compatibility
+  state                 String             @default("visible") // "visible" | "locked" | "hidden"
+  usageEvents           SymbolUsageEvent[]
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  @@index([normalizedLabel])
+  @@index([lexemeId])
+
+  @@map("symbols")
+}
+
+model Phrase {
+  id          String   @id @default(cuid())
+  profileId   String   @map("profile_id")
+  text        String
+  symbolsUsed String   @map("symbols_used") // JSON stringified array
+  isPinned    Boolean  @default(false) @map("is_pinned")
+  useCount    Int      @default(0) @map("use_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("phrases")
+}
+
+model Lexeme {
+  id               String                @id @default(cuid())
+  lemma            String
+  normalizedLemma  String                @map("normalized_lemma")
+  primaryPos       String                @map("primary_pos")
+  secondaryPos     String?               @map("secondary_pos")
+  gender           String?
+  numberBehavior   String?               @map("number_behavior")
+  verbGroup        String?               @map("verb_group")
+  isIrregular      Boolean               @default(false) @map("is_irregular")
+  isReflexive      Boolean               @default(false) @map("is_reflexive")
+  transitivity     String?
+  frequencyScore   Float?                @map("frequency_score")
+  aacPriority      Int?                  @map("aac_priority")
+  source           String                @default("seed")
+  forms            LexemeForm[]
+  aliases          LexemeAlias[]
+  symbols          Symbol[]
+  fromTransitions  PredictionTransition[] @relation("TransitionFromLexeme")
+  toTransitions    PredictionTransition[] @relation("TransitionToLexeme")
+  usageEvents      SymbolUsageEvent[]
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@unique([normalizedLemma, primaryPos])
+  @@index([primaryPos])
+  @@index([aacPriority])
+  @@map("lexemes")
+}
+
+model LexemeForm {
+  id                String   @id @default(cuid())
+  lexemeId          String   @map("lexeme_id")
+  lexeme            Lexeme   @relation(fields: [lexemeId], references: [id], onDelete: Cascade)
+  surface           String
+  normalizedSurface String   @map("normalized_surface")
+  formType          String   @map("form_type")
+  person            Int?
+  tense             String?
+  mood              String?
+  number            String?
+  gender            String?
+  confidence        Float?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@unique([lexemeId, normalizedSurface, formType])
+  @@index([normalizedSurface])
+  @@map("lexeme_forms")
+}
+
+model LexemeAlias {
+  id              String   @id @default(cuid())
+  lexemeId        String   @map("lexeme_id")
+  lexeme          Lexeme   @relation(fields: [lexemeId], references: [id], onDelete: Cascade)
+  alias           String
+  normalizedAlias String   @map("normalized_alias")
+  aliasType       String   @map("alias_type")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([lexemeId, normalizedAlias, aliasType])
+  @@index([normalizedAlias])
+  @@map("lexeme_aliases")
+}
+
+model PredictionTransition {
+  id                  String   @id @default(cuid())
+  profileId           String   @map("profile_id")
+  profile             Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fromLexemeId        String?  @map("from_lexeme_id")
+  fromLexeme          Lexeme?  @relation("TransitionFromLexeme", fields: [fromLexemeId], references: [id], onDelete: SetNull)
+  toLexemeId          String?  @map("to_lexeme_id")
+  toLexeme            Lexeme?  @relation("TransitionToLexeme", fields: [toLexemeId], references: [id], onDelete: SetNull)
+  fromSymbolLabel     String?  @map("from_symbol_label")
+  toSymbolLabel       String?  @map("to_symbol_label")
+  count               Int      @default(0)
+  lastUsedAt          DateTime @default(now()) @map("last_used_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId, count])
+  @@index([fromLexemeId, toLexemeId])
+  @@map("prediction_transitions")
+}
+
+model SymbolUsageEvent {
+  id             String   @id @default(cuid())
+  profileId      String   @map("profile_id")
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  symbolId       String?  @map("symbol_id")
+  symbol         Symbol?  @relation(fields: [symbolId], references: [id], onDelete: SetNull)
+  lexemeId       String?  @map("lexeme_id")
+  lexeme         Lexeme?  @relation(fields: [lexemeId], references: [id], onDelete: SetNull)
+  phraseSessionId String  @map("phrase_session_id")
+  sequenceIndex  Int      @map("sequence_index")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([profileId, createdAt])
+  @@index([phraseSessionId, sequenceIndex])
+  @@index([lexemeId])
+  @@map("symbol_usage_events")
+}

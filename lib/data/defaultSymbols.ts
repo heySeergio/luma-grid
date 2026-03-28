@@ -1,100 +1,159 @@
 import type { Symbol } from '@/lib/supabase/types'
+import {
+  DEFAULT_FIXED_CELL_COLOR,
+  DEFAULT_FOLDER_COLOR,
+  DEFAULT_SYMBOL_COLOR,
+  DEFAULT_TEMPLATE_COLOR,
+} from '@/lib/ui/symbolColors'
 
 type PartialSymbol = Omit<Symbol, 'id' | 'grid_id' | 'created_at' | 'updated_at'>
 
 export const DEFAULT_SYMBOLS: PartialSymbol[] = [
   // Pronombres
-  { label: 'Yo', emoji: '👤', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 0, position_y: 0, color: '#dbeafe', hidden: false },
-  { label: 'Tú', emoji: '👥', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 1, position_y: 0, color: '#dbeafe', hidden: false },
-  { label: 'Él', emoji: '🧑', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 2, position_y: 0, color: '#dbeafe', hidden: false },
-  { label: 'Ella', emoji: '👩', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 3, position_y: 0, color: '#dbeafe', hidden: false },
-  { label: 'Nosotros', emoji: '👨‍👩‍👧', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 4, position_y: 0, color: '#dbeafe', hidden: false },
-  { label: 'No', emoji: '❌', category: 'Yo/Tú', pos_type: 'adverb', position_x: 5, position_y: 0, color: '#fee2e2', hidden: false },
-  { label: 'Sí', emoji: '✅', category: 'Yo/Tú', pos_type: 'adverb', position_x: 6, position_y: 0, color: '#dcfce7', hidden: false },
-  { label: 'Más', emoji: '➕', category: 'Yo/Tú', pos_type: 'adverb', position_x: 7, position_y: 0, color: '#fef9c3', hidden: false },
-  { label: 'Papá', emoji: '👨', category: 'Yo/Tú', pos_type: 'noun', position_x: 0, position_y: 1, color: '#fde68a', hidden: false },
-  { label: 'Mamá', emoji: '👩', category: 'Yo/Tú', pos_type: 'noun', position_x: 1, position_y: 1, color: '#fde68a', hidden: false },
-  { label: 'Abuelo', emoji: '👴', category: 'Yo/Tú', pos_type: 'noun', position_x: 2, position_y: 1, color: '#fde68a', hidden: false },
-  { label: 'Abuela', emoji: '👵', category: 'Yo/Tú', pos_type: 'noun', position_x: 3, position_y: 1, color: '#fde68a', hidden: false },
-  { label: 'Hermano', emoji: '🧑', category: 'Yo/Tú', pos_type: 'noun', position_x: 4, position_y: 1, color: '#fde68a', hidden: false },
-  { label: 'Hermana', emoji: '👧', category: 'Yo/Tú', pos_type: 'noun', position_x: 5, position_y: 1, color: '#fde68a', hidden: false },
+  { label: 'Yo', emoji: '👤', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 0, position_y: 0, color: 'preset:sky', hidden: false },
+  { label: 'Tú', emoji: '👥', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 1, position_y: 0, color: 'preset:sky', hidden: false },
+  { label: 'Él', emoji: '🧑', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 2, position_y: 0, color: 'preset:sky', hidden: false },
+  { label: 'Ella', emoji: '👩', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 3, position_y: 0, color: 'preset:sky', hidden: false },
+  { label: 'Nosotros', emoji: '👨‍👩‍👧', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 4, position_y: 0, color: 'preset:sky', hidden: false },
+  { label: 'Ellos', emoji: '👥', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 1, position_y: 2, color: 'preset:sky', hidden: false },
+  { label: 'Vosotros', emoji: '👥', category: 'Yo/Tú', pos_type: 'pronoun', position_x: 0, position_y: 3, color: 'preset:sky', hidden: false },
+  { label: 'No', emoji: '❌', category: 'Yo/Tú', pos_type: 'adverb', position_x: 5, position_y: 0, color: 'preset:rose', hidden: false },
+  { label: 'Sí', emoji: '✅', category: 'Yo/Tú', pos_type: 'adverb', position_x: 6, position_y: 0, color: 'preset:green', hidden: false },
+  { label: 'Más', emoji: '➕', category: 'Yo/Tú', pos_type: 'adverb', position_x: 7, position_y: 0, color: 'preset:yellow', hidden: false },
+  { label: 'Personas', emoji: '👨‍👩‍👧‍👦', category: 'Yo/Tú', pos_type: 'noun', position_x: 0, position_y: 4, color: 'preset:sky', hidden: false },
+  { label: 'Papá', emoji: '👨', category: 'Yo/Tú', pos_type: 'noun', position_x: 0, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: 'Mamá', emoji: '👩', category: 'Yo/Tú', pos_type: 'noun', position_x: 1, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: 'Abuelo', emoji: '👴', category: 'Yo/Tú', pos_type: 'noun', position_x: 2, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: 'Abuela', emoji: '👵', category: 'Yo/Tú', pos_type: 'noun', position_x: 3, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: 'Hermano', emoji: '🧑', category: 'Yo/Tú', pos_type: 'noun', position_x: 4, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: 'Hermana', emoji: '👧', category: 'Yo/Tú', pos_type: 'noun', position_x: 5, position_y: 1, color: 'preset:amber', hidden: false },
+  { label: '¿Qué?', emoji: '🤔', category: 'Preguntas', pos_type: 'other', position_x: 7, position_y: 0, color: 'preset:pink', hidden: false },
+  { label: '¿Quién?', emoji: '🧑', category: 'Preguntas', pos_type: 'other', position_x: 8, position_y: 0, color: 'preset:pink', hidden: false },
+  { label: '¿Dónde?', emoji: '📍', category: 'Preguntas', pos_type: 'other', position_x: 9, position_y: 0, color: 'preset:pink', hidden: false },
+  { label: '¿Cuándo?', emoji: '🕒', category: 'Preguntas', pos_type: 'other', position_x: 10, position_y: 0, color: 'preset:pink', hidden: false },
+  { label: '¿Cómo?', emoji: '⚙️', category: 'Preguntas', pos_type: 'other', position_x: 11, position_y: 0, color: 'preset:pink', hidden: false },
+  { label: '¿Por qué?', emoji: '🧠', category: 'Preguntas', pos_type: 'other', position_x: 12, position_y: 0, color: 'preset:pink', hidden: false },
 
   // Acciones
-  { label: 'Querer', emoji: '💙', category: 'Acciones', pos_type: 'verb', position_x: 0, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Comer', emoji: '🍽️', category: 'Acciones', pos_type: 'verb', position_x: 1, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Beber', emoji: '🥤', category: 'Acciones', pos_type: 'verb', position_x: 2, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Ir', emoji: '🚶', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Ver', emoji: '👁️', category: 'Acciones', pos_type: 'verb', position_x: 4, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Jugar', emoji: '🎮', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Dormir', emoji: '😴', category: 'Acciones', pos_type: 'verb', position_x: 6, position_y: 2, color: '#ede9fe', hidden: false },
-  { label: 'Ayudar', emoji: '🤝', category: 'Acciones', pos_type: 'verb', position_x: 7, position_y: 2, color: '#ede9fe', hidden: false },
+  { label: 'Querer', emoji: '💙', category: 'Acciones', pos_type: 'verb', position_x: 0, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Gustar', emoji: '💚', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 0, color: 'preset:violet', hidden: false },
+  { label: 'Dar', emoji: '🤲', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 0, color: 'preset:violet', hidden: false },
+  { label: 'Poner', emoji: '📌', category: 'Acciones', pos_type: 'verb', position_x: 2, position_y: 1, color: 'preset:violet', hidden: false },
+  { label: 'Necesitar', emoji: '🙏', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 1, color: 'preset:violet', hidden: false },
+  { label: 'Ser', emoji: '✨', category: 'Acciones', pos_type: 'verb', position_x: 4, position_y: 1, color: 'preset:violet', hidden: false },
+  { label: 'Sentir', emoji: '❤️', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 1, color: 'preset:violet', hidden: false },
+  { label: 'Hacer', emoji: '🛠️', category: 'Acciones', pos_type: 'verb', position_x: 2, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Escuchar', emoji: '👂', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Pensar', emoji: '💭', category: 'Acciones', pos_type: 'verb', position_x: 4, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Coger', emoji: '✋', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Comer', emoji: '🍽️', category: 'Acciones', pos_type: 'verb', position_x: 1, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Beber', emoji: '🥤', category: 'Acciones', pos_type: 'verb', position_x: 2, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Ir', emoji: '🚶', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Ver', emoji: '👁️', category: 'Acciones', pos_type: 'verb', position_x: 4, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Jugar', emoji: '🎮', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Dormir', emoji: '😴', category: 'Acciones', pos_type: 'verb', position_x: 6, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Ayudar', emoji: '🤝', category: 'Acciones', pos_type: 'verb', position_x: 7, position_y: 2, color: 'preset:violet', hidden: false },
+  { label: 'Estar', emoji: '🧍', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 3, color: 'preset:violet', hidden: false },
+  { label: 'Tener', emoji: '🫶', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 3, color: 'preset:violet', hidden: false },
+  { label: 'Poder', emoji: '⚡', category: 'Acciones', pos_type: 'verb', position_x: 5, position_y: 4, color: 'preset:violet', hidden: false },
+  { label: 'Terminar', emoji: '🏁', category: 'Acciones', pos_type: 'verb', position_x: 3, position_y: 5, color: 'preset:violet', hidden: false },
+  { label: 'Decir', emoji: '🗣️', category: 'Acciones', pos_type: 'verb', position_x: 4, position_y: 5, color: 'preset:violet', hidden: false },
 
   // Comida
-  { label: 'Agua', emoji: '💧', category: 'Comida', pos_type: 'noun', position_x: 0, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Leche', emoji: '🥛', category: 'Comida', pos_type: 'noun', position_x: 1, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Pan', emoji: '🍞', category: 'Comida', pos_type: 'noun', position_x: 2, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Fruta', emoji: '🍎', category: 'Comida', pos_type: 'noun', position_x: 3, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Pasta', emoji: '🍝', category: 'Comida', pos_type: 'noun', position_x: 4, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Pollo', emoji: '🍗', category: 'Comida', pos_type: 'noun', position_x: 5, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Galleta', emoji: '🍪', category: 'Comida', pos_type: 'noun', position_x: 6, position_y: 2, color: '#e0f2fe', hidden: false },
-  { label: 'Zumo', emoji: '🧃', category: 'Comida', pos_type: 'noun', position_x: 7, position_y: 2, color: '#e0f2fe', hidden: false },
+  { label: 'Agua', emoji: '💧', category: 'Comida', pos_type: 'noun', position_x: 0, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Leche', emoji: '🥛', category: 'Comida', pos_type: 'noun', position_x: 1, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Pan', emoji: '🍞', category: 'Comida', pos_type: 'noun', position_x: 2, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Fruta', emoji: '🍎', category: 'Comida', pos_type: 'noun', position_x: 3, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Pasta', emoji: '🍝', category: 'Comida', pos_type: 'noun', position_x: 4, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Pollo', emoji: '🍗', category: 'Comida', pos_type: 'noun', position_x: 5, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Galleta', emoji: '🍪', category: 'Comida', pos_type: 'noun', position_x: 6, position_y: 2, color: 'preset:cyan', hidden: false },
+  { label: 'Zumo', emoji: '🧃', category: 'Comida', pos_type: 'noun', position_x: 7, position_y: 2, color: 'preset:cyan', hidden: false },
 
   // Lugares
-  { label: 'Casa', emoji: '🏠', category: 'Lugares', pos_type: 'noun', position_x: 0, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Colegio', emoji: '🏫', category: 'Lugares', pos_type: 'noun', position_x: 1, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Baño', emoji: '🚽', category: 'Lugares', pos_type: 'noun', position_x: 2, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Parque', emoji: '🌳', category: 'Lugares', pos_type: 'noun', position_x: 3, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Médico', emoji: '🏥', category: 'Lugares', pos_type: 'noun', position_x: 4, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Tienda', emoji: '🏪', category: 'Lugares', pos_type: 'noun', position_x: 5, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Cama', emoji: '🛏️', category: 'Lugares', pos_type: 'noun', position_x: 6, position_y: 3, color: '#fef3c7', hidden: false },
-  { label: 'Mesa', emoji: '🪑', category: 'Lugares', pos_type: 'noun', position_x: 7, position_y: 3, color: '#fef3c7', hidden: false },
+  { label: 'Casa', emoji: '🏠', category: 'Lugares', pos_type: 'noun', position_x: 0, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Colegio', emoji: '🏫', category: 'Lugares', pos_type: 'noun', position_x: 1, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Baño', emoji: '🚽', category: 'Lugares', pos_type: 'noun', position_x: 2, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Parque', emoji: '🌳', category: 'Lugares', pos_type: 'noun', position_x: 3, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Médico', emoji: '🏥', category: 'Lugares', pos_type: 'noun', position_x: 4, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Tienda', emoji: '🏪', category: 'Lugares', pos_type: 'noun', position_x: 5, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Cama', emoji: '🛏️', category: 'Lugares', pos_type: 'noun', position_x: 6, position_y: 3, color: 'preset:yellow', hidden: false },
+  { label: 'Mesa', emoji: '🪑', category: 'Lugares', pos_type: 'noun', position_x: 7, position_y: 3, color: 'preset:yellow', hidden: false },
 
   // Sentimientos
-  { label: 'Feliz', emoji: '😊', category: 'Sentimientos', pos_type: 'adj', position_x: 0, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Triste', emoji: '😢', category: 'Sentimientos', pos_type: 'adj', position_x: 1, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Enfadado', emoji: '😠', category: 'Sentimientos', pos_type: 'adj', position_x: 2, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Cansado', emoji: '😪', category: 'Sentimientos', pos_type: 'adj', position_x: 3, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Dolor', emoji: '🤕', category: 'Sentimientos', pos_type: 'noun', position_x: 4, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Miedo', emoji: '😨', category: 'Sentimientos', pos_type: 'noun', position_x: 5, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Bien', emoji: '👍', category: 'Sentimientos', pos_type: 'adverb', position_x: 6, position_y: 4, color: '#dcfce7', hidden: false },
-  { label: 'Mal', emoji: '👎', category: 'Sentimientos', pos_type: 'adverb', position_x: 7, position_y: 4, color: '#dcfce7', hidden: false },
+  { label: 'Feliz', emoji: '😊', category: 'Sentimientos', pos_type: 'adj', position_x: 0, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Triste', emoji: '😢', category: 'Sentimientos', pos_type: 'adj', position_x: 1, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Enfadado', emoji: '😠', category: 'Sentimientos', pos_type: 'adj', position_x: 2, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Cansado', emoji: '😪', category: 'Sentimientos', pos_type: 'adj', position_x: 3, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Dolor', emoji: '🤕', category: 'Sentimientos', pos_type: 'noun', position_x: 4, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Miedo', emoji: '😨', category: 'Sentimientos', pos_type: 'noun', position_x: 5, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Bien', emoji: '👍', category: 'Sentimientos', pos_type: 'adverb', position_x: 6, position_y: 4, color: 'preset:green', hidden: false },
+  { label: 'Mal', emoji: '👎', category: 'Sentimientos', pos_type: 'adverb', position_x: 7, position_y: 4, color: 'preset:green', hidden: false },
 
   // Tiempo
-  { label: 'Ahora', emoji: '⏰', category: 'Tiempo', pos_type: 'adverb', position_x: 0, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Hoy', emoji: '📅', category: 'Tiempo', pos_type: 'adverb', position_x: 1, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Mañana', emoji: '🌅', category: 'Tiempo', pos_type: 'adverb', position_x: 2, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Después', emoji: '⏭️', category: 'Tiempo', pos_type: 'adverb', position_x: 3, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Antes', emoji: '⏮️', category: 'Tiempo', pos_type: 'adverb', position_x: 4, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Siempre', emoji: '♾️', category: 'Tiempo', pos_type: 'adverb', position_x: 5, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Nunca', emoji: '🚫', category: 'Tiempo', pos_type: 'adverb', position_x: 6, position_y: 5, color: '#f3e8ff', hidden: false },
-  { label: 'Mucho', emoji: '💯', category: 'Tiempo', pos_type: 'adverb', position_x: 7, position_y: 5, color: '#f3e8ff', hidden: false },
+  { label: 'Ahora', emoji: '⏰', category: 'Tiempo', pos_type: 'adverb', position_x: 0, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Ayer', emoji: '📆', category: 'Tiempo', pos_type: 'adverb', position_x: 3, position_y: 6, color: 'preset:time', hidden: false },
+  { label: 'Hoy', emoji: '📅', category: 'Tiempo', pos_type: 'adverb', position_x: 1, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Mañana', emoji: '🌅', category: 'Tiempo', pos_type: 'adverb', position_x: 2, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Después', emoji: '⏭️', category: 'Tiempo', pos_type: 'adverb', position_x: 3, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Antes', emoji: '⏮️', category: 'Tiempo', pos_type: 'adverb', position_x: 4, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Siempre', emoji: '♾️', category: 'Tiempo', pos_type: 'adverb', position_x: 5, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Nunca', emoji: '🚫', category: 'Tiempo', pos_type: 'adverb', position_x: 6, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Mucho', emoji: '💯', category: 'Tiempo', pos_type: 'adverb', position_x: 7, position_y: 5, color: 'preset:time', hidden: false },
+  { label: 'Teclado', emoji: '⌨️', category: 'Fijo', pos_type: 'other', position_x: 6, position_y: 7, color: DEFAULT_TEMPLATE_COLOR, hidden: false },
+
+  // Partículas y conectores
+  { label: 'Y', emoji: '🔗', category: 'Partículas', pos_type: 'other', position_x: 6, position_y: 1, color: 'preset:mint', hidden: false },
+  { label: 'A', emoji: '➡️', category: 'Partículas', pos_type: 'other', position_x: 6, position_y: 2, color: 'preset:mint', hidden: false },
+  { label: 'DE', emoji: '↘️', category: 'Partículas', pos_type: 'other', position_x: 6, position_y: 3, color: 'preset:mint', hidden: false },
+  { label: 'CON', emoji: '🤝', category: 'Partículas', pos_type: 'other', position_x: 6, position_y: 4, color: 'preset:mint', hidden: false },
+  { label: 'UN', emoji: '1️⃣', category: 'Partículas', pos_type: 'other', position_x: 6, position_y: 5, color: 'preset:mint', hidden: false },
+  { label: 'Este', emoji: '👈', category: 'Partículas', pos_type: 'other', position_x: 1, position_y: 3, color: 'preset:mint', hidden: false },
+  { label: 'No lo sé', emoji: '🤷', category: 'Partículas', pos_type: 'other', position_x: 1, position_y: 6, color: 'preset:mint', hidden: false },
+  { label: 'Aquí', emoji: '📍', category: 'Partículas', pos_type: 'adverb', position_x: 2, position_y: 6, color: 'preset:mint', hidden: false },
+  { label: 'Diferente', emoji: '🔀', category: 'Descripción', pos_type: 'adj', position_x: 3, position_y: 7, color: 'preset:green', hidden: false },
+  { label: 'Muy', emoji: '🔥', category: 'Partículas', pos_type: 'adverb', position_x: 4, position_y: 7, color: 'preset:mint', hidden: false },
+  { label: 'También', emoji: '➕', category: 'Partículas', pos_type: 'adverb', position_x: 5, position_y: 7, color: 'preset:mint', hidden: false },
 ]
 
 export const CATEGORIES = ['Yo/Tú', 'Acciones', 'Comida', 'Lugares', 'Sentimientos', 'Tiempo']
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  'Yo/Tú': '#dbeafe',
-  'Acciones': '#ede9fe',
-  'Comida': '#e0f2fe',
-  'Lugares': '#fef3c7',
-  'Sentimientos': '#dcfce7',
-  'Tiempo': '#f3e8ff',
+  'Yo/Tú': 'preset:sky',
+  'Acciones': 'preset:violet',
+  'Comida': 'preset:cyan',
+  'Lugares': 'preset:yellow',
+  'Sentimientos': 'preset:green',
+  'Tiempo': 'preset:time',
 }
 
 export const DEFAULT_FOLDER_TILES: PartialSymbol[] = [
-  { label: 'Charla rápida', emoji: '💬', category: 'Carpetas', pos_type: 'other', position_x: 4, position_y: 2, color: '#ead6c9', hidden: false },
-  { label: 'Juegos', emoji: '🧩', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 5, color: '#ead6c9', hidden: false },
-  { label: 'Partículas', emoji: '➕', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 5, color: '#ead6c9', hidden: false },
-  { label: 'Alimentos', emoji: '🍎', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 2, color: '#ead6c9', hidden: false },
-  { label: 'Lácteos', emoji: '🥛', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 2, color: '#ead6c9', hidden: false },
-  { label: 'Objetos', emoji: '🪑', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 2, color: '#ead6c9', hidden: false },
-  { label: 'Lugares', emoji: '🏫', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 2, color: '#ead6c9', hidden: false },
-  { label: 'Bebidas', emoji: '🥤', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 3, color: '#ead6c9', hidden: false },
-  { label: 'Ropa', emoji: '👕', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 3, color: '#ead6c9', hidden: false },
-  { label: 'Cuerpo', emoji: '🧍', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 3, color: '#ead6c9', hidden: false },
-  { label: 'Animales', emoji: '🐴', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 4, color: '#ead6c9', hidden: false },
-  { label: 'Colores', emoji: '🎨', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 4, color: '#ead6c9', hidden: false },
-  { label: 'Tiempo+', emoji: '⏰', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 4, color: '#ead6c9', hidden: false },
+  { label: 'Charla rápida', emoji: '💬', category: 'Carpetas', pos_type: 'other', position_x: 4, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Juegos', emoji: '🧩', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Partículas', emoji: '➕', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Alimentos', emoji: '🍎', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Lácteos', emoji: '🥛', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Objetos', emoji: '🪑', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Lugares', emoji: '🏫', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Bebidas', emoji: '🥤', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 3, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Ropa', emoji: '👕', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 3, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Cuerpo', emoji: '🧍', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 3, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Animales', emoji: '🐴', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 4, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Colores', emoji: '🎨', category: 'Carpetas', pos_type: 'other', position_x: 6, position_y: 4, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Tiempo+', emoji: '🕒', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 4, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Más verbos', emoji: '🗂️', category: 'Carpetas', pos_type: 'other', position_x: 5, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Muebles', emoji: '🛋️', category: 'Carpetas', pos_type: 'other', position_x: 10, position_y: 2, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Complementos', emoji: '🧰', category: 'Carpetas', pos_type: 'other', position_x: 13, position_y: 3, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Aparatos', emoji: '📱', category: 'Carpetas', pos_type: 'other', position_x: 8, position_y: 4, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Transportes', emoji: '🚗', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Plantas', emoji: '🌿', category: 'Carpetas', pos_type: 'other', position_x: 9, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Fiesta', emoji: '🎉', category: 'Carpetas', pos_type: 'other', position_x: 11, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Conceptos', emoji: '🧠', category: 'Carpetas', pos_type: 'other', position_x: 13, position_y: 5, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Actividades', emoji: '🏃', category: 'Carpetas', pos_type: 'other', position_x: 8, position_y: 6, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Descripción', emoji: '📝', category: 'Carpetas', pos_type: 'other', position_x: 10, position_y: 6, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Formas y medidas', emoji: '📏', category: 'Carpetas', pos_type: 'other', position_x: 12, position_y: 6, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Números', emoji: '🔢', category: 'Carpetas', pos_type: 'other', position_x: 7, position_y: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Aficiones', emoji: '🎯', category: 'Carpetas', pos_type: 'other', position_x: 9, position_y: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Frases hechas', emoji: '🗨️', category: 'Carpetas', pos_type: 'other', position_x: 11, position_y: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
 ]
 
 export const DEFAULT_FOLDER_CONTENTS: Record<string, string[]> = {
@@ -1070,7 +1129,6 @@ export const DEFAULT_FOLDER_CONTENTS: Record<string, string[]> = {
     'Yogur bebible',
     'Batido',
   ],
-  Ropa: ['Camiseta', 'Pantalón', 'Zapatos', 'Chaqueta', 'Gorra', 'Calcetines'],
   Cuerpo: [
     'Cuerpo',
     'Cabeza',
@@ -1103,7 +1161,227 @@ export const DEFAULT_FOLDER_CONTENTS: Record<string, string[]> = {
     'Cejas',
     'Pestañas',
   ],
-  Animales: ['Perro', 'Gato', 'Pájaro', 'Caballo', 'Vaca', 'Pez'],
-  Colores: ['Rojo', 'Azul', 'Verde', 'Amarillo', 'Negro', 'Blanco'],
-  'Tiempo+': ['Ahora', 'Después', 'Antes', 'Hoy', 'Mañana', 'Ayer', 'Luego'],
+}
+
+export const MAIN_GRID_TEMPLATE: string[][] = [
+  ['Yo', 'Tú', 'Querer', 'Gustar', 'Ir', 'Dar', 'Charla rápida', '¿Qué?', '¿Quién?', '¿Dónde?', '¿Cuándo?', '¿Cómo?', '¿Por qué?', ''],
+  ['Él', 'Ella', 'Poner', 'Necesitar', 'Ser', 'Sentir', 'Y', 'Alimentos', '', 'Objetos', '', 'Lugares', '', 'Cuerpo'],
+  ['Nosotros', 'Ellos', 'Hacer', 'Escuchar', 'Pensar', 'Coger', 'A', '', 'Bebidas', '', 'Muebles', '', 'Ropa', ''],
+  ['Vosotros', 'Este', 'Ver', 'Estar', 'Jugar', 'Tener', 'DE', 'Juegos', '', 'Sentimientos', '', 'Tiempo', '', 'Complementos'],
+  ['Personas', 'Ayudar', 'Ahora', 'Comer', 'Beber', 'Poder', 'CON', '', 'Aparatos', '', 'Animales', '', 'Colores', ''],
+  ['Sí', 'No', 'Después', 'Terminar', 'Decir', 'Más verbos', 'UN', 'Transportes', '', 'Plantas', '', 'Fiesta', '', 'Conceptos'],
+  ['Más', 'No lo sé', 'Aquí', 'Ayer', 'Hoy', 'Mañana', 'Partículas', '', 'Actividades', '', 'Descripción', '', 'Formas y medidas', ''],
+  ['Bien', 'Mal', 'Mucho', 'Diferente', 'Muy', 'También', 'Teclado', 'Números', '', 'Aficiones', '', 'Frases hechas', '', 'Más'],
+]
+
+export const FIXED_COLUMNS = 7
+export const TOTAL_COLUMNS = 14
+
+const DEFAULT_POSITION_BY_LABEL = new Map(
+  [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES].map((symbol) => [
+    symbol.label.toLowerCase(),
+    { x: symbol.position_x, y: symbol.position_y },
+  ])
+)
+
+const DEFAULT_SYMBOL_BY_LABEL = new Map(
+  [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES].map((symbol) => [
+    symbol.label.toLowerCase(),
+    symbol,
+  ])
+)
+
+function getStoredPosition(symbol: Symbol) {
+  return {
+    x: symbol.positionX !== undefined ? symbol.positionX : symbol.position_x,
+    y: symbol.positionY !== undefined ? symbol.positionY : symbol.position_y,
+  }
+}
+
+function isCustomPosition(symbol: Symbol) {
+  const defaultPosition = DEFAULT_POSITION_BY_LABEL.get(symbol.label.toLowerCase())
+  if (!defaultPosition) return true
+
+  const storedPosition = getStoredPosition(symbol)
+  return storedPosition.x !== defaultPosition.x || storedPosition.y !== defaultPosition.y
+}
+
+export function computeMainGrid(symbols: Symbol[], activeFolder: string | null): Symbol[] {
+  const byLabel = new Map(symbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
+  const customSymbols = symbols
+    .filter((symbol) => isCustomPosition(symbol))
+    .map((symbol) => {
+      const storedPosition = getStoredPosition(symbol)
+      return {
+        ...symbol,
+        positionX: storedPosition.x,
+        positionY: storedPosition.y,
+        position_x: storedPosition.x,
+        position_y: storedPosition.y,
+      }
+    })
+  const occupiedCells = new Set(customSymbols.map((symbol) => `${symbol.position_x}:${symbol.position_y}`))
+
+  const folderSymbols: Symbol[] = activeFolder
+    ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => ({
+      id: `folder-item-${activeFolder}-${i}`,
+      gridId: 'demo',
+      grid_id: 'demo',
+      label,
+      emoji: symbols.find(s => s.label.toLowerCase() === label.toLowerCase())?.emoji || '🧩',
+      category: activeFolder,
+      posType: 'noun',
+      pos_type: 'noun',
+      positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
+      positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
+      position_x: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
+      position_y: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
+      color: DEFAULT_SYMBOL_COLOR,
+      hidden: false,
+      imageUrl: undefined,
+      state: 'visible',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }))
+    : []
+
+  const fixedLeftPanel: Symbol[] = []
+  MAIN_GRID_TEMPLATE.forEach((row, y) => {
+    row.forEach((label, x) => {
+      if (!label || x >= FIXED_COLUMNS) return
+      const existing = byLabel.get(label.toLowerCase())
+      if (occupiedCells.has(`${x}:${y}`)) return
+      if (existing && !isCustomPosition(existing)) {
+        fixedLeftPanel.push({
+          ...existing,
+          positionX: x,
+          positionY: y,
+          position_x: x,
+          position_y: y,
+        })
+        return
+      }
+
+      if (existing) return
+
+      const fallbackSymbol = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+      if (fallbackSymbol) {
+        fixedLeftPanel.push({
+          id: `default-left-${label.toLowerCase().replace(/\s+/g, '-')}`,
+          gridId: 'default-left',
+          grid_id: 'default-left',
+          label: fallbackSymbol.label,
+          emoji: fallbackSymbol.emoji,
+          category: fallbackSymbol.category,
+          posType: fallbackSymbol.pos_type,
+          pos_type: fallbackSymbol.pos_type,
+          positionX: x,
+          positionY: y,
+          position_x: x,
+          position_y: y,
+          color: fallbackSymbol.color,
+          hidden: fallbackSymbol.hidden,
+          imageUrl: undefined,
+          state: 'visible',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        return
+      }
+
+      fixedLeftPanel.push({
+        id: `fixed-left-${label.toLowerCase().replace(/\s+/g, '-')}`,
+        gridId: 'template-left',
+        grid_id: 'template-left',
+        label,
+        emoji: x === FIXED_COLUMNS - 1 ? undefined : '❔',
+        category: 'Fijo',
+        posType: 'other',
+        pos_type: 'other',
+        positionX: x,
+        positionY: y,
+        position_x: x,
+        position_y: y,
+        color: x === FIXED_COLUMNS - 1 ? DEFAULT_TEMPLATE_COLOR : DEFAULT_FIXED_CELL_COLOR,
+        hidden: false,
+        imageUrl: undefined,
+        state: 'visible',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+    })
+  })
+
+  if (activeFolder) {
+    return [...fixedLeftPanel, ...folderSymbols]
+  }
+
+  const rightPanelFromTemplate: Symbol[] = []
+  MAIN_GRID_TEMPLATE.forEach((row, y) => {
+    row.forEach((label, x) => {
+      if (!label || x < FIXED_COLUMNS) return
+      const existing = byLabel.get(label.toLowerCase())
+      if (occupiedCells.has(`${x}:${y}`)) return
+      if (existing && !isCustomPosition(existing)) {
+        rightPanelFromTemplate.push({
+          ...existing,
+          positionX: x,
+          positionY: y,
+          position_x: x,
+          position_y: y,
+        })
+        return
+      }
+
+      if (existing) return
+
+      const fallbackSymbol = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+      if (fallbackSymbol) {
+        rightPanelFromTemplate.push({
+          id: `default-${label.toLowerCase().replace(/\s+/g, '-')}`,
+          gridId: 'default',
+          grid_id: 'default',
+          label: fallbackSymbol.label,
+          emoji: fallbackSymbol.emoji,
+          category: fallbackSymbol.category,
+          posType: fallbackSymbol.pos_type,
+          pos_type: fallbackSymbol.pos_type,
+          positionX: x,
+          positionY: y,
+          position_x: x,
+          position_y: y,
+          color: fallbackSymbol.color,
+          hidden: fallbackSymbol.hidden,
+          imageUrl: undefined,
+          state: 'visible',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        return
+      }
+
+      rightPanelFromTemplate.push({
+        id: `template-${label.toLowerCase().replace(/\s+/g, '-')}`,
+        gridId: 'template',
+        grid_id: 'template',
+        label,
+        emoji: '❔',
+        category: 'Carpetas',
+        posType: 'other',
+        pos_type: 'other',
+        positionX: x,
+        positionY: y,
+        position_x: x,
+        position_y: y,
+        color: DEFAULT_TEMPLATE_COLOR,
+        hidden: false,
+        imageUrl: undefined,
+        state: 'visible',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+    })
+  })
+
+  return [...customSymbols, ...fixedLeftPanel, ...rightPanelFromTemplate]
 }

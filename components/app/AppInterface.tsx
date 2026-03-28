@@ -1,50 +1,34 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import SymbolGrid from './SymbolGrid'
 import PhraseBar from './PhraseBar'
 import Keyboard from './Keyboard'
 import QuickPhrases from './QuickPhrases'
 import ScannerOverlay from './ScannerOverlay'
 import ProfileSelector from './ProfileSelector'
-import { db } from '@/lib/dexie/db'
-import { DEFAULT_FOLDER_CONTENTS, DEFAULT_FOLDER_TILES, DEFAULT_SYMBOLS } from '@/lib/data/defaultSymbols'
-import { getLocalProfiles, getLocalSymbols } from '@/lib/localGridStore'
+import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
+import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymbols'
+import { detectQuestionType } from '@/lib/lexicon/questions'
+import { getProfiles } from '@/app/actions/profiles'
+import { getProfileSymbols } from '@/app/actions/symbols'
+import { getPinnedPhrases, saveQuickPhrase } from '@/app/actions/phrases'
+import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
 import { applyProfileGenders } from '@/lib/profileGender'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
 
 type TabMode = 'grid' | 'keyboard'
 
-const MAIN_LAYOUT_ORDER = [
-  // Banda izquierda tipo pronombres/personas
-  'Yo', 'Tú', 'Él', 'Ella', 'Nosotros', 'Vosotros', 'Personas',
-  'Sí', 'No', 'No lo sé', 'Bien', 'Mal',
-  // Núcleo verbal
-  'Querer', 'Gustar', 'Ir', 'Dar', 'Poner', 'Necesitar', 'Ser', 'Sentir',
-  'Hacer', 'Escuchar', 'Pensar', 'Coger', 'Ver', 'Estar', 'Jugar', 'Tener',
-  'Ayudar', 'Ahora', 'Comer', 'Beber', 'Poder', 'Terminar', 'Decir', 'Más verbos',
-  // Conectores / funcionales
-  'Y', 'A', 'DE', 'CON', 'UN', 'Más palabras', 'Aquí', 'Ayer', 'Hoy', 'Mañana', 'Muy', 'También',
-  // Carpetas semánticas tipo Grid 3
-  'Alimentos', 'Lácteos', 'Objetos', 'Lugares', 'Cuerpo', 'Bebidas', 'Muebles', 'Ropa',
-  'Juegos', 'Sentimientos', 'Tiempo', 'Complementos', 'Aparatos', 'Animales', 'Colores',
-  'Transportes', 'Plantas', 'Fiesta', 'Conceptos', 'Actividades', 'Descripción', 'Formas y medidas',
-  'Aficiones', 'Frases hechas', 'Teclado', 'Números',
-]
+type PredictionInputSymbol = {
+  id: string
+  label: string
+  posType: Symbol['posType']
+  lexemeId?: string | null
+  category?: string | null
+  state?: string
+}
 
-const MAIN_GRID_TEMPLATE: string[][] = [
-  ['Yo', 'Tú', 'Querer', 'Gustar', 'Ir', 'Dar', 'Charla rápida', '¿Qué?', '¿Quién?', '¿Dónde?', '¿Cuándo?', '¿Cómo?', '¿Por qué?', ''],
-  ['Él', 'Ella', 'Poner', 'Necesitar', 'Ser', 'Sentir', 'Y', 'Alimentos', '', 'Objetos', '', 'Lugares', '', 'Cuerpo'],
-  ['Nosotros', 'Ellos', 'Hacer', 'Escuchar', 'Pensar', 'Coger', 'A', '', 'Bebidas', '', 'Muebles', '', 'Ropa', ''],
-  ['Vosotros', 'Este', 'Ver', 'Estar', 'Jugar', 'Tener', 'DE', 'Juegos', '', 'Sentimientos', '', 'Tiempo', '', 'Complementos'],
-  ['Personas', 'Ayudar', 'Ahora', 'Comer', 'Beber', 'Poder', 'CON', '', 'Aparatos', '', 'Animales', '', 'Colores', ''],
-  ['Sí', 'No', 'Después', 'Terminar', 'Decir', 'Más verbos', 'UN', 'Transportes', '', 'Plantas', '', 'Fiesta', '', 'Conceptos'],
-  ['Más', 'No lo sé', 'Aquí', 'Ayer', 'Hoy', 'Mañana', 'Partículas', '', 'Actividades', '', 'Descripción', '', 'Formas y medidas', ''],
-  ['Bien', 'Mal', 'Mucho', 'Diferente', 'Muy', 'También', 'Teclado', 'Números', '', 'Aficiones', '', 'Frases hechas', '', 'Más'],
-]
-const FIXED_COLUMNS = 7
-const TOTAL_COLUMNS = 14
 
 export default function AppInterface() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -54,17 +38,46 @@ export default function AppInterface() {
   const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null)
   const [activeTab, setActiveTab] = useState<TabMode>('grid')
-  const [isOnline, setIsOnline] = useState(true)
+  const [, setIsOnline] = useState(true)
   const [predictedIds, setPredictedIds] = useState<string[]>([])
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
-  const [folderHistory, setFolderHistory] = useState<string[]>([])
+  const [, setFolderHistory] = useState<string[]>([])
   const [showProfileSelector, setShowProfileSelector] = useState(false)
+  const phraseSessionIdRef = useRef<string | null>(null)
+  const phraseSequenceRef = useRef(0)
+
+  const shouldUseDefaultGridTemplate = Boolean((profile as Profile & { isDemo?: boolean } | null)?.isDemo)
+  const mainOrderedSymbols = shouldUseDefaultGridTemplate
+    ? computeMainGrid(symbols, activeFolder)
+    : symbols
 
   const speakSelectedWord = useCallback((text: string) => {
     if (!text.trim()) return
     const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
-    adapter.speak(text, profile?.id || '').catch(() => {})
+    adapter.speak(text, profile?.id || '').catch(() => { })
   }, [profile])
+
+  const resetPhraseTracking = useCallback(() => {
+    phraseSessionIdRef.current = null
+    phraseSequenceRef.current = 0
+  }, [])
+
+  const ensurePhraseSessionId = useCallback((profileId: string) => {
+    if (!phraseSessionIdRef.current) {
+      phraseSessionIdRef.current = `${profileId}:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`}`
+    }
+
+    return phraseSessionIdRef.current
+  }, [])
+
+  const toPredictionInput = useCallback((symbol: Pick<Symbol, 'id' | 'label' | 'posType' | 'lexemeId' | 'category' | 'state'>): PredictionInputSymbol => ({
+    id: symbol.id,
+    label: symbol.label,
+    posType: symbol.posType,
+    lexemeId: symbol.lexemeId ?? null,
+    category: symbol.category ?? null,
+    state: symbol.state,
+  }), [])
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -84,6 +97,7 @@ export default function AppInterface() {
 
   useEffect(() => {
     if (profile) {
+      resetPhraseTracking()
       setActiveFolder(null)
       setFolderHistory([])
       loadSymbols()
@@ -91,39 +105,36 @@ export default function AppInterface() {
       loadAccessConfig()
       subscribeToChanges()
     }
-  }, [profile])
+  }, [profile, resetPhraseTracking])
 
   const loadProfiles = async () => {
-    const localProfiles = applyProfileGenders(getLocalProfiles())
-    setProfiles(localProfiles)
-    setProfile(localProfiles[0] ?? null)
+    try {
+      const dbProfiles = await getProfiles()
+      const profilesWithGender = applyProfileGenders(dbProfiles as any)
+      setProfiles(profilesWithGender)
+      setProfile(profilesWithGender[0] ?? null)
+    } catch (err) {
+      console.error('Error fetching profiles', err)
+    }
   }
 
   const loadSymbols = async () => {
-    const local = getLocalSymbols()
-    setSymbols(local)
-    await db.symbols.bulkPut(local)
+    if (!profile) return
+    try {
+      const dbSymbols = await getProfileSymbols(profile.id)
+      setSymbols(dbSymbols as any)
+    } catch (err) {
+      console.error('Error fetching symbols', err)
+    }
   }
 
   const loadPinnedPhrases = async () => {
     if (!profile) return
     try {
-      const { data } = await supabase
-        .from('phrases')
-        .select('*')
-        .eq('profile_id', profile.id)
-        .eq('is_pinned', true)
-        .order('use_count', { ascending: false })
-        .limit(10)
-
-      if (data) setPinnedPhrases(data)
-    } catch {
-      const local = await db.phrases
-        .where('profile_id').equals(profile.id)
-        .and(p => p.is_pinned)
-        .limit(10)
-        .toArray()
-      setPinnedPhrases(local)
+      const phrases = await getPinnedPhrases(profile.id)
+      setPinnedPhrases(phrases as any)
+    } catch (err) {
+      console.error('Error fetching pinned phrases', err)
     }
   }
 
@@ -140,7 +151,7 @@ export default function AppInterface() {
     return () => window.removeEventListener('storage', onStorage)
   }
 
-  const handleSymbolSelect = useCallback((symbol: Symbol) => {
+  const handleSymbolSelect = useCallback(async (symbol: Symbol) => {
     const normalizedLabel = symbol.label.toLowerCase()
     if (activeFolder === 'Más verbos' && normalizedLabel === 'más') {
       setFolderHistory(prev => [...prev, 'Más verbos'])
@@ -165,148 +176,139 @@ export default function AppInterface() {
 
     const normalizedTokenLabel =
       symbol.label === 'Y' ? 'y' : symbol.label === 'A' ? 'a' : symbol.label
+    const currentPhraseSymbols = [...selectedSymbols, {
+      id: symbol.id,
+      label: normalizedTokenLabel,
+      posType: symbol.posType,
+      lexemeId: symbol.lexemeId ?? null,
+      category: symbol.category ?? null,
+      state: symbol.state,
+    }]
+    const phraseQuestionType = detectQuestionType(currentPhraseSymbols[0]?.label ?? '')
 
     setSelectedSymbols(prev => [
       ...prev,
       {
         ...symbol,
         label: normalizedTokenLabel,
+        sourceSymbolId: symbol.id,
         // Cada pulsación crea una entrada única para permitir repetición consecutiva.
         id: `${symbol.id}-sel-${Date.now()}-${prev.length}`,
       },
     ])
     speakSelectedWord(normalizedTokenLabel)
 
-    // Local prediction
-    const posType = symbol.pos_type
-    let prioritized: string[] = []
-    if (posType === 'pronoun') {
-      prioritized = symbols.filter(s => s.pos_type === 'verb').map(s => s.id).slice(0, 8)
-    } else if (posType === 'verb') {
-      prioritized = symbols.filter(s => s.pos_type === 'noun' || s.pos_type === 'adj').map(s => s.id).slice(0, 8)
-    } else if (symbol.label.toLowerCase() === 'no') {
-      prioritized = symbols.filter(s => s.pos_type === 'verb').map(s => s.id).slice(0, 8)
+    if (!profile || !symbol.id || String(symbol.id).startsWith('folder-')) {
+      setPredictedIds([])
+      return
     }
-    setPredictedIds(prioritized)
 
-    // Track usage
-    if (profile) {
-      void profile.id
+    const previousSelectedSymbol = selectedSymbols[selectedSymbols.length - 1]
+    const previousSourceId = previousSelectedSymbol?.sourceSymbolId ?? previousSelectedSymbol?.id
+    const previousSourceSymbol = previousSourceId
+      ? symbols.find(candidate => candidate.id === previousSourceId) ?? null
+      : null
+    const phraseSessionId = ensurePhraseSessionId(profile.id)
+    const sequenceIndex = phraseSequenceRef.current
+    phraseSequenceRef.current += 1
+
+    void recordSymbolUsage({
+      profileId: profile.id,
+      currentSymbol: {
+        id: symbol.id,
+        label: normalizedTokenLabel,
+        posType: symbol.posType,
+        lexemeId: symbol.lexemeId ?? null,
+        state: symbol.state,
+      },
+      previousSymbol: previousSourceSymbol
+        ? {
+            id: previousSourceSymbol.id,
+            label: previousSourceSymbol.label,
+            posType: previousSourceSymbol.posType,
+            lexemeId: previousSourceSymbol.lexemeId ?? null,
+            state: previousSourceSymbol.state,
+          }
+        : null,
+      phraseSessionId,
+      sequenceIndex,
+    })
+
+    try {
+      const recentSymbols = [...selectedSymbols, {
+        id: symbol.id,
+        label: normalizedTokenLabel,
+        posType: symbol.posType,
+        lexemeId: symbol.lexemeId ?? null,
+        category: symbol.category ?? null,
+        state: symbol.state,
+      }].slice(-3).map(item => ({
+        id: item.id,
+        label: item.label,
+        posType: item.posType,
+        lexemeId: item.lexemeId ?? null,
+        category: item.category ?? null,
+        state: item.state,
+      }))
+
+      const prioritized = await getPredictionCandidates({
+        profileId: profile.id,
+        currentSymbol: {
+          id: symbol.id,
+          label: normalizedTokenLabel,
+          posType: symbol.posType,
+          lexemeId: symbol.lexemeId ?? null,
+          category: symbol.category ?? null,
+          state: symbol.state,
+        },
+        recentSymbols,
+        phraseQuestionType,
+        candidateSymbols: mainOrderedSymbols.map(candidate => ({
+          id: candidate.id,
+          label: candidate.label,
+          posType: candidate.posType,
+          lexemeId: candidate.lexemeId ?? null,
+          category: candidate.category ?? null,
+          state: candidate.state,
+        })),
+      })
+      setPredictedIds(prioritized)
+    } catch (err) {
+      console.error('Error calculating predictions', err)
+      setPredictedIds([])
     }
-  }, [symbols, profile, speakSelectedWord])
+  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, profile, selectedSymbols, setFolderHistory, speakSelectedWord, symbols])
 
   const handleDeleteLast = () => {
     setSelectedSymbols(prev => prev.slice(0, -1))
+    setPredictedIds([])
+    if (selectedSymbols.length <= 1) {
+      resetPhraseTracking()
+    }
   }
 
   const handleClearAll = () => {
     setSelectedSymbols([])
     setPredictedIds([])
+    resetPhraseTracking()
   }
 
   const handleQuickPhrase = async (phrase: Phrase) => {
     if (!profile) return
-    await db.phrases.put({ ...phrase, use_count: phrase.use_count + 1 })
+    try {
+      await saveQuickPhrase(profile.id, phrase.text, phrase.symbolsUsed)
+    } catch (err) {
+      console.error('Error saving quick phrase', err)
+    }
   }
 
-  const folderSymbols = activeFolder
-    ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => ({
-      id: `folder-item-${activeFolder}-${i}`,
-      grid_id: 'demo',
-      label,
-      emoji: symbols.find(s => s.label.toLowerCase() === label.toLowerCase())?.emoji || '🧩',
-      category: activeFolder,
-      pos_type: 'noun' as const,
-      position_x: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
-      position_y: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
-      color: '#f8fafc',
-      hidden: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }))
-    : []
-
-  const mainOrderedSymbols = (() => {
-    const byLabel = new Map(symbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
-
-    const fixedLeftPanel: Symbol[] = []
-    MAIN_GRID_TEMPLATE.forEach((row, y) => {
-      row.forEach((label, x) => {
-        if (!label || x >= FIXED_COLUMNS) return
-        const existing = byLabel.get(label.toLowerCase())
-        if (existing) {
-          fixedLeftPanel.push({
-            ...existing,
-            position_x: x,
-            position_y: y,
-          })
-          return
-        }
-
-        // Siempre mantener visible la columna fija izquierda.
-        fixedLeftPanel.push({
-          id: `fixed-left-${label.toLowerCase().replace(/\s+/g, '-')}`,
-          grid_id: 'template-left',
-          label,
-          emoji: x === FIXED_COLUMNS - 1 ? undefined : '❔',
-          category: 'Fijo',
-          pos_type: 'other',
-          position_x: x,
-          position_y: y,
-          color: x === FIXED_COLUMNS - 1 ? '#f3f4f6' : '#e5f6e6',
-          hidden: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-      })
-    })
-
-    if (activeFolder) {
-      return [...fixedLeftPanel, ...folderSymbols]
-    }
-
-    const rightPanelFromTemplate: Symbol[] = []
-    MAIN_GRID_TEMPLATE.forEach((row, y) => {
-      row.forEach((label, x) => {
-        if (!label || x < FIXED_COLUMNS) return
-        const existing = byLabel.get(label.toLowerCase())
-        if (existing) {
-          rightPanelFromTemplate.push({
-            ...existing,
-            position_x: x,
-            position_y: y,
-          })
-          return
-        }
-
-        rightPanelFromTemplate.push({
-          id: `template-${label.toLowerCase().replace(/\s+/g, '-')}`,
-          grid_id: 'template',
-          label,
-          emoji: '❔',
-          category: 'Carpetas',
-          pos_type: 'other',
-          position_x: x,
-          position_y: y,
-          color: '#f3f4f6',
-          hidden: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-      })
-    })
-
-    return [...fixedLeftPanel, ...rightPanelFromTemplate]
-  })()
-
   const cellSize = accessConfig?.grid_cell_size || 'medium'
-  const showKeyboard = accessConfig?.show_keyboard !== false
   const showScanner = accessConfig?.show_scanner || false
   const scannerPattern = accessConfig?.scanner_pattern || 'row'
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#e7ebf3]">
+    <div className="theme-page-shell flex h-screen flex-col overflow-hidden text-slate-900 dark:text-slate-100">
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
         <QuickPhrases
@@ -353,27 +355,90 @@ export default function AppInterface() {
             cellSize={cellSize}
             onSymbolSelect={handleSymbolSelect}
             folders={[]}
+            gridCols={profile?.gridCols || 14}
+            gridRows={profile?.gridRows || 8}
           />
         ) : (
           <Keyboard
-            onTextAdd={(text) => {
-              // Add text as a pseudo-symbol
-              const pseudoSymbol: Symbol = {
-                id: `text-${Date.now()}`,
-                grid_id: '',
-                label: text,
+            onTextAdd={async (text) => {
+              const analyzedTokens = await analyzeLexicalTextInput(text)
+              if (analyzedTokens.length === 0) return
+
+              const batchId = Date.now()
+              const timestamp = new Date().toISOString()
+              const pseudoSymbols = analyzedTokens.map((token, index) => ({
+                id: `text-${batchId}-${index}`,
+                sourceSymbolId: `text-${batchId}-${index}`,
+                gridId: '',
+                label: token.label,
+                normalizedLabel: token.normalizedLabel,
                 emoji: undefined,
+                imageUrl: undefined,
                 category: 'Texto',
-                pos_type: 'noun',
-                position_x: 0,
-                position_y: 0,
+                posType: token.symbolPosType,
+                posConfidence: token.confidence,
+                manualGrammarOverride: false,
+                lexemeId: token.lexemeId ?? null,
+                positionX: 0,
+                positionY: 0,
                 color: '#f3f4f6',
                 hidden: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }
-              setSelectedSymbols(prev => [...prev, pseudoSymbol])
+                state: 'visible',
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              } as Symbol))
+
+              setSelectedSymbols(prev => [...prev, ...pseudoSymbols])
+
               speakSelectedWord(text)
+
+              if (!profile) {
+                setPredictedIds([])
+                return
+              }
+
+              const phraseSessionId = ensurePhraseSessionId(profile.id)
+              const existingSequenceStart = phraseSequenceRef.current
+
+              pseudoSymbols.forEach((pseudoSymbol, index) => {
+                const previous =
+                  index > 0
+                    ? pseudoSymbols[index - 1]
+                    : selectedSymbols[selectedSymbols.length - 1]
+
+                void recordSymbolUsage({
+                  profileId: profile.id,
+                  currentSymbol: toPredictionInput(pseudoSymbol),
+                  previousSymbol: previous ? toPredictionInput(previous) : null,
+                  phraseSessionId,
+                  sequenceIndex: existingSequenceStart + index,
+                })
+              })
+
+              phraseSequenceRef.current += pseudoSymbols.length
+
+              const updatedRecentSymbols = [...selectedSymbols, ...pseudoSymbols]
+                .slice(-3)
+                .map(toPredictionInput)
+              const phraseQuestionType = detectQuestionType(
+                [...selectedSymbols, ...pseudoSymbols][0]?.label ?? '',
+              )
+
+              const lastPseudoSymbol = pseudoSymbols[pseudoSymbols.length - 1]
+
+              try {
+                const prioritized = await getPredictionCandidates({
+                  profileId: profile.id,
+                  currentSymbol: toPredictionInput(lastPseudoSymbol),
+                  recentSymbols: updatedRecentSymbols,
+                  phraseQuestionType,
+                  candidateSymbols: mainOrderedSymbols.map(toPredictionInput),
+                })
+                setPredictedIds(prioritized)
+              } catch (err) {
+                console.error('Error calculating predictions from keyboard input', err)
+                setPredictedIds([])
+              }
             }}
           />
         )}
@@ -381,7 +446,7 @@ export default function AppInterface() {
         {/* Scanner overlay */}
         {showScanner && (
           <ScannerOverlay
-            symbols={filteredSymbols}
+            symbols={mainOrderedSymbols}
             pattern={scannerPattern}
             speed={scannerSpeed}
             scanKey={accessConfig?.scan_key || 'Space'}
