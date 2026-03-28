@@ -3,13 +3,9 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon, tokenizePhraseInput } from '@/lib/lexicon/normalize'
-
-function isUnknownPrismaFieldError(error: unknown, fields: string[]) {
-  if (!(error instanceof Error)) return false
-  return error.message.includes('Unknown field') && fields.some((field) => error.message.includes(field))
-}
 
 async function safeDetectLexemeForLabel(label: string) {
   try {

@@ -207,7 +207,7 @@ async function getHistoricalSequenceScores(
   const latestUse = new Map<string, number>()
   let maxCount = 0
 
-  for (const [, rows] of sessions) {
+  for (const rows of Array.from(sessions.values())) {
     const ordered = [...rows].sort((a, b) => a.sequenceIndex - b.sequenceIndex)
 
     for (let index = 2; index < ordered.length; index += 1) {

@@ -5,17 +5,44 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 
 function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
 }
 
-function isUnknownPrismaFieldError(error: unknown, fields: string[]) {
-    return (
-        error instanceof Error &&
-        (error.message.includes('Unknown field') || error.message.includes('Unknown argument')) &&
-        fields.some((field) => error.message.includes(field))
-    )
+type AccountThemePreference = 'light' | 'dark' | 'system'
+
+async function updatePreferredThemeForUser(userId: string, preferredTheme: AccountThemePreference) {
+    try {
+        return await prisma.user.update({
+            where: { id: userId },
+            data: { preferredTheme },
+            select: {
+                id: true,
+                preferredTheme: true,
+                preferredDyslexiaFont: true,
+            }
+        })
+    } catch (error) {
+        if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
+            throw error
+        }
+
+        const fallbackUser = await prisma.user.update({
+            where: { id: userId },
+            data: { preferredTheme },
+            select: {
+                id: true,
+                preferredTheme: true,
+            }
+        })
+
+        return {
+            ...fallbackUser,
+            preferredDyslexiaFont: false,
+        }
+    }
 }
 
 export async function getAccountSettings() {
@@ -62,7 +89,7 @@ export async function getAccountSettings() {
 export async function updateAccountSettings(data: {
     name: string
     email: string
-    preferredTheme: 'light' | 'dark' | 'system'
+    preferredTheme: AccountThemePreference
     preferredDyslexiaFont: boolean
     currentPassword?: string
     newPassword?: string
@@ -108,16 +135,8 @@ export async function updateAccountSettings(data: {
         password = await bcrypt.hash(newPassword, 10)
     }
 
-    let updatedUser: {
-        id: string
-        name: string | null
-        email: string
-        preferredTheme: string
-        preferredDyslexiaFont: boolean
-    }
-
     try {
-        updatedUser = await prisma.user.update({
+        const updatedUser = await prisma.user.update({
             where: { id: user.id },
             data: {
                 name: trimmedName,
@@ -134,32 +153,51 @@ export async function updateAccountSettings(data: {
                 preferredDyslexiaFont: true,
             }
         })
+        revalidatePath('/admin')
+        revalidatePath('/tablero')
+        return updatedUser
     } catch (error) {
         if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
             throw error
         }
-
-        const fallbackUser = await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                name: trimmedName,
-                email: normalizedEmail,
-                preferredTheme,
-                ...(password ? { password } : {})
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                preferredTheme: true,
-            }
-        })
-
-        updatedUser = {
-            ...fallbackUser,
-            preferredDyslexiaFont: false,
-        }
     }
+
+    const fallbackUser = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+            name: trimmedName,
+            email: normalizedEmail,
+            preferredTheme,
+            ...(password ? { password } : {})
+        },
+        select: {
+            id: true,
+            name: true,
+            email: true,
+            preferredTheme: true,
+        }
+    })
+
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+
+    return {
+        ...fallbackUser,
+        preferredDyslexiaFont: false,
+    }
+}
+
+export async function updateThemePreference(preferredTheme: AccountThemePreference) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+        throw new Error('No autorizado')
+    }
+
+    if (!['light', 'dark', 'system'].includes(preferredTheme)) {
+        throw new Error('Tema no válido')
+    }
+
+    const updatedUser = await updatePreferredThemeForUser(session.user.id, preferredTheme)
 
     revalidatePath('/admin')
     revalidatePath('/tablero')

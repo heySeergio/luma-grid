@@ -12,7 +12,8 @@ interface Props {
   onSelect: (symbol: Symbol) => void
 }
 
-export default function ScannerOverlay({ symbols, pattern, speed, scanKey, onSelect }: Props) {
+export default function ScannerOverlay({ symbols, pattern: _pattern, speed, scanKey, onSelect }: Props) {
+  void _pattern
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const intervalRef = useRef<NodeJS.Timeout>()

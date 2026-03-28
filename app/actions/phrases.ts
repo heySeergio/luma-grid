@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { revalidatePath } from 'next/cache'
+import type { Phrase } from '@/lib/supabase/types'
 
 export async function getPinnedPhrases(profileId: string) {
     const session = await getServerSession(authOptions)
@@ -16,12 +16,17 @@ export async function getPinnedPhrases(profileId: string) {
     })
 
     return phrases.map(p => ({
-        ...p,
-        symbols_used: JSON.parse(p.symbolsUsed), // Convert back to object
+        id: p.id,
+        profileId: p.profileId,
+        text: p.text,
+        symbolsUsed: JSON.parse(p.symbolsUsed) as Phrase['symbolsUsed'],
+        createdAt: p.createdAt.toISOString(),
+        isPinned: p.isPinned,
+        useCount: p.useCount,
     }))
 }
 
-export async function saveQuickPhrase(profileId: string, text: string, symbolsUsed: any[]) {
+export async function saveQuickPhrase(profileId: string, text: string, symbolsUsed: Phrase['symbolsUsed']) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 

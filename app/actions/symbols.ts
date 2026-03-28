@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
+import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
@@ -31,11 +32,6 @@ type SymbolInput = {
     state?: string | null
     gridId?: string | null
     grid_id?: string | null
-}
-
-function isUnknownPrismaFieldError(error: unknown, fields: string[]) {
-    if (!(error instanceof Error)) return false
-    return error.message.includes('Unknown field') && fields.some((field) => error.message.includes(field))
 }
 
 function shouldBackfillLexicalMetadata(symbol: {

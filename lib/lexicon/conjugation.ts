@@ -631,7 +631,7 @@ function selectAdjectiveForm(
     if (exact?.surface) return exact.surface
   }
 
-  let surface = agreement.gender === 'fem'
+  const surface = agreement.gender === 'fem'
     ? applyFallbackGender(token.original, 'female')
     : applyFallbackGender(token.original, 'male')
   if (agreement.number === 'plural' && !surface.endsWith('s')) {

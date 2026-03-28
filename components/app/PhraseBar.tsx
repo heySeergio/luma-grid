@@ -6,7 +6,11 @@ import { signIn, useSession } from 'next-auth/react'
 import { ArrowLeft, House, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { db } from '@/lib/dexie/db'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
-import type { Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
+import type { Phrase, Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
+
+type LocalProfile = Profile & {
+  communication_gender?: 'male' | 'female'
+}
 
 type ConjugationTokenInput = {
   label: string
@@ -17,7 +21,7 @@ type ConjugationTokenInput = {
 
 interface Props {
   symbols: Symbol[]
-  profile: Profile | null
+  profile: LocalProfile | null
   voiceConfig: VoiceConfig | null
   canGoBackFolder: boolean
   onGoBackFolder: () => void
@@ -126,7 +130,7 @@ export default function PhraseBar({
     onClearAll()
   }
 
-  const conjugatePhrase = async (tokens: ConjugationTokenInput[]): Promise<string> => {
+  const conjugatePhrase = useCallback(async (tokens: ConjugationTokenInput[]): Promise<string> => {
     if (tokens.length === 0) return ''
     if (tokens.length === 1) return tokens[0]?.label ?? ''
 
@@ -146,7 +150,7 @@ export default function PhraseBar({
     } catch {
       return tokens.map(token => token.label).join(' ')
     }
-  }
+  }, [profile?.communication_gender])
 
   const handleSpeak = useCallback(async () => {
     if (symbols.length === 0 || isSpeaking) return
@@ -168,16 +172,16 @@ export default function PhraseBar({
 
       // Save to local history
       if (profile) {
-        const localPhrase = {
+        const localPhrase: Phrase = {
           id: `local-${Date.now()}`,
-          profile_id: profile.id,
+          profileId: profile.id,
           text: phrase,
-          symbols_used: symbols.map(s => ({ id: s.id, label: s.label })),
-          is_pinned: false,
-          use_count: 1,
-          created_at: new Date().toISOString(),
+          symbolsUsed: symbols.map(s => ({ id: s.id, label: s.label })),
+          isPinned: false,
+          useCount: 1,
+          createdAt: new Date().toISOString(),
         }
-        await db.phrases.put(localPhrase as any)
+        await db.phrases.put(localPhrase)
         onPhraseSaved?.()
       }
     } catch (err) {
@@ -185,7 +189,7 @@ export default function PhraseBar({
     } finally {
       setIsSpeaking(false)
     }
-  }, [symbols, profile, isSpeaking, onPhraseSaved])
+  }, [symbols, profile, isSpeaking, onPhraseSaved, conjugatePhrase])
 
   return (
     <>

@@ -20,6 +20,13 @@ import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types
 
 type TabMode = 'grid' | 'keyboard'
 
+type LocalProfile = Profile & {
+  isDemo?: boolean
+  gridCols?: number
+  gridRows?: number
+  communication_gender?: 'male' | 'female'
+}
+
 type PredictionInputSymbol = {
   id: string
   label: string
@@ -31,8 +38,8 @@ type PredictionInputSymbol = {
 
 
 export default function AppInterface() {
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [profile, setProfile] = useState<LocalProfile | null>(null)
+  const [profiles, setProfiles] = useState<LocalProfile[]>([])
   const [symbols, setSymbols] = useState<Symbol[]>([])
   const [selectedSymbols, setSelectedSymbols] = useState<Symbol[]>([])
   const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
@@ -46,7 +53,7 @@ export default function AppInterface() {
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
 
-  const shouldUseDefaultGridTemplate = Boolean((profile as Profile & { isDemo?: boolean } | null)?.isDemo)
+  const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
   const mainOrderedSymbols = shouldUseDefaultGridTemplate
     ? computeMainGrid(symbols, activeFolder)
     : symbols
@@ -91,65 +98,66 @@ export default function AppInterface() {
     }
   }, [])
 
-  useEffect(() => {
-    loadProfiles()
-  }, [])
-
-  useEffect(() => {
-    if (profile) {
-      resetPhraseTracking()
-      setActiveFolder(null)
-      setFolderHistory([])
-      loadSymbols()
-      loadPinnedPhrases()
-      loadAccessConfig()
-      subscribeToChanges()
-    }
-  }, [profile, resetPhraseTracking])
-
-  const loadProfiles = async () => {
+  const loadProfiles = useCallback(async () => {
     try {
-      const dbProfiles = await getProfiles()
-      const profilesWithGender = applyProfileGenders(dbProfiles as any)
+      const dbProfiles = await getProfiles() as LocalProfile[]
+      const profilesWithGender = applyProfileGenders(dbProfiles) as LocalProfile[]
       setProfiles(profilesWithGender)
       setProfile(profilesWithGender[0] ?? null)
     } catch (err) {
       console.error('Error fetching profiles', err)
     }
-  }
+  }, [])
 
-  const loadSymbols = async () => {
+  const loadSymbols = useCallback(async () => {
     if (!profile) return
     try {
-      const dbSymbols = await getProfileSymbols(profile.id)
-      setSymbols(dbSymbols as any)
+      const dbSymbols = await getProfileSymbols(profile.id) as Symbol[]
+      setSymbols(dbSymbols)
     } catch (err) {
       console.error('Error fetching symbols', err)
     }
-  }
+  }, [profile])
 
-  const loadPinnedPhrases = async () => {
+  const loadPinnedPhrases = useCallback(async () => {
     if (!profile) return
     try {
-      const phrases = await getPinnedPhrases(profile.id)
-      setPinnedPhrases(phrases as any)
+      const phrases = await getPinnedPhrases(profile.id) as Phrase[]
+      setPinnedPhrases(phrases)
     } catch (err) {
       console.error('Error fetching pinned phrases', err)
     }
-  }
+  }, [profile])
 
-  const loadAccessConfig = async () => {
+  const loadAccessConfig = useCallback(async () => {
     setAccessConfig(null)
-  }
+  }, [])
 
-  const subscribeToChanges = () => {
+  const subscribeToChanges = useCallback(() => {
     const onStorage = () => {
-      loadProfiles()
-      loadSymbols()
+      void loadProfiles()
+      void loadSymbols()
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }
+  }, [loadProfiles, loadSymbols])
+
+  useEffect(() => {
+    void loadProfiles()
+  }, [loadProfiles])
+
+  useEffect(() => {
+    if (!profile) return
+
+    resetPhraseTracking()
+    setActiveFolder(null)
+    setFolderHistory([])
+    void loadSymbols()
+    void loadPinnedPhrases()
+    void loadAccessConfig()
+
+    return subscribeToChanges()
+  }, [profile, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadAccessConfig, subscribeToChanges])
 
   const handleSymbolSelect = useCallback(async (symbol: Symbol) => {
     const normalizedLabel = symbol.label.toLowerCase()

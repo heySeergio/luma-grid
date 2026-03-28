@@ -15,6 +15,7 @@ import { setProfileGender } from '@/lib/profileGender'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import BrandLockup from '@/components/site/BrandLockup'
+import type { Symbol as BoardSymbol } from '@/lib/supabase/types'
 import {
   DEFAULT_SYMBOL_COLOR,
   PRESET_SYMBOL_COLORS,
@@ -24,7 +25,49 @@ import {
   resolveSymbolColor,
 } from '@/lib/ui/symbolColors'
 
-type Symbol = any // Using any for local state to avoid strict Prisma types during editing
+type AdminProfile = {
+  id: string
+  userId?: string
+  name: string
+  gender?: string
+  communication_gender?: string
+  isDemo?: boolean
+  gridRows?: number
+  gridCols?: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+type AdminSymbol = {
+  id: string
+  gridId?: string | null
+  grid_id?: string | null
+  profileId?: string
+  sourceSymbolId?: string
+  label: string
+  normalizedLabel?: string | null
+  emoji?: string | null
+  imageUrl?: string | null
+  image_url?: string | null
+  category: string
+  posType: string
+  pos_type?: string | null
+  posConfidence?: number | null
+  manualGrammarOverride?: boolean
+  lexemeId?: string | null
+  lexeme_id?: string | null
+  positionX?: number | null
+  positionY?: number | null
+  position_x?: number | null
+  position_y?: number | null
+  color: string
+  hidden?: boolean
+  state?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  created_at?: string
+  updated_at?: string
+}
 
 const STATE_OPTIONS = [
   { value: 'visible', label: 'Visible (Normal)' },
@@ -38,6 +81,7 @@ const SYMBOL_POS_OPTIONS = [
   { value: 'noun', label: 'Sustantivo' },
   { value: 'adj', label: 'Adjetivo' },
   { value: 'adverb', label: 'Adverbio' },
+  { value: 'prep', label: 'Preposición' },
   { value: 'other', label: 'Otro' },
 ] as const
 
@@ -52,6 +96,8 @@ const DYSLEXIA_FONT_OPTIONS = [
   { value: true, label: 'Activado' },
 ] as const
 
+type ThemePreference = 'light' | 'dark' | 'system'
+
 const PRESET_COLORS = PRESET_SYMBOL_COLORS
 
 const EMOJI_OPTIONS = [
@@ -62,7 +108,7 @@ const EMOJI_OPTIONS = [
   '🚗', '🚌', '✈️', '⏰', '📅', '🎨', '🐶', '🐱',
 ]
 
-const EMPTY_SYMBOL = {
+const EMPTY_SYMBOL: Omit<AdminSymbol, 'id' | 'createdAt' | 'updatedAt' | 'gridId' | 'hidden'> = {
   label: '',
   emoji: '',
   imageUrl: '',
@@ -75,6 +121,10 @@ const EMPTY_SYMBOL = {
   positionY: 0,
   color: DEFAULT_SYMBOL_COLOR,
   state: 'visible',
+}
+
+function normalizeThemePreference(value: string | null | undefined): ThemePreference {
+  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
 }
 
 type LexemeAlternative = {
@@ -128,14 +178,14 @@ type LexiconCoverage = {
   }>
 }
 
-function getSymbolPosition(symbol: any) {
+function getSymbolPosition(symbol: Pick<AdminSymbol, 'positionX' | 'positionY' | 'position_x' | 'position_y'>) {
   return {
-    x: symbol.positionX !== undefined ? symbol.positionX : symbol.position_x,
-    y: symbol.positionY !== undefined ? symbol.positionY : symbol.position_y,
+    x: symbol.positionX ?? symbol.position_x ?? 0,
+    y: symbol.positionY ?? symbol.position_y ?? 0,
   }
 }
 
-function isMovableSymbol(symbol: any) {
+function isMovableSymbol(symbol: Pick<AdminSymbol, 'id'> | null | undefined) {
   return Boolean(
     symbol?.id &&
     !String(symbol.id).startsWith('fixed-left') &&
@@ -144,7 +194,7 @@ function isMovableSymbol(symbol: any) {
   )
 }
 
-function updateSymbolCoordinates(symbol: any, x: number, y: number) {
+function updateSymbolCoordinates(symbol: AdminSymbol, x: number, y: number): AdminSymbol {
   return {
     ...symbol,
     positionX: x,
@@ -154,7 +204,7 @@ function updateSymbolCoordinates(symbol: any, x: number, y: number) {
   }
 }
 
-function sortSymbolsByPosition(a: any, b: any) {
+function sortSymbolsByPosition(a: AdminSymbol, b: AdminSymbol) {
   const aPos = getSymbolPosition(a)
   const bPos = getSymbolPosition(b)
   if (aPos.y !== bPos.y) return aPos.y - bPos.y
@@ -189,7 +239,7 @@ function DraggableGridItem({
   symbol,
   children,
 }: {
-  symbol: any
+  symbol: AdminSymbol
   children: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -223,12 +273,12 @@ export default function AdminPage() {
     id: string
     name: string | null
     email: string
-    preferredTheme: 'light' | 'dark' | 'system'
+    preferredTheme: ThemePreference
     preferredDyslexiaFont: boolean
   } | null>(null)
   const [accountName, setAccountName] = useState('')
   const [accountEmail, setAccountEmail] = useState('')
-  const [accountPreferredTheme, setAccountPreferredTheme] = useState<'light' | 'dark' | 'system'>('system')
+  const [accountPreferredTheme, setAccountPreferredTheme] = useState<ThemePreference>('system')
   const [accountPreferredDyslexiaFont, setAccountPreferredDyslexiaFont] = useState(false)
   const [showChangePasswordFields, setShowChangePasswordFields] = useState(false)
   const [accountCurrentPassword, setAccountCurrentPassword] = useState('')
@@ -236,16 +286,16 @@ export default function AdminPage() {
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('')
   const [accountGender, setAccountGender] = useState<'male' | 'female'>('male')
   const [savingAccountSettings, setSavingAccountSettings] = useState(false)
-  const [profiles, setProfiles] = useState<any[]>([])
+  const [profiles, setProfiles] = useState<AdminProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
-  const [symbols, setSymbols] = useState<Symbol[]>([])
+  const [symbols, setSymbols] = useState<AdminSymbol[]>([])
   const [lexiconCoverage, setLexiconCoverage] = useState<LexiconCoverage | null>(null)
   const [loadingLexiconCoverage, setLoadingLexiconCoverage] = useState(false)
   const [status, setStatus] = useState('')
   const [loadingData, setLoadingData] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
   const [savingGrid, setSavingGrid] = useState(false)
-  const [editingSymbol, setEditingSymbol] = useState<Symbol | null>(null)
+  const [editingSymbol, setEditingSymbol] = useState<AdminSymbol | null>(null)
   const [lexemePreview, setLexemePreview] = useState<LexemePreview | null>(null)
   const [detectingLexeme, setDetectingLexeme] = useState(false)
   const [listSearch, setListSearch] = useState('')
@@ -257,12 +307,12 @@ export default function AdminPage() {
   const [showAccountSettingsModal, setShowAccountSettingsModal] = useState(false)
   const [newProfileName, setNewProfileName] = useState('')
   const [creatingProfile, setCreatingProfile] = useState(false)
-  const [profileBeingEdited, setProfileBeingEdited] = useState<any | null>(null)
+  const [profileBeingEdited, setProfileBeingEdited] = useState<AdminProfile | null>(null)
   const [editProfileName, setEditProfileName] = useState('')
   const [markEditedProfileAsDefault, setMarkEditedProfileAsDefault] = useState(false)
   const [savingProfileChanges, setSavingProfileChanges] = useState(false)
   const [deletingProfileId, setDeletingProfileId] = useState('')
-  const [profilePendingDeletion, setProfilePendingDeletion] = useState<any | null>(null)
+  const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
   const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
 
@@ -281,19 +331,25 @@ export default function AdminPage() {
         getProfiles(),
         getAccountSettings()
       ])
+      const normalizedAccountSettings = fetchedAccountSettings
+        ? {
+            ...fetchedAccountSettings,
+            preferredTheme: normalizeThemePreference(fetchedAccountSettings.preferredTheme),
+          }
+        : null
       setProfiles(fetchedProfiles)
-      setAccountSettings(fetchedAccountSettings)
-      setAccountName(fetchedAccountSettings?.name ?? '')
-      setAccountEmail(fetchedAccountSettings?.email ?? '')
-      setAccountPreferredTheme(fetchedAccountSettings?.preferredTheme ?? 'system')
-      setAccountPreferredDyslexiaFont(Boolean(fetchedAccountSettings?.preferredDyslexiaFont))
+      setAccountSettings(normalizedAccountSettings)
+      setAccountName(normalizedAccountSettings?.name ?? '')
+      setAccountEmail(normalizedAccountSettings?.email ?? '')
+      setAccountPreferredTheme(normalizedAccountSettings?.preferredTheme ?? 'system')
+      setAccountPreferredDyslexiaFont(Boolean(normalizedAccountSettings?.preferredDyslexiaFont))
       if (fetchedProfiles.length === 0) {
         setSelectedProfileId('')
       } else if (!selectedProfileId || !fetchedProfiles.some(profile => profile.id === selectedProfileId)) {
         setSelectedProfileId(fetchedProfiles[0].id)
       }
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
       setStatus('Error al cargar perfiles')
     }
     setLoadingData(false)
@@ -386,7 +442,7 @@ export default function AdminPage() {
       isCancelled = true
       clearTimeout(timeoutId)
     }
-  }, [editingSymbol?.label])
+  }, [editingSymbol])
 
   const handleGridSizeUpdate = async (rows: number, cols: number) => {
     if (!selectedProfile) return
@@ -432,18 +488,22 @@ export default function AdminPage() {
         setProfileGender(selectedProfile.id, accountGender)
       }
 
-      setAccountSettings(updatedAccount)
+      const normalizedPreferredTheme = normalizeThemePreference(updatedAccount.preferredTheme)
+      setAccountSettings({
+        ...updatedAccount,
+        preferredTheme: normalizedPreferredTheme,
+      })
       setAccountName(updatedAccount.name ?? '')
       setAccountEmail(updatedAccount.email)
-      setAccountPreferredTheme(updatedAccount.preferredTheme)
+      setAccountPreferredTheme(normalizedPreferredTheme)
       setAccountPreferredDyslexiaFont(Boolean(updatedAccount.preferredDyslexiaFont))
       resetPasswordFields()
-      setTheme(updatedAccount.preferredTheme)
+      setTheme(normalizedPreferredTheme)
       await updateSession({
         user: {
           name: updatedAccount.name ?? '',
           email: updatedAccount.email,
-          preferredTheme: updatedAccount.preferredTheme,
+          preferredTheme: normalizedPreferredTheme,
           preferredDyslexiaFont: Boolean(updatedAccount.preferredDyslexiaFont),
         },
       })
@@ -487,7 +547,7 @@ export default function AdminPage() {
       const coverage = await getProfileLexiconCoverage(selectedProfileId)
       setLexiconCoverage(coverage)
       setStatus('Símbolo eliminado.')
-    } catch (err) {
+    } catch {
       setStatus('Error al eliminar símbolo.')
     }
   }
@@ -569,7 +629,7 @@ export default function AdminPage() {
     }
   }
 
-  const openEditProfileModal = (profile: any) => {
+  const openEditProfileModal = (profile: AdminProfile) => {
     setProfileBeingEdited(profile)
     setEditProfileName(profile.name)
     setMarkEditedProfileAsDefault(false)
@@ -600,7 +660,7 @@ export default function AdminPage() {
     }
   }
 
-  const handleDeleteProfile = async (profile: any) => {
+  const handleDeleteProfile = async (profile: AdminProfile) => {
     if (profile.isDemo) return
 
     setProfilePendingDeletion(profile)
@@ -630,10 +690,10 @@ export default function AdminPage() {
 
   const shouldUseDefaultGridTemplate = Boolean(selectedProfile?.isDemo)
   const mainGridSymbols = shouldUseDefaultGridTemplate
-    ? computeMainGrid(symbols as any, activeFolder)
+    ? computeMainGrid(symbols as unknown as BoardSymbol[], activeFolder) as AdminSymbol[]
     : symbols
   const draggableSymbolsById = useMemo(() => {
-    return new Map(mainGridSymbols.filter((symbol: any) => isMovableSymbol(symbol)).map((symbol: any) => [symbol.id, symbol]))
+    return new Map(mainGridSymbols.filter((symbol) => isMovableSymbol(symbol)).map((symbol) => [symbol.id, symbol]))
   }, [mainGridSymbols])
   const activeDraggedSymbol = activeDraggedSymbolId ? draggableSymbolsById.get(activeDraggedSymbolId) ?? null : null
   const listSymbols = useMemo(() => {
@@ -641,7 +701,7 @@ export default function AdminPage() {
 
     return [...mainGridSymbols]
       .sort(sortSymbolsByPosition)
-      .filter((symbol: any) => {
+      .filter((symbol) => {
         if (listStateFilter !== 'all' && (symbol.state ?? 'visible') !== listStateFilter) {
           return false
         }
@@ -686,7 +746,7 @@ export default function AdminPage() {
     const sourcePosition = getSymbolPosition(draggedSymbol)
     if (sourcePosition.x === x && sourcePosition.y === y) return
 
-    const targetSymbol = mainGridSymbols.find((symbol: any) => {
+    const targetSymbol = mainGridSymbols.find((symbol) => {
       if (!isMovableSymbol(symbol) || symbol.id === draggedSymbol.id) return false
       const position = getSymbolPosition(symbol)
       return position.x === x && position.y === y
@@ -713,7 +773,7 @@ export default function AdminPage() {
     let foundEmptySlot = false
     for (let y = 0; y < gridRows; y += 1) {
       for (let x = 0; x < gridCols; x += 1) {
-        const occupied = mainGridSymbols.some((symbol: any) => {
+        const occupied = mainGridSymbols.some((symbol) => {
           const position = getSymbolPosition(symbol)
           return position.x === x && position.y === y
         })
@@ -740,6 +800,7 @@ export default function AdminPage() {
     }
 
     setEditingSymbol({
+      id: `draft-${Date.now()}`,
       ...EMPTY_SYMBOL,
       positionX: nextPosition.x,
       positionY: nextPosition.y,
@@ -1067,7 +1128,7 @@ export default function AdminPage() {
                         const x = index % gridCols
                         const y = Math.floor(index / gridCols)
 
-                        const symbol = mainGridSymbols.find((s: any) => s.positionX === x && s.positionY === y || s.position_x === x && s.position_y === y)
+                        const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
 
                         if (symbol) {
                           return (
@@ -1136,7 +1197,7 @@ export default function AdminPage() {
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
                             <button
-                              onClick={() => setEditingSymbol({ ...EMPTY_SYMBOL, positionX: x, positionY: y })}
+                              onClick={() => setEditingSymbol({ id: `draft-${Date.now()}`, ...EMPTY_SYMBOL, positionX: x, positionY: y })}
                               type="button"
                             className="ui-empty-slot group flex h-20 w-full items-center justify-center rounded-[1.35rem] transition hover:border-[var(--app-predicted-border)] hover:bg-[var(--app-predicted)]"
                             >
@@ -1250,7 +1311,7 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {listSymbols.map((symbol: any) => {
+                          {listSymbols.map((symbol) => {
                             const position = getSymbolPosition(symbol)
                             return (
                               <tr key={`row-${symbol.id}`} className="bg-[color-mix(in_srgb,var(--app-surface-elevated)_55%,transparent)]">
@@ -1841,7 +1902,7 @@ export default function AdminPage() {
                       <div className="flex items-center gap-3">
                         <input
                           type="color"
-                          value={getColorInputValue(editingSymbol.color)}
+                          value={getColorInputValue(editingSymbol.color ?? DEFAULT_SYMBOL_COLOR)}
                           onChange={e => setEditingSymbol({ ...editingSymbol, color: e.target.value })}
                           className="h-10 w-14 cursor-pointer rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
                         />

@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
+import { updateThemePreference } from '@/app/actions/account'
 import BrandLockup from '@/components/site/BrandLockup'
 
 const FOOTER_LINKS = [
@@ -15,7 +17,9 @@ const FOOTER_LINKS = [
 
 export default function SiteFooter() {
   const { resolvedTheme, setTheme } = useTheme()
+  const { data: session, update: updateSession } = useSession()
   const [mounted, setMounted] = useState(false)
+  const [isUpdatingTheme, setIsUpdatingTheme] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -23,16 +27,42 @@ export default function SiteFooter() {
 
   const isDark = mounted && resolvedTheme === 'dark'
 
+  const handleThemeToggle = async () => {
+    const nextTheme = isDark ? 'light' : 'dark'
+
+    setTheme(nextTheme)
+
+    if (!session?.user?.id) {
+      return
+    }
+
+    setIsUpdatingTheme(true)
+    try {
+      const updatedUser = await updateThemePreference(nextTheme)
+      await updateSession({
+        user: {
+          preferredTheme: updatedUser.preferredTheme,
+          preferredDyslexiaFont: updatedUser.preferredDyslexiaFont,
+        },
+      })
+    } catch {
+      setTheme(session.user.preferredTheme ?? 'system')
+    } finally {
+      setIsUpdatingTheme(false)
+    }
+  }
+
   return (
     <footer className="border-t border-[var(--app-border)] bg-[color-mix(in_srgb,var(--app-bg-soft)_82%,var(--app-surface-elevated))] dark:bg-[color-mix(in_srgb,var(--app-surface-strong)_88%,black_12%)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-6 py-8 md:px-10 md:py-10">
         <div className="flex justify-start">
           <button
             type="button"
-            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            onClick={handleThemeToggle}
             aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
             title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="ui-icon-button inline-flex h-11 w-11 items-center justify-center rounded-full transition"
+            disabled={isUpdatingTheme}
+            className="ui-icon-button inline-flex h-11 w-11 items-center justify-center rounded-full transition disabled:opacity-60"
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>

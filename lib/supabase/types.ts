@@ -1,4 +1,4 @@
-export type PosType = 'pronoun' | 'verb' | 'noun' | 'adj' | 'adverb' | 'other'
+export type PosType = 'pronoun' | 'verb' | 'noun' | 'adj' | 'adverb' | 'prep' | 'other'
 export type VoiceEngine = 'webspeech' | 'elevenlabs'
 export type ScannerPattern = 'row' | 'cell' | 'quadrant'
 export type GridCellSize = 'small' | 'medium' | 'large'

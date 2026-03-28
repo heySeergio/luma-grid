@@ -117,7 +117,7 @@ export function getSymbolTextColor(color: string | null | undefined) {
   return getRelativeLuminance(rgb) > 0.42 ? '#0f172a' : '#f8fafc'
 }
 
-export function getColorInputValue(color: string | null | undefined) {
+export function getColorInputValue(color: string | null | undefined): string {
   return isHexColor(color) ? color : '#cbd5e1'
 }
 
