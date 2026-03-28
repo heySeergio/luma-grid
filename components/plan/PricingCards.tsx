@@ -16,7 +16,8 @@ type Props = {
   disabled?: boolean
 }
 
-const features = {
+/** Ventajas por plan (compartido con upsell del admin, etc.). */
+export const PLAN_FEATURE_BULLETS = {
   free: ['1 tablero activo', 'Máximo 60 botones en total (incl. carpetas)', 'Voz del sistema (TTS del dispositivo)'],
   voice: ['Hasta 5 tableros', 'Botones ilimitados por tablero', 'Voces naturales ElevenLabs', '50.000 caracteres de voz / mes'],
   identity: [
@@ -25,7 +26,9 @@ const features = {
     'Voces naturales + clonación de voz',
     '100.000 caracteres de voz / mes',
   ],
-}
+} as const
+
+const features = PLAN_FEATURE_BULLETS
 
 export default function PricingCards({ variant, onSelectFree, onSelectPaid, disabled }: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('month')

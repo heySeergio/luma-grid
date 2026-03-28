@@ -17,6 +17,7 @@ import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/action
 import { setProfileGender } from '@/lib/profileGender'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import BrandLockup from '@/components/site/BrandLockup'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
@@ -40,6 +41,7 @@ import {
 } from '@/lib/voice/cloneRecording'
 
 const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
+const ADMIN_FREE_PLAN_UPSELL_SESSION_KEY = 'luma_admin_free_plan_upsell_session'
 
 function subscriptionPlanLabel(plan: SubscriptionPlan): string {
   switch (plan) {
@@ -329,6 +331,7 @@ export default function AdminPage() {
   const [voiceSubscriptionActive, setVoiceSubscriptionActive] = useState(false)
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null)
   const [showPlanPickerModal, setShowPlanPickerModal] = useState(false)
+  const [showFreePlanUpsell, setShowFreePlanUpsell] = useState(false)
   const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
   const [subscriptionPortalBusy, setSubscriptionPortalBusy] = useState(false)
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
@@ -701,6 +704,30 @@ export default function AdminPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const dismissFreePlanUpsell = useCallback(() => {
+    try {
+      sessionStorage.setItem(ADMIN_FREE_PLAN_UPSELL_SESSION_KEY, '1')
+    } catch {
+      /* modo privado / storage bloqueado */
+    }
+    setShowFreePlanUpsell(false)
+  }, [])
+
+  useEffect(() => {
+    if (loadingData) return
+    if (voicePlan !== 'free') {
+      setShowFreePlanUpsell(false)
+      return
+    }
+    if (typeof window === 'undefined') return
+    try {
+      if (sessionStorage.getItem(ADMIN_FREE_PLAN_UPSELL_SESSION_KEY) === '1') return
+    } catch {
+      return
+    }
+    setShowFreePlanUpsell(true)
+  }, [loadingData, voicePlan])
 
   useEffect(() => {
     if (!cloneRecording) return
@@ -2757,6 +2784,10 @@ export default function AdminPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {showFreePlanUpsell ? (
+        <AdminFreePlanUpsellModal open onDismiss={dismissFreePlanUpsell} />
+      ) : null}
 
       <PlanPickerModal
         open={showPlanPickerModal}
