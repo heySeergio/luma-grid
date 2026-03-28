@@ -1,6 +1,5 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import bcrypt from "bcrypt"
 
 function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
@@ -19,7 +18,11 @@ export const authOptions: NextAuthOptions = {
                     return null
                 }
 
-                const { prisma } = await import("@/lib/prisma")
+                const [prismaMod, bcryptMod] = await Promise.all([
+                    import("@/lib/prisma"),
+                    import("bcrypt"),
+                ])
+                const prisma = prismaMod.prisma
                 const email = normalizeEmail(credentials.email)
                 const user = await prisma.user.findUnique({
                     where: { email }
@@ -29,7 +32,7 @@ export const authOptions: NextAuthOptions = {
                     return null
                 }
 
-                const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+                const isPasswordValid = await bcryptMod.default.compare(credentials.password, user.password)
 
                 if (!isPasswordValid) {
                     return null

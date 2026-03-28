@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import type { Session } from 'next-auth'
 import { getServerSession } from 'next-auth'
 import localFont from 'next/font/local'
 import { Inter } from 'next/font/google'
@@ -58,12 +59,20 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
+/** Evita caché estática del shell; la sesión depende de cookies. */
+export const dynamic = 'force-dynamic'
+
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  let session: Session | null = null
+  try {
+    session = await getServerSession(authOptions)
+  } catch (err) {
+    console.error('[layout] getServerSession:', err)
+  }
   const dyslexiaFontEnabled = Boolean(session?.user?.preferredDyslexiaFont)
 
   return (
