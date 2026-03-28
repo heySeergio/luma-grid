@@ -1,15 +1,25 @@
 /** Plan de producto Luma Grid (facturación y límites). */
 export type SubscriptionPlan = 'free' | 'voice' | 'identity'
 
-/** Cuenta que siempre recibe el plan más alto (Identidad) en límites y permisos. */
-const SUPERUSER_EMAIL_NORMALIZED = 'sergio.tdc.tdc@gmail.com'
-
-function normalizeEmailForPlan(email: string | null | undefined): string {
-  return (email ?? '').trim().toLowerCase()
+/** Campos mínimos para saber si el pago (Stripe) sigue activo. */
+export type UserSubscriptionFields = {
+  plan?: string | null
+  stripeSubscriptionId?: string | null
+  planExpiresAt?: Date | null
 }
 
-export function isSuperuserSubscriptionEmail(email: string | null | undefined): boolean {
-  return normalizeEmailForPlan(email) === SUPERUSER_EMAIL_NORMALIZED
+/**
+ * Plan de pago (voz/identidad) con suscripción Stripe vigente y periodo no vencido.
+ * Sin esto, ElevenLabs no aplica: se usa solo voz del navegador.
+ */
+export function hasActivePaidSubscription(user: UserSubscriptionFields): boolean {
+  const tier = normalizeSubscriptionPlan(user.plan)
+  if (tier !== 'voice' && tier !== 'identity') return false
+  const sid = user.stripeSubscriptionId?.trim()
+  if (!sid) return false
+  const exp = user.planExpiresAt
+  if (exp && exp.getTime() <= Date.now()) return false
+  return true
 }
 
 /** Acepta valores en BD (libre/voz/identidad) y legacy en inglés. */
@@ -22,14 +32,11 @@ export function normalizeSubscriptionPlan(raw: string | null | undefined): Subsc
   return 'free'
 }
 
-/**
- * Plan efectivo para permisos y cuotas (superusuario → siempre Identidad).
- */
+/** Plan efectivo para permisos y cuotas (según campo `plan` en BD). */
 export function effectiveSubscriptionPlan(
-  email: string | null | undefined,
+  _email: string | null | undefined,
   raw: string | null | undefined,
 ): SubscriptionPlan {
-  if (isSuperuserSubscriptionEmail(email)) return 'identity'
   return normalizeSubscriptionPlan(raw)
 }
 

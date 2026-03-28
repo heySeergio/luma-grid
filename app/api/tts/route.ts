@@ -12,6 +12,7 @@ import {
   canUseElevenLabsPresets,
   canUseVoiceCloning,
   effectiveSubscriptionPlan,
+  hasActivePaidSubscription,
 } from '@/lib/subscription/plans'
 
 export const dynamic = 'force-dynamic'
@@ -58,11 +59,20 @@ export async function POST(req: Request) {
         plan: true,
         charactersUsed: true,
         ttsBillingMonth: true,
+        stripeSubscriptionId: true,
+        planExpiresAt: true,
       },
     })
 
     if (!user) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+    }
+
+    if (!hasActivePaidSubscription(user)) {
+      return NextResponse.json(
+        { error: 'Sin suscripción activa: usa voz del navegador', code: 'BROWSER_MODE' },
+        { status: 400 },
+      )
     }
 
     const ttsMode = normalizeTtsMode(user.ttsMode)

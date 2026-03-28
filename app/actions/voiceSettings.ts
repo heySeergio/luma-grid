@@ -9,7 +9,12 @@ import { ELEVENLABS_PRESET_VOICES } from '@/lib/voice/elevenlabsPresets'
 import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import type { TtsMode } from '@/lib/tts/types'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
-import { canUseElevenLabsPresets, canUseVoiceCloning, effectiveSubscriptionPlan } from '@/lib/subscription/plans'
+import {
+  canUseElevenLabsPresets,
+  canUseVoiceCloning,
+  effectiveSubscriptionPlan,
+  hasActivePaidSubscription,
+} from '@/lib/subscription/plans'
 
 export type VoiceSettingsDto = {
   ttsMode: TtsMode
@@ -18,6 +23,8 @@ export type VoiceSettingsDto = {
   charactersUsed: number
   ttsBillingMonth: string
   monthlyCharLimit: number
+  /** Suscripción Stripe vigente (voz/identidad); si es false, solo aplica voz del navegador. */
+  hasActivePaidSubscription: boolean
 }
 
 const DEFAULT_SETTINGS: VoiceSettingsDto = {
@@ -27,6 +34,7 @@ const DEFAULT_SETTINGS: VoiceSettingsDto = {
   charactersUsed: 0,
   ttsBillingMonth: '',
   monthlyCharLimit: getMonthlyCharLimit('free'),
+  hasActivePaidSubscription: false,
 }
 
 function normalizeTtsMode(value: string | null | undefined): TtsMode {
@@ -48,22 +56,28 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
         plan: true,
         charactersUsed: true,
         ttsBillingMonth: true,
+        stripeSubscriptionId: true,
+        planExpiresAt: true,
       },
     })
 
     if (!user) return null
 
     const plan = effectiveSubscriptionPlan(user.email, user.plan)
+    const activePaid = hasActivePaidSubscription(user)
+    const ttsMode = activePaid ? normalizeTtsMode(user.ttsMode) : 'browser'
+    const voiceId = activePaid ? user.voiceId : null
     return {
-      ttsMode: normalizeTtsMode(user.ttsMode),
-      voiceId: user.voiceId,
+      ttsMode,
+      voiceId,
       plan,
       charactersUsed: user.charactersUsed,
       ttsBillingMonth: user.ttsBillingMonth ?? '',
       monthlyCharLimit: getMonthlyCharLimit(plan),
+      hasActivePaidSubscription: activePaid,
     }
   } catch (error) {
-    if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId', 'plan', 'charactersUsed', 'ttsBillingMonth'])) {
+    if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId', 'plan', 'charactersUsed', 'ttsBillingMonth', 'stripeSubscriptionId', 'planExpiresAt'])) {
       throw error
     }
     return DEFAULT_SETTINGS
@@ -89,12 +103,35 @@ export async function updateVoiceSettings(data: {
       email: true,
       plan: true,
       voiceId: true,
+      stripeSubscriptionId: true,
+      planExpiresAt: true,
     },
   })
 
   if (!user) throw new Error('Usuario no encontrado')
 
   const plan = effectiveSubscriptionPlan(user.email, user.plan)
+  const activePaid = hasActivePaidSubscription(user)
+
+  if (!activePaid) {
+    if (ttsMode !== 'browser') {
+      throw new Error('Necesitas una suscripción activa para usar voces de ElevenLabs.')
+    }
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { ttsMode: 'browser', voiceId: null },
+      })
+    } catch (error) {
+      if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId'])) {
+        throw error
+      }
+      throw new Error('La base de datos no tiene columnas TTS. Ejecuta migraciones.')
+    }
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+    return
+  }
 
   if (ttsMode === 'preset' && !canUseElevenLabsPresets(plan)) {
     throw new Error('Las voces naturales requieren plan Voz o Identidad.')

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
 import { priceIdForCheckout } from '@/lib/stripe/plan-mapping'
 import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
-import { effectiveSubscriptionPlan, isSuperuserSubscriptionEmail, type SubscriptionPlan } from '@/lib/subscription/plans'
+import { effectiveSubscriptionPlan, type SubscriptionPlan } from '@/lib/subscription/plans'
 
 export type SubscriptionGateState =
   | { signedIn: false }
@@ -38,11 +38,9 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
     return { signedIn: false }
   }
 
-  const superuser = isSuperuserSubscriptionEmail(user.email)
-
   return {
     signedIn: true,
-    needsPlanSelection: superuser ? false : user.planSelectionCompletedAt == null,
+    needsPlanSelection: user.planSelectionCompletedAt == null,
     plan: effectiveSubscriptionPlan(user.email, user.plan),
     stripeCustomerId: user.stripeCustomerId,
   }

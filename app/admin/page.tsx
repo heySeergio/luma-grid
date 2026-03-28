@@ -326,6 +326,7 @@ export default function AdminPage() {
   const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
   const [voiceMonthlyLimit, setVoiceMonthlyLimit] = useState(10_000)
   const [voicePlan, setVoicePlan] = useState<SubscriptionPlan>('free')
+  const [voiceSubscriptionActive, setVoiceSubscriptionActive] = useState(false)
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null)
   const [showPlanPickerModal, setShowPlanPickerModal] = useState(false)
   const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
@@ -404,6 +405,7 @@ export default function AdminPage() {
         setVoiceCharsUsed(voiceSettings.charactersUsed)
         setVoiceMonthlyLimit(voiceSettings.monthlyCharLimit)
         setVoicePlan(voiceSettings.plan)
+        setVoiceSubscriptionActive(voiceSettings.hasActivePaidSubscription)
       }
     } catch (error) {
       console.error(error)
@@ -439,6 +441,7 @@ export default function AdminPage() {
   }, [])
 
   const openCustomVoiceMode = useCallback(() => {
+    if (!voiceSubscriptionActive) return
     if (voicePlan !== 'identity') {
       setVoiceTtsMode('custom')
       return
@@ -454,7 +457,7 @@ export default function AdminPage() {
       }
     }
     setVoiceCloneDisclaimerOpen(true)
-  }, [voicePlan])
+  }, [voicePlan, voiceSubscriptionActive])
 
   const acceptVoiceCloneDisclaimer = useCallback(() => {
     try {
@@ -593,7 +596,7 @@ export default function AdminPage() {
 
   const submitVoiceClone = useCallback(
     async (file: File) => {
-      if (voicePlan !== 'identity') return
+      if (voicePlan !== 'identity' || !voiceSubscriptionActive) return
       setVoiceCloneBusy(true)
       setStatus('')
       try {
@@ -612,21 +615,21 @@ export default function AdminPage() {
         setVoiceCloneBusy(false)
       }
     },
-    [cloneVoiceName, voicePlan, loadData],
+    [cloneVoiceName, voicePlan, voiceSubscriptionActive, loadData],
   )
 
   const handleVoiceCloneUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
-      if (!file || voicePlan !== 'identity') return
+      if (!file || voicePlan !== 'identity' || !voiceSubscriptionActive) return
       e.target.value = ''
       await submitVoiceClone(file)
     },
-    [submitVoiceClone, voicePlan],
+    [submitVoiceClone, voicePlan, voiceSubscriptionActive],
   )
 
   const startCloneRecording = useCallback(async () => {
-    if (voicePlan !== 'identity') return
+    if (voicePlan !== 'identity' || !voiceSubscriptionActive) return
     if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setStatus('❌ Tu navegador no permite grabar audio. Usa «Subir archivo».')
       return
@@ -650,7 +653,7 @@ export default function AdminPage() {
     } catch {
       setStatus('❌ No se pudo usar el micrófono. Permite el permiso o usa «Subir archivo».')
     }
-  }, [voicePlan])
+  }, [voicePlan, voiceSubscriptionActive])
 
   const stopCloneRecordingAndUpload = useCallback(async () => {
     const mr = cloneMediaRecorderRef.current
@@ -1155,11 +1158,17 @@ export default function AdminPage() {
     })
   }
 
+  const previewGridCols = selectedProfile?.gridCols || 14
+  const ADMIN_GRID_GAP_PX = 8
+  const ADMIN_MIN_CELL_PX = 72
+  const adminPreviewGridMinWidth =
+    previewGridCols * ADMIN_MIN_CELL_PX + (previewGridCols - 1) * ADMIN_GRID_GAP_PX
+
   return (
-    <div className="theme-page-shell min-h-screen p-4 text-slate-900 dark:text-slate-100 md:p-8">
+    <div className="theme-page-shell min-h-screen overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
       <div className="mx-auto max-w-7xl">
-        <header className="app-panel mb-8 flex flex-col items-start gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <header className="app-panel mb-6 flex flex-col items-stretch gap-4 rounded-2xl p-4 sm:mb-8 sm:p-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
             <BrandLockup
               href="/"
               iconSize={44}
@@ -1175,13 +1184,13 @@ export default function AdminPage() {
               <p className="mt-1 text-slate-500 dark:text-slate-400">Personaliza el comunicador para cada perfil.</p>
             </div>
           </div>
-          <div className="flex gap-3">
-            <Link href="/tablero" className="ui-secondary-button inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
+            <Link href="/tablero" className="ui-secondary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition">
               <ArrowLeft className="mr-2 h-4 w-4" /> VOLVER AL TABLERO
             </Link>
             <button
               onClick={handleSaveAll}
-              className="ui-primary-button inline-flex h-10 items-center justify-center rounded-2xl px-6 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              className="ui-primary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-6 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
             >
               <Save className="mr-2 h-4 w-4" /> Guardar Cambios
             </button>
@@ -1329,8 +1338,8 @@ export default function AdminPage() {
             {/* Main Area */}
             <div className="lg:col-span-3">
               {viewMode === 'grid' ? (
-                <div className="app-panel rounded-2xl p-6">
-                  <div className="mb-4 flex items-center justify-between">
+                <div className="app-panel rounded-2xl p-4 sm:p-6">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                         {activeFolder ? `Editando carpeta: ${activeFolder}` : 'Vista Previa del Grid'}
@@ -1348,12 +1357,16 @@ export default function AdminPage() {
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   >
-                    <div
-                      className="aac-grid-surface grid min-h-[500px] content-start gap-2 rounded-[1.8rem] p-4"
-                      style={{ gridTemplateColumns: `repeat(${selectedProfile?.gridCols || 14}, minmax(0, 1fr))` }}
-                    >
-                      {Array.from({ length: (selectedProfile?.gridCols || 14) * (selectedProfile?.gridRows || 8) }).map((_, index) => {
-                        const gridCols = selectedProfile?.gridCols || 14
+                    <div className="overflow-x-auto rounded-[1.8rem] pb-1">
+                      <div
+                        className="aac-grid-surface grid min-h-[min(500px,70dvh)] min-w-0 content-start gap-2 p-4 sm:min-h-[500px]"
+                        style={{
+                          gridTemplateColumns: `repeat(${previewGridCols}, minmax(${ADMIN_MIN_CELL_PX}px, 1fr))`,
+                          minWidth: adminPreviewGridMinWidth,
+                        }}
+                      >
+                      {Array.from({ length: previewGridCols * (selectedProfile?.gridRows || 8) }).map((_, index) => {
+                        const gridCols = previewGridCols
                         const x = index % gridCols
                         const y = Math.floor(index / gridCols)
 
@@ -1435,6 +1448,7 @@ export default function AdminPage() {
                           </DroppableGridCell>
                         )
                       })}
+                      </div>
                     </div>
 
                     <DragOverlay>
@@ -1613,7 +1627,7 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {showAccountSettingsModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1629,9 +1643,9 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.96, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              className="ui-modal-panel relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[2rem]"
+              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,920px)] sm:rounded-[2rem]"
             >
-              <div className="flex items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Configuración de la cuenta</h3>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Gestiona tus datos, la voz gramatical y la preferencia visual.</p>
@@ -1646,7 +1660,7 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveAccountSettings} className="max-h-[calc(90vh-88px)] overflow-y-auto p-6">
+              <form onSubmit={handleSaveAccountSettings} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6">
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1857,11 +1871,19 @@ export default function AdminPage() {
                       Voz (texto a voz)
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
-                      <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
-                        {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
-                      </span>
-                      {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
+                      {!voiceSubscriptionActive ? (
+                        <span className="font-medium text-amber-800 dark:text-amber-200">
+                          Sin suscripción activa: solo se usa la voz del navegador hasta que tengas un plan de pago vigente.
+                        </span>
+                      ) : (
+                        <>
+                          Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
+                          <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
+                            {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
+                          </span>
+                          {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
+                        </>
+                      )}
                     </p>
 
                     <div className="grid gap-2 sm:grid-cols-3">
@@ -1876,8 +1898,9 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setVoiceTtsMode('preset')}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        disabled={!voiceSubscriptionActive}
+                        onClick={() => voiceSubscriptionActive && setVoiceTtsMode('preset')}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                         style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
                       >
                         Voces naturales
@@ -1885,8 +1908,9 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => openCustomVoiceMode()}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        disabled={!voiceSubscriptionActive}
+                        onClick={() => voiceSubscriptionActive && openCustomVoiceMode()}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                         style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
                       >
                         Crear mi voz
@@ -2046,11 +2070,11 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3 border-t border-[var(--app-border)] pt-6">
+                <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
                     onClick={closeAccountSettingsModal}
-                    className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition dark:text-slate-300"
+                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={savingAccountSettings}
                   >
                     Cancelar
@@ -2058,7 +2082,7 @@ export default function AdminPage() {
                   <button
                     type="submit"
                     disabled={savingAccountSettings || !accountSettings}
-                    className="ui-primary-button rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70"
+                    className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
                   >
                     {savingAccountSettings ? 'Guardando...' : 'Guardar configuración'}
                   </button>
@@ -2072,7 +2096,7 @@ export default function AdminPage() {
       {/* Modern Editing Modal */}
       <AnimatePresence>
         {editingSymbol && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2085,19 +2109,19 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative w-full max-w-xl overflow-hidden rounded-[2rem]"
+              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,880px)] sm:max-w-2xl sm:rounded-[2rem] lg:max-w-3xl"
             >
-              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
+                <h3 className="pr-2 text-lg font-bold text-slate-800 sm:text-xl dark:text-slate-100">
                   {editingSymbol.id ? 'Editar Símbolo' : 'Nuevo Símbolo'}
                 </h3>
-                <button onClick={() => setEditingSymbol(null)} className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200">
+                <button onClick={() => setEditingSymbol(null)} className="ui-icon-button shrink-0 rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200">
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="p-6">
-                <div className="grid grid-cols-2 gap-6">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                   {/* Left Column */}
                   <div className="space-y-4">
                     <div>
@@ -2195,7 +2219,7 @@ export default function AdminPage() {
                           Quitar emoji
                         </button>
                       </div>
-                      <div className="ui-floating-panel mt-2 grid max-h-56 grid-cols-6 gap-2 overflow-y-auto rounded-2xl p-3 sm:grid-cols-7">
+                      <div className="ui-floating-panel mt-2 grid max-h-56 grid-cols-5 gap-2 overflow-y-auto rounded-2xl p-3 sm:grid-cols-6 md:grid-cols-7">
                         {EMOJI_OPTIONS.map((emoji) => (
                           <button
                             key={emoji}
@@ -2347,15 +2371,17 @@ export default function AdminPage() {
                           />
                         ))}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={getColorInputValue(editingSymbol.color ?? DEFAULT_SYMBOL_COLOR)}
-                          onChange={e => setEditingSymbol({ ...editingSymbol, color: e.target.value })}
-                          className="h-10 w-14 cursor-pointer rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
-                        />
-                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Color personalizado</span>
-                        <span className="text-sm font-mono text-slate-500 dark:text-slate-400">{normalizeSymbolColor(editingSymbol.color)}</span>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={getColorInputValue(editingSymbol.color ?? DEFAULT_SYMBOL_COLOR)}
+                            onChange={e => setEditingSymbol({ ...editingSymbol, color: e.target.value })}
+                            className="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
+                          />
+                          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Color personalizado</span>
+                        </div>
+                        <span className="break-all text-sm font-mono text-slate-500 dark:text-slate-400">{normalizeSymbolColor(editingSymbol.color)}</span>
                       </div>
                     </div>
 
@@ -2381,22 +2407,22 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-100 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="flex shrink-0 flex-col gap-2 border-t border-slate-100 bg-[var(--app-surface-muted)] p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 sm:p-6 dark:border-slate-800">
                 {editingSymbol.id && !String(editingSymbol.id).startsWith('folder-item-') && (
                   <button
                     onClick={handleDeleteEditingSymbol}
                     type="button"
-                    className="mr-auto rounded-2xl bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
+                    className="order-3 w-full rounded-2xl bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 sm:order-none sm:mr-auto sm:w-auto dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
                   >
                     Eliminar símbolo
                   </button>
                 )}
-                <button onClick={() => setEditingSymbol(null)} className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition dark:text-slate-300">
+                <button onClick={() => setEditingSymbol(null)} className="ui-secondary-button order-2 w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:order-none sm:w-auto dark:text-slate-300">
                   Cancelar
                 </button>
                 <button
                   onClick={handleEditSave}
-                  className="ui-primary-button rounded-2xl px-6 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                  className="ui-primary-button order-1 w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:order-none sm:w-auto"
                 >
                   Guardar en Grid
                 </button>
@@ -2408,7 +2434,7 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {showCreateProfileModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2426,9 +2452,9 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative w-full max-w-md overflow-hidden rounded-[2rem]"
+              className="ui-modal-panel relative max-h-[100dvh] w-full max-w-md overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,640px)] sm:rounded-[2rem]"
             >
-              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear perfil</h3>
                 <button
                   onClick={() => {
@@ -2444,7 +2470,7 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateProfile} className="p-6">
+              <form onSubmit={handleCreateProfile} className="max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain p-4 sm:max-h-none sm:overflow-visible sm:p-6">
                 <div>
                   <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Nombre del perfil</label>
                   <input
@@ -2462,21 +2488,21 @@ export default function AdminPage() {
                   Se creará un perfil nuevo vacío para personalizar su grid desde este panel.
                 </p>
 
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       setShowCreateProfileModal(false)
                       setNewProfileName('')
                     }}
-                    className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition dark:text-slate-300"
+                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={creatingProfile}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="ui-primary-button rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70"
+                    className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
                     disabled={creatingProfile || !newProfileName.trim()}
                   >
                     {creatingProfile ? 'Creando...' : 'Crear perfil'}
@@ -2490,7 +2516,7 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {profileBeingEdited && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2509,9 +2535,9 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative w-full max-w-md overflow-hidden rounded-[2rem]"
+              className="ui-modal-panel relative max-h-[100dvh] w-full max-w-md overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,720px)] sm:rounded-[2rem]"
             >
-              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Editar perfil</h3>
                 <button
                   onClick={() => {
@@ -2528,7 +2554,7 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleEditProfile} className="p-6">
+              <form onSubmit={handleEditProfile} className="max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain p-4 sm:max-h-none sm:overflow-visible sm:p-6">
                 <div>
                   <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Nombre del perfil</label>
                   <input
@@ -2560,7 +2586,7 @@ export default function AdminPage() {
                   </p>
                 )}
 
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -2568,14 +2594,14 @@ export default function AdminPage() {
                       setEditProfileName('')
                       setMarkEditedProfileAsDefault(false)
                     }}
-                    className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition dark:text-slate-300"
+                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={savingProfileChanges}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="ui-primary-button rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70"
+                    className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
                     disabled={savingProfileChanges || !editProfileName.trim()}
                   >
                     {savingProfileChanges ? 'Guardando...' : 'Guardar cambios'}
@@ -2589,7 +2615,7 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {profilePendingDeletion && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2607,9 +2633,9 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="ui-modal-panel relative w-full max-w-md overflow-hidden rounded-[2rem]"
+              className="ui-modal-panel relative max-h-[100dvh] w-full max-w-md overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,720px)] sm:rounded-[2rem]"
             >
-              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Eliminar perfil</h3>
                 <button
                   onClick={() => {
@@ -2625,11 +2651,11 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={confirmDeleteProfile} className="p-6">
+              <form onSubmit={confirmDeleteProfile} className="max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain p-4 sm:max-h-none sm:overflow-visible sm:p-6">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Esta acción eliminará el perfil y sus símbolos. Para confirmar, escribe exactamente:
                 </p>
-                <p className="mt-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+                <p className="mt-2 break-words rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
                   {profilePendingDeletion.name}
                 </p>
 
@@ -2646,21 +2672,21 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       setProfilePendingDeletion(null)
                       setDeleteProfileNameConfirmation('')
                     }}
-                    className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition dark:text-slate-300"
+                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
                     disabled={Boolean(deletingProfileId)}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="rounded-2xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:opacity-70"
+                    className="w-full rounded-2xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:opacity-70 sm:w-auto"
                     disabled={Boolean(deletingProfileId) || deleteProfileNameConfirmation.trim() !== profilePendingDeletion.name}
                   >
                     {deletingProfileId ? 'Eliminando...' : 'Eliminar perfil'}
@@ -2674,7 +2700,7 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {voiceCloneDisclaimerOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2686,10 +2712,10 @@ export default function AdminPage() {
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              className="ui-modal-panel relative w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-200 dark:border-slate-700"
+              className="ui-modal-panel relative max-h-[100dvh] w-full max-w-md overflow-hidden rounded-t-[1.75rem] border border-slate-200 sm:max-h-[min(90dvh,720px)] sm:rounded-[2rem] dark:border-slate-700"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="border-b border-slate-200 bg-[var(--app-surface-muted)] p-6 dark:border-slate-800">
+              <div className="border-b border-slate-200 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <div className="flex items-start gap-3">
                   <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
                     <ShieldAlert className="h-5 w-5" aria-hidden />
@@ -2700,7 +2726,7 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
-              <div className="space-y-4 p-6 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              <div className="max-h-[calc(100dvh-8rem)] space-y-4 overflow-y-auto overscroll-contain p-4 text-sm leading-relaxed text-slate-700 sm:max-h-none sm:overflow-visible sm:p-6 dark:text-slate-300">
                 <p>
                   Para crear tu voz personalizada, las <strong className="text-slate-900 dark:text-slate-100">grabaciones o archivos de audio</strong>{' '}
                   que envíes se envían de forma segura a <strong className="text-slate-900 dark:text-slate-100">ElevenLabs</strong>, que los utiliza

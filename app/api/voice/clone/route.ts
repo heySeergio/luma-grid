@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { elevenLabsAddVoiceFromFiles } from '@/lib/elevenlabs/server'
-import { canUseVoiceCloning, effectiveSubscriptionPlan } from '@/lib/subscription/plans'
+import { canUseVoiceCloning, effectiveSubscriptionPlan, hasActivePaidSubscription } from '@/lib/subscription/plans'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -28,11 +28,18 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, email: true, plan: true },
+      select: { id: true, email: true, plan: true, stripeSubscriptionId: true, planExpiresAt: true },
     })
 
     if (!user) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+    }
+
+    if (!hasActivePaidSubscription(user)) {
+      return NextResponse.json(
+        { error: 'Clonar voz requiere suscripción activa (plan Identidad).' },
+        { status: 403 },
+      )
     }
 
     if (!canUseVoiceCloning(effectiveSubscriptionPlan(user.email, user.plan))) {
