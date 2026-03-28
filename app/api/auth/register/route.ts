@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
 import { Prisma } from '@prisma/client'
+import { PrismaClientInitializationError } from '@prisma/client/runtime/library'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,13 @@ function isMissingDatabaseUrlError(error: unknown) {
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
+        let body: Record<string, unknown>
+        try {
+            body = (await req.json()) as Record<string, unknown>
+        } catch {
+            return NextResponse.json({ error: 'Solicitud no válida.' }, { status: 400 })
+        }
+
         const email = typeof body.email === 'string' ? normalizeEmail(body.email) : ''
         const password = typeof body.password === 'string' ? body.password : ''
         const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -116,6 +123,16 @@ export async function POST(req: Request) {
                 { status: 500 },
             )
         }
+        if (error instanceof PrismaClientInitializationError) {
+            console.error('Prisma init:', error.message)
+            return NextResponse.json(
+                {
+                    error:
+                        'No se pudo conectar a la base de datos. Comprueba DATABASE_URL en el servidor y que PostgreSQL esté accesible.',
+                },
+                { status: 503 },
+            )
+        }
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
             if (error.code === 'P2002') {
                 const target = (error.meta?.target as string[] | undefined)?.join(', ')
@@ -125,6 +142,17 @@ export async function POST(req: Request) {
                         { status: 409 },
                     )
                 }
+            }
+            /** Esquema de BD desincronizado con Prisma (faltan tablas o columnas). */
+            if (error.code === 'P2021' || error.code === 'P2022') {
+                console.error('Prisma schema drift:', error.code, error.meta)
+                return NextResponse.json(
+                    {
+                        error:
+                            'La base de datos no está actualizada. En producción hay que ejecutar las migraciones de Prisma contra Neon (por ejemplo: npx prisma migrate deploy con DATABASE_URL de producción).',
+                    },
+                    { status: 503 },
+                )
             }
         }
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

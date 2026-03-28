@@ -36,10 +36,14 @@ export default function RegisterPage() {
             try {
                 data = raw ? (JSON.parse(raw) as { error?: string }) : {}
             } catch {
+                const trimmed = raw.trimStart()
+                const looksLikeHtml = trimmed.startsWith('<!') || trimmed.toLowerCase().startsWith('<html')
                 setError(
                     res.ok
                         ? 'Respuesta del servidor no válida. Inténtalo de nuevo.'
-                        : `Error del servidor (${res.status}). Si persiste, prueba más tarde.`,
+                        : looksLikeHtml
+                          ? `Error del servidor (${res.status}). La respuesta no es JSON (p. ej. página de error). Revisa los logs del despliegue y que la base de datos tenga las migraciones aplicadas (prisma migrate deploy).`
+                          : `Error del servidor (${res.status}). Si persiste, prueba más tarde.`,
                 )
                 return
             }
