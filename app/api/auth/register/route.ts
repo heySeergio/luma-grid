@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcrypt'
-import { DEFAULT_SYMBOLS, DEFAULT_FOLDER_TILES } from '@/lib/data/defaultSymbols'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
@@ -21,6 +22,9 @@ export async function POST(req: Request) {
         if (password.length < 8) {
             return NextResponse.json({ error: 'La contraseña debe tener al menos 8 caracteres.' }, { status: 400 })
         }
+
+        const { prisma } = await import('@/lib/prisma')
+        const { DEFAULT_SYMBOLS, DEFAULT_FOLDER_TILES } = await import('@/lib/data/defaultSymbols')
 
         const existingUser = await prisma.user.findUnique({
             where: { email },
