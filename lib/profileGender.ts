@@ -35,6 +35,6 @@ export function applyProfileGenders(profiles: Profile[]): Profile[] {
   const map = readMap()
   return profiles.map(profile => ({
     ...profile,
-    communication_gender: map[profile.id] ?? profile.communication_gender,
+    communication_gender: map[profile.id] ?? profile.communicationGender,
   }))
 }

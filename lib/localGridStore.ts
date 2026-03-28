@@ -24,16 +24,18 @@ function buildDefaultSymbols(): Symbol[] {
   const base = DEFAULT_SYMBOLS.map((symbol, index) => ({
     ...symbol,
     id: `local-symbol-${index}`,
-    grid_id: 'local-grid-1',
-    created_at: now,
-    updated_at: now,
+    gridId: 'local-grid-1',
+    state: 'visible',
+    createdAt: now,
+    updatedAt: now,
   }))
   const folders = DEFAULT_FOLDER_TILES.map((symbol, index) => ({
     ...symbol,
     id: `folder-local-${index}-${symbol.label.toLowerCase()}`,
-    grid_id: 'local-grid-1',
-    created_at: now,
-    updated_at: now,
+    gridId: 'local-grid-1',
+    state: 'visible',
+    createdAt: now,
+    updatedAt: now,
   }))
   return [...base, ...folders]
 }
@@ -45,10 +47,10 @@ function buildDefaultProfiles(): Profile[] {
     name: 'Demo',
     avatar: '🙂',
     color: '#6366f1',
-    created_at: now,
-    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
     archived: false,
-    communication_gender: 'male',
+    communicationGender: 'male',
   }]
 }
 

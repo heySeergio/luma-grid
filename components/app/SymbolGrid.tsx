@@ -71,19 +71,12 @@ export default function SymbolGrid({
 
   // Sort by position
   const sorted = [...symbols].sort((a, b) => {
-    const aY = a.positionY !== undefined ? a.positionY : a.position_y
-    const bY = b.positionY !== undefined ? b.positionY : b.position_y
-    const aX = a.positionX !== undefined ? a.positionX : a.position_x
-    const bX = b.positionX !== undefined ? b.positionX : b.position_x
-    if (aY !== bY) return aY - bY
-    return aX - bX
+    if (a.positionY !== b.positionY) return a.positionY - b.positionY
+    return a.positionX - b.positionX
   })
   const maxRow = Math.max(
     gridRows,
-    sorted.reduce((acc, symbol) => {
-      const symY = symbol.positionY !== undefined ? symbol.positionY : symbol.position_y
-      return Math.max(acc, symY + 1)
-    }, 0)
+    sorted.reduce((acc, symbol) => Math.max(acc, symbol.positionY + 1), 0)
   )
 
   return (
@@ -125,8 +118,8 @@ export default function SymbolGrid({
       })}
 
       {sorted.map(symbol => {
-        const posX = symbol.positionX !== undefined ? symbol.positionX : symbol.position_x
-        const posY = symbol.positionY !== undefined ? symbol.positionY : symbol.position_y
+        const posX = symbol.positionX
+        const posY = symbol.positionY
 
         return (
           <div

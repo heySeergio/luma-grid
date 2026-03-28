@@ -8,6 +8,51 @@ import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
+import type { PosType, Symbol as AppSymbol } from '@/lib/supabase/types'
+
+function mapPrismaSymbolToClient(
+    s: {
+        id: string
+        gridId: string
+        label: string
+        normalizedLabel: string
+        emoji: string | null
+        imageUrl: string | null
+        category: string
+        posType: string
+        posConfidence: number | null
+        manualGrammarOverride: boolean
+        lexemeId: string | null
+        positionX: number
+        positionY: number
+        color: string
+        hidden: boolean
+        state: string
+        createdAt: Date
+        updatedAt: Date
+    },
+): AppSymbol {
+    return {
+        id: s.id,
+        gridId: s.gridId,
+        label: s.label,
+        normalizedLabel: s.normalizedLabel,
+        emoji: s.emoji ?? undefined,
+        imageUrl: s.imageUrl ?? undefined,
+        category: s.category,
+        posType: s.posType as PosType,
+        posConfidence: s.posConfidence,
+        manualGrammarOverride: s.manualGrammarOverride,
+        lexemeId: s.lexemeId,
+        positionX: s.positionX,
+        positionY: s.positionY,
+        color: s.color,
+        hidden: s.hidden,
+        state: s.state,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
+    }
+}
 
 type SymbolInput = {
     id?: string
@@ -257,17 +302,14 @@ export async function getProfileSymbols(profileId: string) {
         backfillProfileSymbolLexicon(profileId, session.user.id).catch(() => null),
     ])
 
-    if (!backfilledById) return symbols
+    const merged = !backfilledById
+        ? symbols
+        : symbols.map((symbol) => {
+            const backfilled = backfilledById.get(symbol.id)
+            return backfilled ? { ...symbol, ...backfilled } : symbol
+        })
 
-    return symbols.map((symbol) => {
-        const backfilled = backfilledById.get(symbol.id)
-        return backfilled
-            ? {
-                ...symbol,
-                ...backfilled,
-            }
-            : symbol
-    })
+    return merged.map((row) => mapPrismaSymbolToClient(row))
 }
 
 export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {

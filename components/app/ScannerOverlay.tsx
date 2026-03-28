@@ -20,8 +20,8 @@ export default function ScannerOverlay({ symbols, pattern: _pattern, speed, scan
   const currentIndexRef = useRef(0)
 
   const sorted = [...symbols].sort((a, b) => {
-    if (a.position_y !== b.position_y) return a.position_y - b.position_y
-    return a.position_x - b.position_x
+    if (a.positionY !== b.positionY) return a.positionY - b.positionY
+    return a.positionX - b.positionX
   })
 
   const advance = useCallback(() => {

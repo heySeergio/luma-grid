@@ -4,15 +4,39 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import type { Profile } from '@/lib/supabase/types'
+
+const DEFAULT_PROFILE_COLOR = '#6366f1'
 
 export async function getProfiles() {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
 
-    return prisma.profile.findMany({
+    const rows = await prisma.profile.findMany({
         where: { userId: session.user.id },
         orderBy: { createdAt: 'asc' },
     })
+
+    return rows.map((p): Profile & {
+        isDemo: boolean
+        gridRows: number
+        gridCols: number
+        userId: string
+        gender: string
+    } => ({
+        id: p.id,
+        name: p.name,
+        color: DEFAULT_PROFILE_COLOR,
+        archived: false,
+        communicationGender: p.gender === 'male' || p.gender === 'female' ? p.gender : undefined,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+        isDemo: p.isDemo,
+        gridRows: p.gridRows,
+        gridCols: p.gridCols,
+        userId: p.userId,
+        gender: p.gender,
+    }))
 }
 
 export async function createProfile(data: { name: string, gender: string }) {

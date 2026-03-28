@@ -47,9 +47,11 @@ export function normalizeSymbolColor(color: string | null | undefined) {
   return LEGACY_COLOR_MAP[lower] ?? color
 }
 
+type PresetValue = (typeof PRESET_SYMBOL_COLORS)[number]['value']
+
 export function resolveSymbolColor(color: string | null | undefined) {
   const normalized = normalizeSymbolColor(color)
-  return PRESET_TO_CSS_VAR.get(normalized) ?? normalized
+  return PRESET_TO_CSS_VAR.get(normalized as PresetValue) ?? normalized
 }
 
 function hexToRgb(value: string) {
@@ -118,10 +120,10 @@ export function getSymbolTextColor(color: string | null | undefined) {
 }
 
 export function getColorInputValue(color: string | null | undefined): string {
-  return isHexColor(color) ? color : '#cbd5e1'
+  return color && isHexColor(color) ? color : '#cbd5e1'
 }
 
 export function isPresetSymbolColor(color: string | null | undefined) {
   if (!color) return false
-  return PRESET_TO_CSS_VAR.has(normalizeSymbolColor(color))
+  return PRESET_TO_CSS_VAR.has(normalizeSymbolColor(color) as PresetValue)
 }
