@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { LayoutGrid, List, LockKeyhole, Mail, Monitor, Moon, Pencil, Plus, Save, Settings, Sun, Trash2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { LayoutGrid, List, LockKeyhole, Mail, Monitor, Moon, Pencil, Play, Plus, Save, Settings, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
+import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
+import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid } from '@/lib/data/defaultSymbols'
 import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfileGender, updateProfileGridSize } from '@/app/actions/profiles'
@@ -25,6 +27,8 @@ import {
   resolveSymbolColor,
 } from '@/lib/ui/symbolColors'
 import { getSpanishPosLabel } from '@/lib/lexicon/posLabels'
+import { femaleVoices, maleVoices } from '@/lib/voice/elevenlabsPresets'
+import type { TtsMode } from '@/lib/tts/types'
 
 type AdminProfile = {
   id: string
@@ -293,6 +297,20 @@ export default function AdminPage() {
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
   const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
 
+  const [voiceTtsMode, setVoiceTtsMode] = useState<TtsMode>('browser')
+  const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
+  const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
+  const [voiceMonthlyLimit, setVoiceMonthlyLimit] = useState(10_000)
+  const [voicePlan, setVoicePlan] = useState<'free' | 'pro'>('free')
+  const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
+  const [cloneVoiceName, setCloneVoiceName] = useState('Mi voz AAC')
+  const cloneFileRef = useRef<HTMLInputElement | null>(null)
+  const [voicePreviewBusy, setVoicePreviewBusy] = useState(false)
+  const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null)
+  const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewBlobUrlRef = useRef<string | null>(null)
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -304,9 +322,10 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     setLoadingData(true)
     try {
-      const [fetchedProfiles, fetchedAccountSettings] = await Promise.all([
+      const [fetchedProfiles, fetchedAccountSettings, voiceSettings] = await Promise.all([
         getProfiles(),
-        getAccountSettings()
+        getAccountSettings(),
+        getVoiceSettings(),
       ])
       const normalizedAccountSettings = fetchedAccountSettings
         ? {
@@ -325,6 +344,28 @@ export default function AdminPage() {
       } else if (!selectedProfileId || !fetchedProfiles.some(profile => profile.id === selectedProfileId)) {
         setSelectedProfileId(fetchedProfiles[0].id)
       }
+
+      if (voiceSettings) {
+        setVoiceTtsMode(voiceSettings.ttsMode)
+        const profilesList = fetchedProfiles
+        const activePid =
+          selectedProfileId && profilesList.some((p) => p.id === selectedProfileId)
+            ? selectedProfileId
+            : profilesList[0]?.id ?? ''
+        const profileForVoice = profilesList.find((p) => p.id === activePid)
+        const genderForVoice = profileForVoice?.gender === 'female' ? 'female' : 'male'
+        const voicesForGender = genderForVoice === 'male' ? maleVoices : femaleVoices
+        const defaultPreset = voicesForGender[0]?.voiceId ?? ''
+        if (voiceSettings.ttsMode === 'preset' && voiceSettings.voiceId) {
+          const inList = voicesForGender.some((v) => v.voiceId === voiceSettings.voiceId)
+          setVoicePresetElevenId(inList ? voiceSettings.voiceId : defaultPreset)
+        } else {
+          setVoicePresetElevenId(defaultPreset)
+        }
+        setVoiceCharsUsed(voiceSettings.charactersUsed)
+        setVoiceMonthlyLimit(voiceSettings.monthlyCharLimit)
+        setVoicePlan(voiceSettings.plan)
+      }
     } catch (error) {
       console.error(error)
       setStatus('Error al cargar perfiles')
@@ -340,9 +381,118 @@ export default function AdminPage() {
   }, [])
 
   const closeAccountSettingsModal = useCallback(() => {
+    previewAudioRef.current?.pause()
+    previewAudioRef.current = null
+    if (previewBlobUrlRef.current) {
+      URL.revokeObjectURL(previewBlobUrlRef.current)
+      previewBlobUrlRef.current = null
+    }
+    setPreviewPlayingVoiceId(null)
     resetPasswordFields()
     setShowAccountSettingsModal(false)
   }, [resetPasswordFields])
+
+  useEffect(() => {
+    if (voiceTtsMode !== 'preset') return
+    const list = accountGender === 'male' ? maleVoices : femaleVoices
+    setVoicePresetElevenId((prev) => {
+      if (list.some((v) => v.voiceId === prev)) return prev
+      return list[0]?.voiceId ?? ''
+    })
+  }, [accountGender, voiceTtsMode])
+
+  useEffect(() => {
+    if (!showAccountSettingsModal || voiceTtsMode !== 'preset') return
+    let cancelled = false
+    setVoicePreviewError(null)
+    setVoicePreviewBusy(true)
+    void ensureVoicePreviewSamples()
+      .then((r) => {
+        if (cancelled) return
+        if (!r.ok) setVoicePreviewError(r.error)
+      })
+      .finally(() => {
+        if (!cancelled) setVoicePreviewBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showAccountSettingsModal, voiceTtsMode])
+
+  const playPresetPreview = useCallback(async (voiceId: string) => {
+    try {
+      previewAudioRef.current?.pause()
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current)
+        previewBlobUrlRef.current = null
+      }
+      setVoicePreviewError(null)
+      const res = await fetch(`/api/voice/preview/${encodeURIComponent(voiceId)}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string }
+        setPreviewPlayingVoiceId(null)
+        setVoicePreviewError(
+          errJson.error ?? (res.status === 404 ? 'Muestra aún no generada. Espera a que termine la preparación.' : `Error ${res.status}`),
+        )
+        return
+      }
+      const blob = await res.blob()
+      if (!blob.size) {
+        setPreviewPlayingVoiceId(null)
+        setVoicePreviewError('No se recibió audio.')
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      previewBlobUrlRef.current = url
+      const audio = new Audio(url)
+      previewAudioRef.current = audio
+      setPreviewPlayingVoiceId(voiceId)
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        previewBlobUrlRef.current = null
+        previewAudioRef.current = null
+        setPreviewPlayingVoiceId((cur) => (cur === voiceId ? null : cur))
+      }
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        previewBlobUrlRef.current = null
+        previewAudioRef.current = null
+        setPreviewPlayingVoiceId(null)
+        setVoicePreviewError('No se pudo reproducir la muestra.')
+      }
+      await audio.play()
+    } catch {
+      setPreviewPlayingVoiceId(null)
+      setVoicePreviewError('No se pudo reproducir la muestra.')
+    }
+  }, [])
+
+  const handleVoiceCloneUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || voicePlan !== 'pro') return
+    setVoiceCloneBusy(true)
+    setStatus('')
+    try {
+      const fd = new FormData()
+      fd.append('name', cloneVoiceName || 'Mi voz AAC')
+      fd.append('file', file)
+      const res = await fetch('/api/voice/clone', { method: 'POST', body: fd })
+      const data = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(data.error || 'Error al clonar voz')
+      setVoiceTtsMode('custom')
+      setStatus('✅ Voz clonada. Ya puedes usarla en el tablero.')
+      await loadData()
+    } catch (err) {
+      setStatus(err instanceof Error ? `❌ ${err.message}` : '❌ Error al clonar')
+    } finally {
+      setVoiceCloneBusy(false)
+      e.target.value = ''
+    }
+  }, [cloneVoiceName, voicePlan, loadData])
 
   useEffect(() => {
     loadData()
@@ -450,6 +600,16 @@ export default function AdminPage() {
         preferredDyslexiaFont: accountPreferredDyslexiaFont,
         currentPassword: accountCurrentPassword,
         newPassword: accountNewPassword,
+      })
+
+      await updateVoiceSettings({
+        ttsMode: voiceTtsMode,
+        voiceId:
+          voiceTtsMode === 'browser'
+            ? null
+            : voiceTtsMode === 'preset'
+              ? voicePresetElevenId
+              : undefined,
       })
 
       if (selectedProfile) {
@@ -1450,6 +1610,150 @@ export default function AdminPage() {
                       </p>
                     </div>
 
+                  </div>
+
+                  <div className="md:col-span-2 space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      <Volume2 size={16} className="shrink-0" />
+                      Voz (texto a voz)
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Plan {voicePlan === 'pro' ? 'Pro' : 'Gratis'} · Uso ElevenLabs este mes:{' '}
+                      <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
+                        {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
+                      </span>
+                      {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
+                    </p>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => setVoiceTtsMode('browser')}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'browser' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        style={{ borderColor: voiceTtsMode === 'browser' ? 'var(--app-predicted-border)' : undefined }}
+                      >
+                        Voz del sistema
+                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">Gratis, sin límite en el navegador</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVoiceTtsMode('preset')}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
+                      >
+                        Voces naturales
+                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">ElevenLabs (presets)</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={voicePlan !== 'pro'}
+                        onClick={() => voicePlan === 'pro' && setVoiceTtsMode('custom')}
+                        title={voicePlan !== 'pro' ? 'Disponible en plan Pro' : undefined}
+                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                        style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
+                      >
+                        Crear mi voz
+                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">Premium · clonación</span>
+                      </button>
+                    </div>
+
+                    {voiceTtsMode === 'preset' ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Voces naturales
+                          </label>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Se muestran las 5 voces según el género de comunicación del perfil (
+                            {accountGender === 'male' ? 'masculino' : 'femenino'}). Pulsa play para escuchar la
+                            muestra generada una sola vez y guardada en el servidor.
+                          </p>
+                        </div>
+                        {voicePreviewBusy ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-300">Preparando muestras de audio…</p>
+                        ) : null}
+                        {voicePreviewError ? (
+                          <p className="text-xs text-red-600 dark:text-red-400">{voicePreviewError}</p>
+                        ) : null}
+                        <div className="flex flex-col gap-2">
+                          {(accountGender === 'male' ? maleVoices : femaleVoices).map((v) => {
+                            const selected = voicePresetElevenId === v.voiceId
+                            const playing = previewPlayingVoiceId === v.voiceId
+                            return (
+                              <div
+                                key={v.voiceId}
+                                className="flex items-center gap-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-2 pl-3"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setVoicePresetElevenId(v.voiceId)
+                                  }}
+                                  className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                                    selected
+                                      ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80'
+                                  }`}
+                                >
+                                  {v.name}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    void playPresetPreview(v.voiceId)
+                                  }}
+                                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
+                                    playing
+                                      ? 'border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/20 dark:text-indigo-100'
+                                      : 'border-[var(--app-border)] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                                  } disabled:opacity-50`}
+                                  aria-label={`Escuchar muestra de ${v.name}`}
+                                >
+                                  <Play className="h-5 w-5" fill={playing ? 'currentColor' : 'none'} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {voiceTtsMode === 'custom' && voicePlan === 'pro' ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre de la voz clonada</label>
+                          <input
+                            type="text"
+                            value={cloneVoiceName}
+                            onChange={(e) => setCloneVoiceName(e.target.value)}
+                            className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                            placeholder="Mi voz AAC"
+                          />
+                        </div>
+                        <input
+                          ref={cloneFileRef}
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={handleVoiceCloneUpload}
+                        />
+                        <button
+                          type="button"
+                          disabled={voiceCloneBusy}
+                          onClick={() => cloneFileRef.current?.click()}
+                          className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                        >
+                          {voiceCloneBusy ? 'Creando voz…' : 'Subir audio'}
+                        </button>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Sube un clip claro (p. ej. MP3 o WAV). Tras crear la voz, pulsa &quot;Guardar configuración&quot; si cambias el modo.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

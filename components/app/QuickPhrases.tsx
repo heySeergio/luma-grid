@@ -8,14 +8,20 @@ interface Props {
   phrases: Phrase[]
   profile: Profile | null
   onSpeak: (phrase: Phrase) => void
+  /** Si existe, sustituye Web Speech al reproducir el texto. */
+  speakText?: (text: string) => Promise<void>
 }
 
-export default function QuickPhrases({ phrases, profile, onSpeak }: Props) {
+export default function QuickPhrases({ phrases, profile, onSpeak, speakText }: Props) {
   const visiblePhrases = phrases.slice(0, 4)
 
   const handleSpeak = async (phrase: Phrase) => {
-    const adapter = new WebSpeechAdapter()
-    await adapter.speak(phrase.text, profile?.id || '')
+    if (speakText) {
+      await speakText(phrase.text)
+    } else {
+      const adapter = new WebSpeechAdapter()
+      await adapter.speak(phrase.text, profile?.id || '')
+    }
     onSpeak(phrase)
   }
 

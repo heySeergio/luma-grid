@@ -14,8 +14,10 @@ import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
 import { getPinnedPhrases, saveQuickPhrase } from '@/app/actions/phrases'
 import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
+import { getVoiceSettings } from '@/app/actions/voiceSettings'
 import { applyProfileGenders } from '@/lib/profileGender'
-import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
+import { speakText } from '@/lib/voice/speakClient'
+import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
 
 type TabMode = 'grid' | 'keyboard'
@@ -52,6 +54,7 @@ export default function AppInterface() {
   const [showProfileSelector, setShowProfileSelector] = useState(false)
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
+  const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
 
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
   const mainOrderedSymbols = shouldUseDefaultGridTemplate
@@ -60,9 +63,23 @@ export default function AppInterface() {
 
   const speakSelectedWord = useCallback((text: string) => {
     if (!text.trim()) return
-    const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
-    adapter.speak(text, profile?.id || '').catch(() => { })
-  }, [profile])
+    void speakText(text, profile?.id ?? '', voicePrefs).catch(() => { })
+  }, [profile?.id, voicePrefs])
+
+  useEffect(() => {
+    const loadVoice = () => {
+      void getVoiceSettings().then((s) => {
+        if (!s) return
+        setVoicePrefs({ ttsMode: s.ttsMode, voiceId: s.voiceId })
+      })
+    }
+    loadVoice()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') loadVoice()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
 
   const resetPhraseTracking = useCallback(() => {
     phraseSessionIdRef.current = null
@@ -323,6 +340,7 @@ export default function AppInterface() {
           phrases={pinnedPhrases}
           profile={profile}
           onSpeak={handleQuickPhrase}
+          speakText={(text) => speakText(text, profile?.id ?? '', voicePrefs)}
         />
       )}
 
@@ -352,6 +370,7 @@ export default function AppInterface() {
         onDeleteLast={handleDeleteLast}
         onClearAll={handleClearAll}
         onPhraseSaved={loadPinnedPhrases}
+        speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
       />
 
       {/* Main content */}

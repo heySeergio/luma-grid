@@ -29,6 +29,8 @@ interface Props {
   onDeleteLast: () => void
   onClearAll: () => void
   onPhraseSaved?: () => void
+  /** Si existe, sustituye Web Speech (p. ej. ElevenLabs vía /api/tts). */
+  speakPhrase?: (phrase: string) => Promise<void>
 }
 
 export default function PhraseBar({
@@ -40,6 +42,7 @@ export default function PhraseBar({
   onDeleteLast,
   onClearAll,
   onPhraseSaved,
+  speakPhrase,
 }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
@@ -166,9 +169,12 @@ export default function PhraseBar({
       const phrase = await conjugatePhrase(tokens)
       setConjugated(phrase)
 
-      // Speak with Web Speech API
-      const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
-      await adapter.speak(phrase, profile?.id || '')
+      if (speakPhrase) {
+        await speakPhrase(phrase)
+      } else {
+        const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
+        await adapter.speak(phrase, profile?.id || '')
+      }
 
       // Save to local history
       if (profile) {
@@ -189,7 +195,7 @@ export default function PhraseBar({
     } finally {
       setIsSpeaking(false)
     }
-  }, [symbols, profile, isSpeaking, onPhraseSaved, conjugatePhrase])
+  }, [symbols, profile, isSpeaking, onPhraseSaved, conjugatePhrase, speakPhrase])
 
   return (
     <>

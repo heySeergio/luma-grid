@@ -15,9 +15,58 @@ model User {
   name                   String?
   preferredTheme         String    @default("system") @map("preferred_theme")
   preferredDyslexiaFont  Boolean   @default(false) @map("preferred_dyslexia_font")
+  /// "browser" | "preset" | "custom"
+  ttsMode                String    @default("browser") @map("tts_mode")
+  /// ElevenLabs voice_id cuando preset/custom
+  voiceId                String?   @map("voice_id")
+  charactersUsed         Int       @default(0) @map("characters_used")
+  /// YYYY-MM para reset mensual del contador
+  ttsBillingMonth        String    @default("") @map("tts_billing_month")
+  /// "free" | "pro"
+  plan                   String    @default("free") @map("plan")
   profiles               Profile[]
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+}
+
+/// Catálogo opcional de voces preset (también definidas en código para la UI).
+model VoicePreset {
+  id            String   @id @default(cuid())
+  name          String
+  gender        String
+  elevenVoiceId String   @map("eleven_voice_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([elevenVoiceId])
+  @@map("voice_presets")
+}
+
+/// Audio TTS de muestra por voz preset (generado una vez y reutilizado en admin).
+model VoicePreviewSample {
+  id            String   @id @default(cuid())
+  elevenVoiceId String   @unique @map("eleven_voice_id")
+  phraseText    String   @map("phrase_text")
+  audioMpeg     Bytes    @map("audio_mpeg")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("voice_preview_samples")
+}
+
+/// Caché persistente de TTS por voz + frase normalizada (ahorra ElevenLabs en repeticiones).
+model TtsPhraseCache {
+  id            String   @id @default(cuid())
+  elevenVoiceId String   @map("eleven_voice_id")
+  phraseKey     String   @map("phrase_key")
+  sourceText    String   @map("source_text")
+  audioMpeg     Bytes    @map("audio_mpeg")
+  hitCount      Int      @default(0) @map("hit_count")
+  charLength    Int      @map("char_length")
+  createdAt     DateTime @default(now()) @map("created_at")
+  lastHitAt     DateTime @default(now()) @map("last_hit_at")
+
+  @@unique([elevenVoiceId, phraseKey])
+  @@index([elevenVoiceId])
+  @@map("tts_phrase_cache")
 }
 
 model Profile {
