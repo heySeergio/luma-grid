@@ -4,6 +4,7 @@ import {
   mapLexicalPosToSymbolPosType,
   normalizeLooseTextForSearch,
   normalizeTextForLexicon,
+  stripOuterPunctuation,
   type LexicalPrimaryPos,
 } from '@/lib/lexicon/normalize'
 
@@ -81,6 +82,7 @@ function buildCandidate(
 }
 
 function buildUnknownResult(label: string): DetectionResult {
+  const stripped = stripOuterPunctuation(label)
   return {
     lexemeId: null,
     detectedLemma: null,
@@ -88,8 +90,8 @@ function buildUnknownResult(label: string): DetectionResult {
     symbolPosType: 'other',
     confidence: 0,
     method: 'unknown',
-    normalizedLabel: normalizeTextForLexicon(label),
-    normalizedLooseLabel: normalizeLooseTextForSearch(label),
+    normalizedLabel: normalizeTextForLexicon(stripped),
+    normalizedLooseLabel: normalizeLooseTextForSearch(stripped),
     matchedForm: null,
     alternatives: [],
   }
@@ -133,8 +135,9 @@ function heuristicCandidates(normalizedLabel: string, normalizedLooseLabel: stri
 }
 
 export async function detectLexemeForLabel(label: string): Promise<DetectionResult> {
-  const normalizedLabel = normalizeTextForLexicon(label)
-  const normalizedLooseLabel = normalizeLooseTextForSearch(label)
+  const stripped = stripOuterPunctuation(label)
+  const normalizedLabel = normalizeTextForLexicon(stripped)
+  const normalizedLooseLabel = normalizeLooseTextForSearch(stripped)
 
   if (!normalizedLabel) {
     return buildUnknownResult(label)

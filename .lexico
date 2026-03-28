@@ -1,165 +1,114 @@
-# Arquitectura Léxica AAC
+# Arquitectura léxica AAC — estado y roadmap
 
-## 1. Ampliar el modelo de datos
-Primero ampliaría la base en Prisma para separar el botón visual del conocimiento lingüístico.
+Leyenda: **Hecho** · **Parcial** · **Evolutivo** (mejora continua, no “cerrado”)
 
-- Añadir a `Symbol`:
-  - `normalizedLabel`
-  - `lexemeId`
-  - `posConfidence`
-  - `manualGrammarOverride`
-- Crear tablas nuevas:
-  - `Lexeme`
-  - `LexemeForm`
-  - `LexemeAlias`
-  - `PredictionTransition`
-  - `SymbolUsageEvent`
+Referencias rápidas: `prisma/schema.prisma` · `prisma/seed-lexicon.mjs` (`npm run seed:lexicon`) · `lib/lexicon/normalize.ts` · `lib/lexicon/detect.ts` · `lib/lexicon/conjugation.ts` · `app/actions/symbols.ts` · `app/actions/lexicon.ts` · `app/actions/predictions.ts` · `app/admin/page.tsx` · `components/app/AppInterface.tsx` (`recordSymbolUsage`)
 
-Objetivo:
-Tener una arquitectura donde el símbolo AAC no sea el diccionario, sino una capa visual enlazada a un sistema lingüístico.
+---
 
-## 2. Preparar un banco léxico inicial
-No intentaría cargar todo el español desde el primer momento. Empezaría con una base útil para AAC.
+## 1. Ampliar el modelo de datos — **Hecho**
 
-- Incluir:
-  - verbos frecuentes
-  - pronombres
-  - determinantes
-  - preposiciones
-  - conectores
-  - sustantivos y adjetivos frecuentes
-  - verbos irregulares importantes
-- Cada entrada inicial debería tener:
-  - `lemma`
-  - `primaryPos`
-  - rasgos básicos
-  - formas conocidas en `LexemeForm`
+Separar el botón visual del conocimiento lingüístico.
 
-Objetivo:
-Disponer de un seed pequeño pero muy útil desde el día 1.
+- **Symbol:** `normalizedLabel`, `lexemeId`, `posConfidence`, `manualGrammarOverride` (y `posType` existente).
+- **Tablas:** `Lexeme`, `LexemeForm`, `LexemeAlias`, `PredictionTransition`, `SymbolUsageEvent`.
 
-## 3. Crear el normalizador
-Antes de detectar o conjugar nada, hace falta una capa de normalización coherente.
+Objetivo cumplido: el símbolo AAC enlaza a un sistema léxico; el diccionario vive en `Lexeme*` y formas.
 
-- Implementar utilidades como:
-  - `normalizeTextForLexicon()`
-  - `normalizeLooseTextForSearch()`
-- Estas funciones deberían:
-  - hacer `trim`
-  - pasar a minúsculas
-  - limpiar espacios duplicados
-  - mantener tildes
-  - generar una variante flexible para búsquedas tolerantes
+---
 
-Objetivo:
-Evitar que diferencias de formato rompan la detección léxica.
+## 2. Banco léxico inicial — **Hecho** (ampliación continua en §10)
 
-## 4. Implementar el detector léxico
-Después haría una función central tipo `detectLexemeForLabel(label: string)`.
+- Seed en `prisma/seed-lexicon.mjs`: verbos frecuentes, pronombres, determinantes, conectores, sustantivos/adjetivos, formas conjugadas y `LexemeForm` para reconocimiento.
+- Cada entrada incluye `lemma`, `primaryPos`, rasgos y formas donde aplica.
 
-Orden de resolución:
-1. Buscar en `LexemeAlias`
-2. Buscar en `LexemeForm.surface`
-3. Buscar en `Lexeme.lemma`
-4. Aplicar heurísticas
-5. Devolver `unknown` si no hay coincidencia fiable
+**Evolutivo:** añadir más lemas y formas según uso real (véase §10).
 
-La salida debería incluir:
-- `lexemeId`
-- `lemma`
-- `primaryPos`
-- `confidence`
-- `alternatives`
-- `method`
+---
 
-Objetivo:
-Que el sistema proponga automáticamente el análisis lingüístico al crear un botón.
+## 3. Normalizador — **Hecho** (refinado)
 
-## 5. Integrarlo en el guardado de símbolos
-Una vez existe el detector, lo conectaría con el flujo de creación y edición de símbolos en `/admin`.
+- `normalizeTextForLexicon()`, `normalizeLooseTextForSearch()`
+- `stripOuterPunctuation()` para etiquetas con `¿`, `¡`, `?`, etc. antes de buscar en BD
+- Trim, minúsculas, espacios; tildes en léxico; **búsqueda flexible** sin diacríticos en `normalizeLooseTextForSearch`
 
-Al guardar un símbolo:
-1. Normalizar `label`
-2. Llamar al detector
-3. Guardar:
-   - `normalizedLabel`
-   - `lexemeId`
-   - `posType`
-   - `posConfidence`
-   - `manualGrammarOverride = false`
+---
 
-Si la confianza es baja:
-- Mostrar sugerencia editable al usuario
+## 4. Detector léxico — **Hecho**
 
-Si el usuario corrige:
-- Guardar override manual
+`detectLexemeForLabel()` en `lib/lexicon/detect.ts`:
 
-Objetivo:
-Automatizar la clasificación sin quitarle control al usuario.
+1. `LexemeAlias` (normalizado)
+2. `LexemeForm.normalizedSurface`
+3. `Lexeme.normalizedLemma`
+4. Heurísticas locales (pronombres, det, prep, sufijos -ar/-er/-ir, etc.)
+5. `unknown` si no hay candidato fiable
 
-## 6. Rehacer el predictor AAC sobre léxico
-Cuando los símbolos ya tengan `lexemeId` o `posType`, rehacería el predictor para que se base en información lingüística real.
+Salida: `lexemeId`, `lemma`, POS, `confidence`, `alternatives`, `method`, `matchedForm` cuando aplica.
 
-El predictor debería combinar:
-- reglas gramaticales
-- historial del perfil
-- prioridad AAC
-- frecuencia reciente
+---
 
-Primera versión simple:
-- `pronoun -> verb`
-- `verb -> noun/adj`
-- `det -> noun`
-- `negation -> verb`
+## 5. Integración en guardado de símbolos y `/admin` — **Hecho**
 
-Ejemplo de score:
-- 35% gramática
-- 35% transiciones reales del perfil
-- 15% prioridad AAC
-- 10% recencia
-- 5% contexto semántico
+- `app/actions/symbols.ts`: al guardar, normaliza, detecta, rellena `normalizedLabel`, `lexemeId`, `posType`, `posConfidence`, `manualGrammarOverride` según lógica.
+- `app/admin/page.tsx`: vista previa con `previewLexemeDetection`, cobertura léxica (`getProfileLexiconCoverage`), modo manual vs automático.
 
-Objetivo:
-Mejorar el iluminado de sugerencias con un sistema más útil y coherente.
+Si la confianza es baja, el usuario puede corregir y queda `manualGrammarOverride = true`.
 
-## 7. Registrar uso real del usuario
-Después haría que cada pulsación al construir frase deje rastro para que el predictor aprenda.
+---
 
-En cada selección:
-- guardar `SymbolUsageEvent`
-- actualizar `PredictionTransition`
+## 6. Predictor AAC sobre léxico — **Hecho** (pesos distintos al borrador original)
 
-Con esto el sistema aprende:
-- qué suele venir después de qué
-- qué secuencias usa cada perfil
-- qué vocabulario es más frecuente o reciente
+Combinación en `getPredictionCandidates` (`app/actions/predictions.ts`):
 
-Objetivo:
-Hacer que el predictor no solo sea “correcto en español”, sino adaptado a cómo se comunica esa persona.
+- Reglas gramaticales (`getGrammarScore`)
+- Patrones de contexto reciente (`getContextPatternScore`)
+- Preguntas tipo AAC (`getQuestionCandidateScore`)
+- Secuencias de uso (`getHistoricalSequenceScores` + `SymbolUsageEvent`)
+- `PredictionTransition` (conteo y recencia)
+- `aacPriority` y `frequencyScore` de `Lexeme`
 
-## 8. Añadir conjugación y reverse lookup serio
-Cuando ya haya base léxica y predictor básico, entraría a fondo con los verbos.
+Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la implementación usa una mezcla ponderada explícita en código (p. ej. gramática ~18%, transiciones ~14%, etc.).
 
-Haría dos piezas:
-- `LexemeForm` para reconocer formas ya conjugadas
-- un motor de conjugación para generar la forma correcta
+**Parcial:** no hay un canal explícito de “contexto semántico” (5% del borrador); se puede añadir más adelante con embeddings o categorías.
 
-Ejemplos:
-- `quiero` se detecta como forma de `querer`
-- `yo + comer` permite proponer o generar `como`
-- `ella + ir` permite resolver una forma correcta según contexto
+---
 
-Objetivo:
-Que la conjugación y la predicción compartan la misma base lingüística y no vivan como sistemas separados.
+## 7. Registro de uso — **Hecho**
 
-## Orden de implementación recomendado
-1. Prisma: nuevas tablas y campos
-2. Seed léxico mínimo
-3. Normalizador
-4. `detectLexemeForLabel()`
-5. Integración en `/admin`
-6. Corrección manual en el modal del símbolo
-7. Registro de transiciones de uso
-8. Predictor por score
-9. Conjugación de verbos
-10. Ampliación progresiva del diccionario
+- `recordSymbolUsage` en `AppInterface.tsx`: cada selección en frase escribe `SymbolUsageEvent` y actualiza `PredictionTransition` cuando hay símbolo anterior y lexemas válidos.
+
+---
+
+## 8. Conjugación y reverse lookup — **Parcial**
+
+- **Reverse lookup:** `LexemeForm` en seed + `detectLexemeForLabel` para formas como `quiero`, `como`, `voy`.
+- **Generación:** `lib/lexicon/conjugation.ts` + reglas presente regular, irregulars fijadas, acuerdo de adjetivos; API `app/api/conjugate/route.ts`.
+
+**Evolutivo:** más tiempos/modos, más verbos irregulares en BD, alineación total con un motor de conjugación completo.
+
+---
+
+## 9. Orden de implementación recomendado — **Seguido**
+
+| # | Tarea | Estado |
+|---|--------|--------|
+| 1 | Prisma: tablas y campos | Hecho |
+| 2 | Seed léxico mínimo | Hecho |
+| 3 | Normalizador | Hecho |
+| 4 | `detectLexemeForLabel()` | Hecho |
+| 5 | Integración `/admin` | Hecho |
+| 6 | Corrección manual en modal | Hecho |
+| 7 | Registro de transiciones de uso | Hecho |
+| 8 | Predictor por score | Hecho |
+| 9 | Conjugación de verbos | Parcial |
+| 10 | Ampliación progresiva del diccionario | Evolutivo |
+
+---
+
+## Próximos pasos sugeridos (prioridad)
+
+1. **Diccionario:** ampliar `seed-lexicon.mjs` o importaciones por dominio (comida, escuela, salud).
+2. **Predictor:** opcional — término de “similitud semántica” o categoría simbólica.
+3. **Conjugación:** más formas en `LexemeForm` y/o reglas para pretérito/imperfecto si la frase lo requiere.
+4. **Calidad:** métricas en admin sobre cobertura léxica por perfil (ya hay base en `getProfileLexiconCoverage`).

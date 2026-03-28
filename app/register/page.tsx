@@ -31,29 +31,43 @@ export default function RegisterPage() {
                 body: JSON.stringify({ name: name.trim(), email: normalizedEmail, password }),
             })
 
-            const data = await res.json()
+            const raw = await res.text()
+            let data: { error?: string } = {}
+            try {
+                data = raw ? (JSON.parse(raw) as { error?: string }) : {}
+            } catch {
+                setError(
+                    res.ok
+                        ? 'Respuesta del servidor no válida. Inténtalo de nuevo.'
+                        : `Error del servidor (${res.status}). Si persiste, prueba más tarde.`,
+                )
+                return
+            }
 
             if (!res.ok) {
                 setError(data.error || 'Ocurrió un error al registrarse')
                 return
             }
 
-            // Automatically sign in after registration
-            const signInRes = await signIn('credentials', {
-                email: normalizedEmail,
-                password,
-                redirect: false,
-                callbackUrl,
-            })
+            try {
+                const signInRes = await signIn('credentials', {
+                    email: normalizedEmail,
+                    password,
+                    redirect: false,
+                    callbackUrl,
+                })
 
-            if (signInRes?.error) {
-                setError('Cuenta creada, pero hubo un error al iniciar sesión automáticamente.')
-            } else {
-                router.replace(callbackUrl)
-                router.refresh()
+                if (signInRes?.error) {
+                    setError('Cuenta creada, pero hubo un error al iniciar sesión automáticamente.')
+                } else {
+                    router.replace(callbackUrl)
+                    router.refresh()
+                }
+            } catch {
+                setError('Cuenta creada, pero no se pudo iniciar sesión automáticamente. Entra desde Iniciar sesión.')
             }
         } catch {
-            setError('Ocurrió un error inesperado. Inténtalo de nuevo.')
+            setError('No se pudo conectar. Comprueba la red e inténtalo de nuevo.')
         } finally {
             setLoading(false)
         }

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
+import { Prisma } from '@prisma/client'
+import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+/** Evita timeouts al sembrar muchos símbolos en un solo request (p. ej. Vercel). */
+export const maxDuration = 60
 
 function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
@@ -36,9 +40,11 @@ export async function POST(req: Request) {
 
         const hashedPassword = await bcrypt.hash(password, 10)
 
-        // Crear el usuario junto con un perfil DEMO y sus símbolos por defecto
+        const seed = [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES]
+
+        // Usuario + perfil en una transacción; símbolos con createMany (un INSERT masivo, más rápido que cientos de INSERT anidados).
         const user = await prisma.$transaction(async (tx) => {
-            return tx.user.create({
+            const created = await tx.user.create({
                 data: {
                     email,
                     password: hashedPassword,
@@ -48,24 +54,35 @@ export async function POST(req: Request) {
                             name: 'Demo Profile',
                             isDemo: true,
                             gender: 'male',
-                            symbols: {
-                                create: [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES].map((symbol) => ({
-                                    gridId: 'demo',
-                                    label: symbol.label,
-                                    emoji: symbol.emoji,
-                                    category: symbol.category,
-                                    posType: symbol.posType,
-                                    positionX: symbol.positionX,
-                                    positionY: symbol.positionY,
-                                    color: symbol.color,
-                                    hidden: symbol.hidden,
-                                    state: 'visible',
-                                })),
-                            },
                         },
                     },
                 },
+                include: { profiles: { select: { id: true } } },
             })
+
+            const profileId = created.profiles[0]?.id
+            if (!profileId) {
+                throw new Error('No se pudo crear el perfil DEMO')
+            }
+
+            await tx.symbol.createMany({
+                data: seed.map((symbol) => ({
+                    profileId,
+                    gridId: 'demo',
+                    label: symbol.label,
+                    normalizedLabel: normalizeTextForLexicon(symbol.label),
+                    emoji: symbol.emoji ?? null,
+                    category: symbol.category,
+                    posType: symbol.posType,
+                    positionX: symbol.positionX,
+                    positionY: symbol.positionY,
+                    color: symbol.color,
+                    hidden: symbol.hidden,
+                    state: 'visible',
+                })),
+            })
+
+            return created
         })
 
         return NextResponse.json({
@@ -77,6 +94,17 @@ export async function POST(req: Request) {
         }, { status: 201 })
     } catch (error) {
         console.error('Registration error:', error)
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2002') {
+                const target = (error.meta?.target as string[] | undefined)?.join(', ')
+                if (target?.includes('email')) {
+                    return NextResponse.json(
+                        { error: 'El correo electrónico ya está registrado.' },
+                        { status: 409 },
+                    )
+                }
+            }
+        }
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
     }
 }

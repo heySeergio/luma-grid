@@ -18,6 +18,19 @@ export function collapseWhitespace(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
+/** Quita signos de apertura/cierre típicos del español AAC para que coincida con el léxico. */
+export function stripOuterPunctuation(value: string) {
+  return value
+    .replace(/^[\s\u00A0]*[¿¡]+/, '')
+    .replace(/[?!.,;:…]+[\s\u00A0]*$/, '')
+    .trim()
+}
+
+/** Normaliza una etiqueta de botón para detección: trim, quita puntuación externa, minúsculas, espacios. */
+export function normalizeLabelForLexicalMatch(value: string) {
+  return normalizeTextForLexicon(stripOuterPunctuation(value))
+}
+
 export function stripDiacritics(value: string) {
   return value.normalize('NFD').replace(DIACRITIC_REGEX, '')
 }
