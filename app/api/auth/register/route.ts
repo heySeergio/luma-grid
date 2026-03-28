@@ -12,6 +12,13 @@ function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
 }
 
+function isMissingDatabaseUrlError(error: unknown) {
+    return (
+        error instanceof Error &&
+        error.message.includes('Environment variable not found: DATABASE_URL')
+    )
+}
+
 export async function POST(req: Request) {
     try {
         const body = await req.json()
@@ -25,6 +32,13 @@ export async function POST(req: Request) {
 
         if (password.length < 8) {
             return NextResponse.json({ error: 'La contraseña debe tener al menos 8 caracteres.' }, { status: 400 })
+        }
+
+        if (!process.env.DATABASE_URL?.trim()) {
+            return NextResponse.json(
+                { error: 'Falta configurar DATABASE_URL en .env.local (o variables del entorno).' },
+                { status: 500 },
+            )
         }
 
         const { prisma } = await import('@/lib/prisma')
@@ -94,6 +108,12 @@ export async function POST(req: Request) {
         }, { status: 201 })
     } catch (error) {
         console.error('Registration error:', error)
+        if (isMissingDatabaseUrlError(error)) {
+            return NextResponse.json(
+                { error: 'Falta configurar DATABASE_URL en .env.local (o variables del entorno).' },
+                { status: 500 },
+            )
+        }
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
             if (error.code === 'P2002') {
                 const target = (error.meta?.target as string[] | undefined)?.join(', ')

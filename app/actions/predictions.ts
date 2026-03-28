@@ -152,6 +152,34 @@ function getContextPatternScore(
   return 0
 }
 
+function getCategorySemanticScore(
+  currentSymbol: PredictionSymbolInput,
+  recentSymbols: PredictionSymbolInput[],
+  candidate: PredictionSymbolInput,
+) {
+  const currentCategory = (currentSymbol.category ?? '').trim().toLowerCase()
+  const candidateCategory = (candidate.category ?? '').trim().toLowerCase()
+  const last = recentSymbols[recentSymbols.length - 1]
+  const lastCategory = (last?.category ?? '').trim().toLowerCase()
+
+  if (!candidateCategory) return 0
+
+  // Penalizacion suave para ruido de carpetas.
+  const isGenericFolderCategory = candidateCategory === 'carpetas'
+  if (isGenericFolderCategory) return 0.06
+
+  // Continuidad semantica por dominio tematico.
+  if (currentCategory && currentCategory === candidateCategory) return 1
+  if (lastCategory && lastCategory === candidateCategory) return 0.8
+
+  // Priorizacion ligera por dominios AAC frecuentes.
+  if ((currentCategory === 'preguntas' || lastCategory === 'preguntas') && candidateCategory === 'acciones') return 0.72
+  if ((currentCategory === 'acciones' || lastCategory === 'acciones') && (candidateCategory === 'comida' || candidateCategory === 'lugares')) return 0.62
+  if ((currentCategory === 'comida' || lastCategory === 'comida') && candidateCategory === 'acciones') return 0.6
+
+  return 0.14
+}
+
 async function getHistoricalSequenceScores(
   profileId: string,
   recentSymbols: PredictionSymbolInput[],
@@ -280,9 +308,10 @@ export async function getPredictionCandidates({
       .map((candidate) => ({
         id: candidate.id,
         score:
-          getGrammarScore(currentSymbol.posType, candidate.posType, currentSymbol.label) * 0.5 +
-          getContextPatternScore(recentSymbols, candidate) * 0.2 +
-          getQuestionCandidateScore(phraseQuestionType, candidate) * 0.3,
+          getGrammarScore(currentSymbol.posType, candidate.posType, currentSymbol.label) * 0.42 +
+          getContextPatternScore(recentSymbols, candidate) * 0.18 +
+          getQuestionCandidateScore(phraseQuestionType, candidate) * 0.25 +
+          getCategorySemanticScore(currentSymbol, recentSymbols, candidate) * 0.15,
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_PREDICTIONS)
@@ -339,6 +368,7 @@ export async function getPredictionCandidates({
     const grammarScore = getGrammarScore(currentSymbol.posType, candidate.posType, currentSymbol.label)
     const contextPatternScore = getContextPatternScore(recentSymbols, candidate)
     const questionScore = getQuestionCandidateScore(phraseQuestionType, candidate)
+    const categorySemanticScore = getCategorySemanticScore(currentSymbol, recentSymbols, candidate)
     const lexeme = candidate.lexemeId ? lexemeById.get(candidate.lexemeId) : undefined
     const transition = candidate.lexemeId ? transitionByLexemeId.get(candidate.lexemeId) : undefined
     const historicalSequence = candidate.lexemeId
@@ -355,14 +385,15 @@ export async function getPredictionCandidates({
     const frequencyScore = lexeme?.frequencyScore ?? 0.35
 
     const score =
-      grammarScore * 0.18 +
-      contextPatternScore * 0.16 +
-      questionScore * 0.17 +
-      historicalSequenceScore * 0.19 +
-      transitionScore * 0.14 +
+      grammarScore * 0.17 +
+      contextPatternScore * 0.15 +
+      questionScore * 0.15 +
+      categorySemanticScore * 0.08 +
+      historicalSequenceScore * 0.18 +
+      transitionScore * 0.13 +
       aacPriorityScore * 0.1 +
       frequencyScore * 0.05 +
-      recencyScore * 0.02 +
+      recencyScore * 0.03 +
       historicalSequenceRecency * 0.01
 
     return {

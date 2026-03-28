@@ -218,3 +218,66 @@ export async function getProfileLexiconCoverage(profileId: string) {
     reviewItems,
   }
 }
+
+export async function getProfileLexiconObservability(profileId: string) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return null
+
+  const profile = await prisma.profile.findUnique({
+    where: { id: profileId, userId: session.user.id },
+    select: { id: true },
+  })
+
+  if (!profile) return null
+
+  const [coverage, usageSince7d, transitionSince7d, unknownLexemeUsageSince7d, lowConfidenceSymbols] = await Promise.all([
+    getProfileLexiconCoverage(profileId),
+    prisma.symbolUsageEvent.count({
+      where: {
+        profileId,
+        createdAt: { gte: new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)) },
+      },
+    }),
+    prisma.predictionTransition.count({
+      where: {
+        profileId,
+        updatedAt: { gte: new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)) },
+      },
+    }),
+    prisma.symbolUsageEvent.count({
+      where: {
+        profileId,
+        createdAt: { gte: new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)) },
+        lexemeId: null,
+      },
+    }),
+    prisma.symbol.count({
+      where: {
+        profileId,
+        state: { not: 'hidden' },
+        manualGrammarOverride: false,
+        OR: [
+          { posConfidence: null },
+          { posConfidence: { lt: 0.72 } },
+        ],
+      },
+    }),
+  ])
+
+  const overrideRate = coverage && coverage.totalSymbols > 0
+    ? coverage.manualOverrideCount / coverage.totalSymbols
+    : 0
+  const unknownUsageRate7d = usageSince7d > 0
+    ? unknownLexemeUsageSince7d / usageSince7d
+    : 0
+
+  return {
+    coverage,
+    usageSince7d,
+    transitionSince7d,
+    unknownLexemeUsageSince7d,
+    unknownUsageRate7d,
+    lowConfidenceSymbols,
+    overrideRate,
+  }
+}

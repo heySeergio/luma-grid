@@ -7,7 +7,7 @@ import { LayoutGrid, List, LockKeyhole, Mail, Monitor, Moon, Pencil, Plus, Save,
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
-import { getProfileLexiconCoverage, previewLexemeDetection } from '@/app/actions/lexicon'
+import { previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid } from '@/lib/data/defaultSymbols'
 import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfileGender, updateProfileGridSize } from '@/app/actions/profiles'
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
@@ -156,28 +156,6 @@ type LexemePreview = {
   alternatives: LexemeAlternative[]
 }
 
-type LexiconCoverage = {
-  totalSymbols: number
-  manualOverrideCount: number
-  linkedLexemeCount: number
-  highConfidenceCount: number
-  resolvedCount: number
-  reviewNeededCount: number
-  coverageRatio: number
-  reviewItems: Array<{
-    id: string
-    label: string
-    posType: string
-    posConfidence: number | null
-    lexemeId: string | null
-    manualGrammarOverride: boolean
-    suggestedLemma: string | null
-    suggestedPosType: string
-    suggestedConfidence: number
-    reason: 'sin_lexema' | 'baja_confianza' | 'tipo_generico' | 'normalizacion_pendiente'
-  }>
-}
-
 function getSymbolPosition(symbol: Pick<AdminSymbol, 'positionX' | 'positionY' | 'position_x' | 'position_y'>) {
   return {
     x: symbol.positionX ?? symbol.position_x ?? 0,
@@ -289,8 +267,6 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState<AdminProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
   const [symbols, setSymbols] = useState<AdminSymbol[]>([])
-  const [lexiconCoverage, setLexiconCoverage] = useState<LexiconCoverage | null>(null)
-  const [loadingLexiconCoverage, setLoadingLexiconCoverage] = useState(false)
   const [status, setStatus] = useState('')
   const [loadingData, setLoadingData] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
@@ -373,25 +349,17 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!selectedProfileId) {
-      setLexiconCoverage(null)
       return
     }
     const fetchSymbols = async () => {
       setStatus('Cargando...')
-      setLoadingLexiconCoverage(true)
       try {
-        const [syms, coverage] = await Promise.all([
-          getProfileSymbols(selectedProfileId),
-          getProfileLexiconCoverage(selectedProfileId),
-        ])
+        const syms = await getProfileSymbols(selectedProfileId)
         setSymbols(syms)
-        setLexiconCoverage(coverage)
         setStatus('Datos cargados.')
       } catch (error) {
         console.error(error)
         setStatus('Error al cargar datos léxicos del perfil.')
-      } finally {
-        setLoadingLexiconCoverage(false)
       }
     }
     fetchSymbols()
@@ -523,12 +491,8 @@ export default function AdminPage() {
     setStatus('Guardando cambios en la nube...')
     try {
       await saveSymbols(selectedProfileId, symbols)
-      const [freshSymbols, coverage] = await Promise.all([
-        getProfileSymbols(selectedProfileId),
-        getProfileLexiconCoverage(selectedProfileId),
-      ])
+      const freshSymbols = await getProfileSymbols(selectedProfileId)
       setSymbols(freshSymbols)
-      setLexiconCoverage(coverage)
       setStatus('✅ Cambios guardados correctamente.')
     } catch (err) {
       console.error(err)
@@ -544,8 +508,6 @@ export default function AdminPage() {
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
       setSymbols(prev => prev.filter(s => s.id !== symbolId))
-      const coverage = await getProfileLexiconCoverage(selectedProfileId)
-      setLexiconCoverage(coverage)
       setStatus('Símbolo eliminado.')
     } catch {
       setStatus('Error al eliminar símbolo.')
@@ -583,8 +545,6 @@ export default function AdminPage() {
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
       setSymbols(prev => prev.filter(s => s.id !== editingSymbol.id))
-      const coverage = await getProfileLexiconCoverage(selectedProfileId)
-      setLexiconCoverage(coverage)
       setEditingSymbol(null)
       setStatus('Símbolo eliminado.')
     } catch (error) {
@@ -933,116 +893,6 @@ export default function AdminPage() {
                   </div>
                 </button>
               </div>
-
-              {selectedProfile && (
-                <div className="app-panel rounded-2xl p-5">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--app-muted-foreground)]">
-                        Cobertura léxica
-                      </h2>
-                      <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
-                        Calidad del análisis gramatical del perfil actual.
-                      </p>
-                    </div>
-                    <span className="ui-soft-badge rounded-full px-3 py-1 text-xs font-semibold text-[var(--app-foreground)] dark:text-indigo-100">
-                      {loadingLexiconCoverage
-                        ? '...'
-                        : `${Math.round((lexiconCoverage?.coverageRatio ?? 0) * 100)}%`}
-                    </span>
-                  </div>
-
-                  <div className="mb-4 overflow-hidden rounded-full bg-[var(--app-surface-muted)]">
-                    <div
-                      className="h-2 rounded-full bg-[var(--app-primary-button)]"
-                      style={{ width: `${Math.round((lexiconCoverage?.coverageRatio ?? 0) * 100)}%` }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="ui-floating-panel rounded-2xl px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--app-muted-foreground)]">
-                        Resueltos
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-[var(--app-foreground)]">
-                        {lexiconCoverage?.resolvedCount ?? 0}
-                      </p>
-                    </div>
-                    <div className="ui-floating-panel rounded-2xl px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--app-muted-foreground)]">
-                        Revisar
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-[var(--app-foreground)]">
-                        {lexiconCoverage?.reviewNeededCount ?? 0}
-                      </p>
-                    </div>
-                    <div className="ui-floating-panel rounded-2xl px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--app-muted-foreground)]">
-                        Con lexema
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-[var(--app-foreground)]">
-                        {lexiconCoverage?.linkedLexemeCount ?? 0}
-                      </p>
-                    </div>
-                    <div className="ui-floating-panel rounded-2xl px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--app-muted-foreground)]">
-                        Overrides
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-[var(--app-foreground)]">
-                        {lexiconCoverage?.manualOverrideCount ?? 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  {Boolean(lexiconCoverage?.reviewItems.length) && (
-                    <div className="mt-4 space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--app-muted-foreground)]">
-                        Revisión sugerida
-                      </p>
-                      {lexiconCoverage?.reviewItems.slice(0, 4).map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            const targetSymbol = symbols.find((symbol) => symbol.id === item.id)
-                            if (!targetSymbol) return
-                            const position = getSymbolPosition(targetSymbol)
-                            setEditingSymbol({
-                              ...targetSymbol,
-                              color: normalizeSymbolColor(targetSymbol.color),
-                              positionX: position.x,
-                              positionY: position.y,
-                              state: targetSymbol.state || 'visible',
-                            })
-                          }}
-                          className="ui-secondary-button flex w-full items-start justify-between gap-3 rounded-2xl px-4 py-3 text-left transition"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-[var(--app-foreground)]">
-                              {item.label}
-                            </p>
-                            <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
-                              {item.reason === 'sin_lexema'
-                                ? 'Sin lexema enlazado'
-                                : item.reason === 'baja_confianza'
-                                  ? 'Confianza baja'
-                                  : item.reason === 'tipo_generico'
-                                    ? 'Tipo demasiado genérico'
-                                    : 'Normalización pendiente'}
-                            </p>
-                            <p className="mt-1 text-xs font-medium text-indigo-600 dark:text-indigo-200">
-                              Sugerencia: {item.suggestedLemma ?? item.label} · {item.suggestedPosType} · {Math.round(item.suggestedConfidence * 100)}%
-                            </p>
-                          </div>
-                          <span className="shrink-0 text-xs font-semibold text-[var(--app-foreground)]/88">
-                            Abrir
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
               <div className="app-panel rounded-2xl p-5">
                 <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vista</h2>

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed:lexicon": "node prisma/seed-lexicon.mjs",
-    "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs"
+    "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs",
+    "test:lexicon-detection": "node scripts/test-lexicon-detection.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed-lexicon.mjs"

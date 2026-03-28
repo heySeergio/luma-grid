@@ -41,7 +41,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
 - `TypeScript`
 - `Tailwind CSS`
 - `NextAuth`
-- `Prisma` + `SQLite`
+- `Prisma` + `PostgreSQL (Neon)`
 - `Framer Motion`
 - `dnd-kit`
 - `next-themes`
@@ -249,6 +249,7 @@ npm run build
 npm run start
 npm run lint
 npm run seed:lexicon
+npm run test:lexicon-detection
 ```
 
 ## Notas de desarrollo
@@ -257,6 +258,40 @@ npm run seed:lexicon
 - El proyecto usa `server actions` en `app/actions/`.
 - Algunas partes del código incluyen fallbacks defensivos para clientes Prisma desfasados durante desarrollo.
 - El banco léxico se puede ampliar de forma progresiva sin reestructurar el sistema.
+
+## Observabilidad léxica
+
+Además de `getProfileLexiconCoverage`, existe `getProfileLexiconObservability` en `app/actions/lexicon.ts` para exponer métricas operativas por perfil:
+
+- cobertura y ratio resuelto
+- tasa de override manual
+- eventos de uso en 7 días
+- transiciones registradas en 7 días
+- uso sin `lexemeId` en 7 días
+- símbolos con baja confianza
+
+Estas métricas ayudan a priorizar ampliaciones del seed y ajustes del predictor.
+
+## Offline y sincronización (Dexie vs servidor)
+
+Estado actual recomendado:
+
+- **Fuente de verdad:** servidor (`Prisma` + Postgres/Neon).
+- **Cliente local (`Dexie`):** caché/interacción para continuidad UX.
+- **Predicción y aprendizaje:** se calculan con eventos persistidos en servidor (`SymbolUsageEvent`, `PredictionTransition`).
+
+Cuando no hay red:
+
+- el usuario puede seguir interactuando con el tablero local,
+- los eventos locales deben considerarse pendientes de sincronización,
+- hasta sincronizar, la predicción de servidor no verá esas secuencias recientes.
+
+Buenas prácticas:
+
+1. etiquetar eventos locales con `phraseSessionId` y timestamp,
+2. reintentar envío en segundo plano al recuperar conexión,
+3. deduplicar por (`phraseSessionId`, `sequenceIndex`) durante sync,
+4. refrescar sugerencias tras completar sincronización.
 
 ## Estado actual del proyecto
 

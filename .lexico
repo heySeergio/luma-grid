@@ -57,20 +57,19 @@ Si la confianza es baja, el usuario puede corregir y queda `manualGrammarOverrid
 
 ---
 
-## 6. Predictor AAC sobre léxico — **Hecho** (pesos distintos al borrador original)
+## 6. Predictor AAC sobre léxico — **Hecho**
 
 Combinación en `getPredictionCandidates` (`app/actions/predictions.ts`):
 
 - Reglas gramaticales (`getGrammarScore`)
 - Patrones de contexto reciente (`getContextPatternScore`)
 - Preguntas tipo AAC (`getQuestionCandidateScore`)
+- Señal semántica ligera por categoría AAC (`getCategorySemanticScore`)
 - Secuencias de uso (`getHistoricalSequenceScores` + `SymbolUsageEvent`)
 - `PredictionTransition` (conteo y recencia)
 - `aacPriority` y `frequencyScore` de `Lexeme`
 
-Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la implementación usa una mezcla ponderada explícita en código (p. ej. gramática ~18%, transiciones ~14%, etc.).
-
-**Parcial:** no hay un canal explícito de “contexto semántico” (5% del borrador); se puede añadir más adelante con embeddings o categorías.
+Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la implementación usa una mezcla ponderada explícita en código y ahora incluye semántica barata por dominio sin embeddings.
 
 ---
 
@@ -106,9 +105,19 @@ Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la imp
 
 ---
 
+## 10. Cierre de pendientes (marzo 2026)
+
+- **Diccionario y formas verbales:** ampliado seed con dominios salud/colegio/ocio y nuevas formas (incluye pretérito en varios verbos frecuentes).
+- **Semántica en predictor:** implementada señal ligera por categoría temática.
+- **Calidad detector:** añadido script de regresión `npm run test:lexicon-detection` para casos `label -> lemma`.
+- **Observabilidad:** añadido `getProfileLexiconObservability(profileId)` (uso 7d, unknown rate, override rate, baja confianza).
+- **Offline / Dexie vs servidor:** documentado en `README.md` el flujo de sincronización y deduplicación sugerido.
+
+---
+
 ## Próximos pasos sugeridos (prioridad)
 
-1. **Diccionario:** ampliar `seed-lexicon.mjs` o importaciones por dominio (comida, escuela, salud).
-2. **Predictor:** opcional — término de “similitud semántica” o categoría simbólica.
-3. **Conjugación:** más formas en `LexemeForm` y/o reglas para pretérito/imperfecto si la frase lo requiere.
-4. **Calidad:** métricas en admin sobre cobertura léxica por perfil (ya hay base en `getProfileLexiconCoverage`).
+1. **Conjugación:** ampliar a imperfecto/futuro/subjuntivo en `LexemeForm` y motor.
+2. **Admin:** exponer visualmente `getProfileLexiconObservability` (dashboard simple).
+3. **CI:** ejecutar `npm run test:lexicon-detection` en pipeline de PR/deploy.
+4. **Sincronización offline:** implementar cola real Dexie -> servidor con reintentos y dedupe.
