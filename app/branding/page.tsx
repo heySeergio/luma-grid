@@ -100,7 +100,7 @@ export default function BrandingPage() {
               href="/"
               iconSize={44}
               wordmarkWidth={164}
-              subtitle="Sistema de branding y lenguaje visual"
+              subtitle="Comunicación Aumentativa y Alternativa"
               priority
             />
 
@@ -191,14 +191,19 @@ export default function BrandingPage() {
                           priority
                           className="h-auto w-28 md:w-36"
                         />
-                        <Image
-                          src="/icons/Luma%20Grid%20Texto.svg"
-                          alt="Logo tipográfico de Luma Grid sobre fondo claro"
-                          width={340}
-                          height={96}
-                          priority
-                          className="h-auto w-full max-w-[260px]"
-                        />
+                        <div className="flex w-full max-w-[280px] flex-col items-center gap-2">
+                          <Image
+                            src="/icons/Luma%20Grid%20Texto.svg"
+                            alt="Logo tipográfico de Luma Grid sobre fondo claro"
+                            width={340}
+                            height={96}
+                            priority
+                            className="h-auto w-full max-w-[260px]"
+                          />
+                          <p className="text-center text-sm leading-snug text-slate-500">
+                            Comunicación Aumentativa y Alternativa
+                          </p>
+                        </div>
                       </div>
                     </article>
 
@@ -215,14 +220,19 @@ export default function BrandingPage() {
                           priority
                           className="h-auto w-28 md:w-36"
                         />
-                        <Image
-                          src="/icons/Luma%20Grid%20Texto.svg"
-                          alt="Logo tipográfico de Luma Grid sobre fondo oscuro"
-                          width={340}
-                          height={96}
-                          priority
-                          className="h-auto w-full max-w-[260px]"
-                        />
+                        <div className="flex w-full max-w-[280px] flex-col items-center gap-2">
+                          <Image
+                            src="/icons/Luma%20Grid%20Texto.svg"
+                            alt="Logo tipográfico de Luma Grid sobre fondo oscuro"
+                            width={340}
+                            height={96}
+                            priority
+                            className="h-auto w-full max-w-[260px]"
+                          />
+                          <p className="text-center text-sm leading-snug text-slate-400">
+                            Comunicación Aumentativa y Alternativa
+                          </p>
+                        </div>
                       </div>
                     </article>
                   </div>

@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { Columns2, LayoutGrid, List, LockKeyhole, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Save, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
-import { useSession } from 'next-auth/react'
+import { BarChart2, Check, Columns2, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
 import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
-import { previewLexemeDetection } from '@/app/actions/lexicon'
+import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid } from '@/lib/data/defaultSymbols'
 import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfileGender, updateProfileGridSize } from '@/app/actions/profiles'
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
@@ -20,6 +20,7 @@ import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
+import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
 import {
   ProfileGridDimensionPicker,
   PROFILE_GRID_PICKER_MAX_COLS,
@@ -47,7 +48,29 @@ import {
 } from '@/lib/voice/cloneRecording'
 
 const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
-const ADMIN_FREE_PLAN_UPSELL_SESSION_KEY = 'luma_admin_free_plan_upsell_session'
+/** Última vez que se mostró el upsell de plan Libre (ms); no volver a mostrar hasta 24 h. */
+const ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY = 'luma_admin_free_plan_upsell_last_ms'
+const ADMIN_FREE_PLAN_UPSELL_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+function readAdminFreePlanUpsellLastMs(): number | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY)
+    if (!raw) return null
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
+}
+
+function writeAdminFreePlanUpsellLastMs(ts: number) {
+  try {
+    localStorage.setItem(ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY, String(ts))
+  } catch {
+    /* privado / storage lleno */
+  }
+}
 
 const ADMIN_GRID_DIM_MIN = 1
 const ADMIN_GRID_DIM_MAX = 20
@@ -208,6 +231,11 @@ function getSymbolPosition(symbol: Pick<AdminSymbol, 'positionX' | 'positionY' |
   }
 }
 
+function symbolImageDisplayUrl(symbol: Pick<AdminSymbol, 'imageUrl' | 'image_url'>): string | undefined {
+  const u = symbol.imageUrl ?? symbol.image_url
+  return typeof u === 'string' && u.length > 0 ? u : undefined
+}
+
 function isMovableSymbol(symbol: Pick<AdminSymbol, 'id'> | null | undefined) {
   return Boolean(
     symbol?.id &&
@@ -317,8 +345,10 @@ function DraggableGridItem({
   )
 }
 
+const DEBUG_CREATE_PROFILE_STEP_EMAIL = 'sergio.tdc.tdc@gmail.com'
+
 export default function AdminPage() {
-  const { update: updateSession } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const { setTheme } = useTheme()
   const [accountSettings, setAccountSettings] = useState<{
     id: string
@@ -326,6 +356,7 @@ export default function AdminPage() {
     email: string
     preferredTheme: ThemePreference
     preferredDyslexiaFont: boolean
+    hasLocalPassword?: boolean
   } | null>(null)
   const [accountName, setAccountName] = useState('')
   const [accountEmail, setAccountEmail] = useState('')
@@ -339,10 +370,13 @@ export default function AdminPage() {
   const [savingAccountSettings, setSavingAccountSettings] = useState(false)
   const [profiles, setProfiles] = useState<AdminProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [lexiconObservability, setLexiconObservability] = useState<Awaited<ReturnType<typeof getProfileLexiconObservability>>>(null)
+  const [lexiconObservabilityLoading, setLexiconObservabilityLoading] = useState(false)
   const [symbols, setSymbols] = useState<AdminSymbol[]>([])
   const [symbolsBaselineJson, setSymbolsBaselineJson] = useState('')
   const symbolsProfileLoadGen = useRef(0)
   const [savingSymbols, setSavingSymbols] = useState(false)
+  const [gridSaveFeedback, setGridSaveFeedback] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [status, setStatus] = useState('')
   const [loadingData, setLoadingData] = useState(false)
   const [symbolsLoadPending, setSymbolsLoadPending] = useState(false)
@@ -360,6 +394,8 @@ export default function AdminPage() {
   const [showAccountSettingsModal, setShowAccountSettingsModal] = useState(false)
   const [showLumaGridSettingsModal, setShowLumaGridSettingsModal] = useState(false)
   const [newProfileName, setNewProfileName] = useState('')
+  const [newProfileGender, setNewProfileGender] = useState<'male' | 'female'>('male')
+  const [createProfileStep, setCreateProfileStep] = useState<1 | 2 | 3>(1)
   const [newProfileGridCols, setNewProfileGridCols] = useState(14)
   const [newProfileGridRows, setNewProfileGridRows] = useState(8)
   const [creatingProfile, setCreatingProfile] = useState(false)
@@ -426,6 +462,7 @@ export default function AdminPage() {
         ? {
             ...fetchedAccountSettings,
             preferredTheme: normalizeThemePreference(fetchedAccountSettings.preferredTheme),
+            hasLocalPassword: Boolean(fetchedAccountSettings.hasLocalPassword),
           }
         : null
       if (gateState.signedIn) {
@@ -785,11 +822,6 @@ export default function AdminPage() {
   }, [status])
 
   const dismissFreePlanUpsell = useCallback(() => {
-    try {
-      sessionStorage.setItem(ADMIN_FREE_PLAN_UPSELL_SESSION_KEY, '1')
-    } catch {
-      /* modo privado / storage bloqueado */
-    }
     setShowFreePlanUpsell(false)
   }, [])
 
@@ -800,14 +832,19 @@ export default function AdminPage() {
       return
     }
     if (typeof window === 'undefined') return
-    try {
-      if (sessionStorage.getItem(ADMIN_FREE_PLAN_UPSELL_SESSION_KEY) === '1') return
-    } catch {
+    const last = readAdminFreePlanUpsellLastMs()
+    if (last !== null && Date.now() - last < ADMIN_FREE_PLAN_UPSELL_COOLDOWN_MS) {
+      setShowFreePlanUpsell(false)
       return
     }
-    if (Math.random() >= 0.2) return
     setShowFreePlanUpsell(true)
   }, [loadingData, voicePlan])
+
+  useEffect(() => {
+    if (!showFreePlanUpsell) return
+    if (typeof window === 'undefined') return
+    writeAdminFreePlanUpsellLastMs(Date.now())
+  }, [showFreePlanUpsell])
 
   useEffect(() => {
     if (!cloneRecording) return
@@ -854,6 +891,25 @@ export default function AdminPage() {
     if (!selectedProfile) return
     setAccountGender(selectedProfile.gender === 'female' ? 'female' : 'male')
   }, [selectedProfile])
+
+  useEffect(() => {
+    if (!selectedProfileId) {
+      setLexiconObservability(null)
+      return
+    }
+    let cancelled = false
+    setLexiconObservabilityLoading(true)
+    void getProfileLexiconObservability(selectedProfileId)
+      .then((data) => {
+        if (!cancelled) setLexiconObservability(data)
+      })
+      .finally(() => {
+        if (!cancelled) setLexiconObservabilityLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedProfileId])
 
   useEffect(() => {
     if (!editingSymbol) {
@@ -960,6 +1016,7 @@ export default function AdminPage() {
       setAccountSettings({
         ...updatedAccount,
         preferredTheme: normalizedPreferredTheme,
+        hasLocalPassword: Boolean(updatedAccount.hasLocalPassword),
       })
       setAccountName(updatedAccount.name ?? '')
       setAccountEmail(updatedAccount.email)
@@ -996,6 +1053,7 @@ export default function AdminPage() {
     if (symbolsBaselineJson === '' || stableGridSnapshot(symbols) === symbolsBaselineJson) return
 
     setSavingSymbols(true)
+    setGridSaveFeedback('saving')
     setStatus('Guardando cambios en la nube...')
     try {
       // El servidor solo hace UPDATE/CREATE de filas que cambiaron (ver saveSymbols).
@@ -1004,9 +1062,11 @@ export default function AdminPage() {
       setSymbols(freshSymbols)
       setSymbolsBaselineJson(stableGridSnapshot(freshSymbols))
       setStatus('✅ Cambios guardados correctamente.')
+      setGridSaveFeedback('saved')
     } catch (err) {
       console.error(err)
       setStatus('❌ Error al guardar.')
+      setGridSaveFeedback('idle')
     } finally {
       setSavingSymbols(false)
     }
@@ -1088,6 +1148,8 @@ export default function AdminPage() {
 
   const resetCreateProfileModal = useCallback(() => {
     setNewProfileName('')
+    setNewProfileGender('male')
+    setCreateProfileStep(1)
     setNewProfileGridCols(14)
     setNewProfileGridRows(8)
   }, [])
@@ -1106,7 +1168,7 @@ export default function AdminPage() {
     try {
       const profile = await createProfile({
         name: newProfileName,
-        gender: 'male',
+        gender: newProfileGender,
         gridCols: newProfileGridCols,
         gridRows: newProfileGridRows,
       })
@@ -1225,15 +1287,28 @@ export default function AdminPage() {
     setActiveDraggedSymbolId(null)
     if (activeFolder) return
 
-    const overId = event.over?.id
-    if (!overId || typeof overId !== 'string' || !overId.startsWith('cell-')) return
+    const overRaw = event.over?.id
+    if (overRaw === undefined || overRaw === null) return
+    const overId = String(overRaw)
 
     const draggedSymbol = draggableSymbolsById.get(String(event.active.id))
     if (!draggedSymbol || !isMovableSymbol(draggedSymbol)) return
 
-    const [, targetX, targetY] = overId.split('-')
-    const x = Number(targetX)
-    const y = Number(targetY)
+    let x: number
+    let y: number
+
+    if (overId.startsWith('cell-')) {
+      const [, targetX, targetY] = overId.split('-')
+      x = Number(targetX)
+      y = Number(targetY)
+    } else {
+      // Soltar encima de otro símbolo: `over` suele ser el id del draggable, no el de la celda.
+      const droppedOn = mainGridSymbols.find((s) => String(s.id) === overId)
+      if (!droppedOn) return
+      const pos = getSymbolPosition(droppedOn)
+      x = pos.x
+      y = pos.y
+    }
 
     if (Number.isNaN(x) || Number.isNaN(y)) return
 
@@ -1320,6 +1395,27 @@ export default function AdminPage() {
     return stableGridSnapshot(symbols) !== symbolsBaselineJson
   }, [symbols, symbolsBaselineJson, selectedProfileId])
 
+  useEffect(() => {
+    if (gridSaveFeedback !== 'saved') return
+    const t = setTimeout(() => setGridSaveFeedback('idle'), 2600)
+    return () => clearTimeout(t)
+  }, [gridSaveFeedback])
+
+  useEffect(() => {
+    if (hasUnsavedGridChanges && gridSaveFeedback === 'saved') {
+      setGridSaveFeedback('idle')
+    }
+  }, [hasUnsavedGridChanges, gridSaveFeedback])
+
+  useEffect(() => {
+    setGridSaveFeedback('idle')
+  }, [selectedProfileId])
+
+  const gridSavePhase: 'idle' | 'saving' | 'saved' = savingSymbols ? 'saving' : gridSaveFeedback
+
+  const showCreateProfileStepDebug =
+    session?.user?.email?.toLowerCase() === DEBUG_CREATE_PROFILE_STEP_EMAIL
+
   const previewGridCols = selectedProfile?.gridCols || 14
   const previewGridRows = selectedProfile?.gridRows || 8
   const canAddPreviewColumn = (previewGridCols < ADMIN_GRID_DIM_MAX)
@@ -1334,45 +1430,78 @@ export default function AdminPage() {
   return (
     <div className="theme-page-shell min-h-screen min-w-0 overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
       <div className="mx-auto min-w-0 max-w-7xl">
-        <header className="app-panel mb-6 flex flex-col items-stretch gap-4 rounded-2xl p-4 sm:mb-8 sm:p-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
-            <BrandLockup
-              href="/"
-              iconSize={44}
-              wordmarkWidth={156}
-              priority
-            />
-            <div
-              aria-hidden="true"
-              className="hidden h-12 w-px bg-slate-200/80 dark:bg-slate-700/80 sm:block"
-            />
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Panel de Administración</h1>
-              <p className="mt-1 text-slate-500 dark:text-slate-400">Personaliza el comunicador para cada perfil.</p>
+        <div className="mb-6 min-w-0 sm:mb-8">
+          <header className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-start lg:gap-x-6 lg:gap-y-3">
+              <div className="flex min-w-0 flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center lg:col-span-1">
+                <BrandLockup
+                  href="/"
+                  iconSize={44}
+                  wordmarkWidth={156}
+                  priority
+                />
+                <div
+                  aria-hidden="true"
+                  className="hidden h-12 w-px bg-slate-200/80 dark:bg-slate-700/80 sm:block"
+                />
+                <div className="min-w-0">
+                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Panel de Administración</h1>
+                  <p className="mt-1 text-slate-500 dark:text-slate-400">Personaliza el comunicador para cada perfil.</p>
+                </div>
+              </div>
+
+              <Link
+                href="/tablero"
+                className="ui-secondary-button inline-flex w-full items-center justify-center self-center rounded-full px-4 py-2 text-sm font-medium text-[var(--app-foreground)] transition lg:col-start-2 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+                Volver al tablero
+              </Link>
+              <button
+                type="button"
+                onClick={() => void handleSaveAll()}
+                disabled={!selectedProfileId || !hasUnsavedGridChanges || savingSymbols || loadingData || symbolsLoadPending}
+                title={
+                  !selectedProfileId
+                    ? 'Selecciona un perfil'
+                    : !hasUnsavedGridChanges
+                      ? 'No hay cambios en el tablero del perfil seleccionado'
+                      : undefined
+                }
+                className={[
+                  'relative inline-flex w-full items-center justify-center self-center overflow-visible rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end',
+                  gridSavePhase === 'idle'
+                    ? 'bg-slate-200 text-slate-900 shadow-sm dark:bg-slate-600 dark:text-white'
+                    : 'bg-slate-900 text-white shadow-sm dark:bg-slate-950',
+                ].join(' ')}
+              >
+                {gridSavePhase === 'saving' && (
+                  <span
+                    className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full border border-slate-600 bg-slate-800 shadow-sm"
+                    aria-hidden
+                  >
+                    <Loader2 className="h-2.5 w-2.5 animate-spin text-white" />
+                  </span>
+                )}
+                {gridSavePhase === 'saved' && (
+                  <span
+                    className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full bg-white shadow-sm"
+                    aria-hidden
+                  >
+                    <Check className="h-2.5 w-2.5 text-slate-900" strokeWidth={3} />
+                  </span>
+                )}
+                <span className="tabular-nums">
+                  {gridSavePhase === 'saving'
+                    ? 'Guardando…'
+                    : gridSavePhase === 'saved'
+                      ? 'Guardado'
+                      : 'Guardar cambios'}
+                </span>
+              </button>
             </div>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
-            <Link href="/tablero" className="ui-secondary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition">
-              <ArrowLeft className="mr-2 h-4 w-4" /> VOLVER AL TABLERO
-            </Link>
-            <button
-              type="button"
-              onClick={() => void handleSaveAll()}
-              disabled={!selectedProfileId || !hasUnsavedGridChanges || savingSymbols || loadingData || symbolsLoadPending}
-              title={
-                !selectedProfileId
-                  ? 'Selecciona un perfil'
-                  : !hasUnsavedGridChanges
-                    ? 'No hay cambios en el tablero del perfil seleccionado'
-                    : undefined
-              }
-              className="ui-primary-button inline-flex h-10 shrink-0 items-center justify-center rounded-2xl px-6 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {savingSymbols ? 'Guardando…' : 'Guardar cambios'}
-            </button>
-          </div>
-        </header>
+          </header>
+        </div>
 
         {status && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 pl-4 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 sm:items-center sm:p-4">
@@ -1426,7 +1555,7 @@ export default function AdminPage() {
                         className={`min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm font-semibold ${selectedProfileId === p.id ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-200'}`}
                         type="button"
                       >
-                        {p.name} {p.isDemo ? '(DEMO)' : ''}
+                        {p.name}
                       </button>
                       <button
                         onClick={() => openEditProfileModal(p)}
@@ -1449,6 +1578,72 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="app-panel rounded-2xl p-5">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <BarChart2 size={16} aria-hidden /> Léxico (observabilidad)
+                </h2>
+                {!selectedProfileId ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Selecciona un perfil para ver métricas.</p>
+                ) : lexiconObservabilityLoading ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Cargando métricas…</p>
+                ) : !lexiconObservability?.coverage ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Sin datos de cobertura.</p>
+                ) : (
+                  <div className="space-y-3 text-xs">
+                    <dl className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Cobertura resuelta</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.coverage.coverageRatio * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Símbolos en revisión</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.coverage.reviewNeededCount}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Usos (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.usageSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Transiciones (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.transitionSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Usos sin lexema (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.unknownLexemeUsageSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Tasa unknown (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.unknownUsageRate7d * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Overrides manuales / total</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.overrideRate * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Baja confianza (visibles)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.lowConfidenceSymbols}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
               </div>
 
               <div className="app-panel rounded-2xl p-5">
@@ -1620,6 +1815,7 @@ export default function AdminPage() {
                         const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
 
                         if (symbol) {
+                          const gridCellImageSrc = symbolImageDisplayUrl(symbol)
                           return (
                             <DroppableGridCell
                               key={`cell-${x}-${y}`}
@@ -1650,8 +1846,8 @@ export default function AdminPage() {
                                     }}
                                   >
                                     <div className="text-xl mb-1">
-                                      {symbol.imageUrl ? (
-                                        <img src={symbol.imageUrl} alt={symbol.label} className="h-8 w-8 object-contain" />
+                                      {gridCellImageSrc ? (
+                                        <img src={gridCellImageSrc} alt={symbol.label} className="h-8 w-8 object-contain" />
                                       ) : (
                                         symbol.emoji || '❓'
                                       )}
@@ -1752,26 +1948,32 @@ export default function AdminPage() {
                     </div>
 
                     <DragOverlay>
-                      {activeDraggedSymbol ? (
-                        <div
-                          className="ui-floating-panel flex h-20 w-20 flex-col items-center justify-center rounded-[1.35rem] p-1"
-                          style={{
-                            backgroundColor: resolveSymbolColor(activeDraggedSymbol.color),
-                            color: getSymbolTextColor(activeDraggedSymbol.color),
-                          }}
-                        >
-                          <div className="text-xl mb-1">
-                            {activeDraggedSymbol.imageUrl ? (
-                              <img src={activeDraggedSymbol.imageUrl} alt={activeDraggedSymbol.label} className="h-8 w-8 object-contain" />
-                            ) : (
-                              activeDraggedSymbol.emoji || '❓'
-                            )}
-                          </div>
-                          <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
-                            {activeDraggedSymbol.label}
-                          </span>
-                        </div>
-                      ) : null}
+                      {activeDraggedSymbol
+                        ? (() => {
+                            const sym = activeDraggedSymbol
+                            const dragImgSrc = symbolImageDisplayUrl(sym)
+                            return (
+                              <div
+                                className="ui-floating-panel flex h-20 w-20 flex-col items-center justify-center rounded-[1.35rem] p-1"
+                                style={{
+                                  backgroundColor: resolveSymbolColor(sym.color),
+                                  color: getSymbolTextColor(sym.color),
+                                }}
+                              >
+                                <div className="text-xl mb-1">
+                                  {dragImgSrc ? (
+                                    <img src={dragImgSrc} alt={sym.label} className="h-8 w-8 object-contain" />
+                                  ) : (
+                                    sym.emoji || '❓'
+                                  )}
+                                </div>
+                                <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
+                                  {sym.label}
+                                </span>
+                              </div>
+                            )
+                          })()
+                        : null}
                     </DragOverlay>
                   </DndContext>
                 </div>
@@ -1873,7 +2075,7 @@ export default function AdminPage() {
                                       className="ui-floating-panel grid h-11 w-11 place-items-center rounded-2xl text-lg"
                                       style={{ backgroundColor: resolveSymbolColor(symbol.color) }}
                                     >
-                                      {symbol.imageUrl ? '🖼️' : symbol.emoji || '❓'}
+                                      {symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
                                     </div>
                                     <div>
                                       <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
@@ -2040,70 +2242,85 @@ export default function AdminPage() {
                       />
                     </div>
 
-                    {!showChangePasswordFields ? (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowChangePasswordFields(true)}
-                          className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 transition dark:text-slate-200"
-                        >
-                          <LockKeyhole size={14} />
-                          Cambiar contraseña
-                        </button>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Solo se mostrará el formulario de contraseña cuando quieras modificarla.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                            <LockKeyhole size={14} />
-                            Cambiar contraseña
-                          </p>
+                    {accountSettings?.hasLocalPassword ? (
+                      !showChangePasswordFields ? (
+                        <div className="space-y-2">
                           <button
                             type="button"
-                            onClick={resetPasswordFields}
-                            className="text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            onClick={() => setShowChangePasswordFields(true)}
+                            className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 transition dark:text-slate-200"
                           >
-                            Cancelar cambio
+                            <LockKeyhole size={14} />
+                            Cambiar contraseña
                           </button>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Solo se mostrará el formulario de contraseña cuando quieras modificarla.
+                          </p>
                         </div>
+                      ) : (
+                        <div className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                              <LockKeyhole size={14} />
+                              Cambiar contraseña
+                            </p>
+                            <button
+                              type="button"
+                              onClick={resetPasswordFields}
+                              className="text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            >
+                              Cancelar cambio
+                            </button>
+                          </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Contraseña actual</label>
-                          <input
-                            type="password"
-                            value={accountCurrentPassword}
-                            onChange={(e) => setAccountCurrentPassword(e.target.value)}
-                            className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                            placeholder="Tu contraseña actual"
-                          />
-                        </div>
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Contraseña actual</label>
+                            <input
+                              type="password"
+                              value={accountCurrentPassword}
+                              onChange={(e) => setAccountCurrentPassword(e.target.value)}
+                              className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                              placeholder="Tu contraseña actual"
+                            />
+                          </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nueva contraseña</label>
-                          <input
-                            type="password"
-                            value={accountNewPassword}
-                            onChange={(e) => setAccountNewPassword(e.target.value)}
-                            className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                            placeholder="Mínimo 8 caracteres"
-                          />
-                        </div>
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nueva contraseña</label>
+                            <input
+                              type="password"
+                              value={accountNewPassword}
+                              onChange={(e) => setAccountNewPassword(e.target.value)}
+                              className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                              placeholder="Mínimo 8 caracteres"
+                            />
+                          </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Confirmar nueva contraseña</label>
-                          <input
-                            type="password"
-                            value={accountConfirmPassword}
-                            onChange={(e) => setAccountConfirmPassword(e.target.value)}
-                            className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                            placeholder="Repite la nueva contraseña"
-                          />
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Confirmar nueva contraseña</label>
+                            <input
+                              type="password"
+                              value={accountConfirmPassword}
+                              onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                              className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                              placeholder="Repite la nueva contraseña"
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Tu cuenta usa solo inicio de sesión con Google; no hay contraseña local que gestionar aquí.
+                      </p>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => void signOut({ callbackUrl: '/' })}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 sm:w-auto"
+                    >
+                      <LogOut size={16} aria-hidden />
+                      Cerrar sesión
+                    </button>
                   </div>
 
                   <div className="space-y-4">
@@ -2863,7 +3080,15 @@ export default function AdminPage() {
               className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,720px)] sm:rounded-[2rem]"
             >
               <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear perfil</h3>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear perfil</h3>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">Paso {createProfileStep} de 3</p>
+                  {showCreateProfileStepDebug ? (
+                    <p className="mt-1.5 rounded-lg bg-amber-100/90 px-2 py-1 font-mono text-[11px] font-semibold text-amber-950 dark:bg-amber-500/20 dark:text-amber-100">
+                      createProfileStep = {createProfileStep}
+                    </p>
+                  ) : null}
+                </div>
                 <button
                   onClick={() => {
                     if (!creatingProfile) {
@@ -2879,57 +3104,165 @@ export default function AdminPage() {
               </div>
 
               <form
-                onSubmit={handleCreateProfile}
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (createProfileStep === 3) void handleCreateProfile(e)
+                }}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 sm:p-6 sm:pb-8"
               >
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Nombre del perfil</label>
-                  <input
-                    type="text"
-                    value={newProfileName}
-                    onChange={(e) => setNewProfileName(e.target.value)}
-                    className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                    placeholder="Ej. María"
-                    autoFocus
-                    required
-                  />
-                </div>
+                {createProfileStep === 1 ? (
+                  <>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        Nombre del perfil
+                      </label>
+                      <input
+                        type="text"
+                        value={newProfileName}
+                        onChange={(e) => setNewProfileName(e.target.value)}
+                        className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                        placeholder="Ej. María"
+                        autoFocus
+                        required
+                      />
+                    </div>
 
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                  Se creará un perfil nuevo vacío para personalizar su grid desde este panel.
-                </p>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                      Se creará un perfil nuevo vacío para personalizar su grid desde este panel.
+                    </p>
 
-                <div className="mt-5 rounded-2xl border border-slate-200/80 bg-[var(--app-surface-muted)] p-4 dark:border-slate-700">
-                  <ProfileGridDimensionPicker
-                    cols={newProfileGridCols}
-                    rows={newProfileGridRows}
-                    onChange={handleNewProfileGridSize}
-                  />
-                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                    Hasta {PROFILE_GRID_PICKER_MAX_COLS} columnas y {PROFILE_GRID_PICKER_MAX_ROWS} filas aquí; si necesitas
-                    más, ajústalas después en Dimensiones (hasta 20×20).
-                  </p>
-                </div>
+                    <div className="mt-5 rounded-2xl border border-slate-200/80 bg-[var(--app-surface-muted)] p-4 dark:border-slate-700">
+                      <ProfileGridDimensionPicker
+                        cols={newProfileGridCols}
+                        rows={newProfileGridRows}
+                        onChange={handleNewProfileGridSize}
+                      />
+                      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                        Hasta {PROFILE_GRID_PICKER_MAX_COLS} columnas y {PROFILE_GRID_PICKER_MAX_ROWS} filas aquí; si necesitas
+                        más, ajústalas después en Dimensiones (hasta 20×20).
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+
+                {createProfileStep === 2 ? (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Género de comunicación</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Se usa para conjugar frases y filtrar voces en este perfil.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewProfileGender('male')}
+                        className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition ${
+                          newProfileGender === 'male'
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-100'
+                            : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        Masculino
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewProfileGender('female')}
+                        className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition ${
+                          newProfileGender === 'female'
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-100'
+                            : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        Femenino
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {createProfileStep === 3 ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Cómo volver a este panel</p>
+                      <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                        Desde el <span className="font-semibold">tablero</span> (ruta{' '}
+                        <span className="rounded bg-slate-200/90 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">/tablero</span>
+                        ), toca <span className="font-semibold">cinco veces seguidas</span> el icono de la casa en la barra inferior.
+                        Se abrirá un aviso para ir al panel de administración (<span className="font-mono text-xs">/admin</span>).
+                      </p>
+                    </div>
+                    <AdminAccessBoardDemo />
+                    <p className="text-center text-[11px] text-slate-500 dark:text-slate-400">Animación de ejemplo; en el tablero real el gesto es el mismo.</p>
+                  </div>
+                ) : null}
 
                 <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCreateProfileModal(false)
-                      resetCreateProfileModal()
-                    }}
-                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                    disabled={creatingProfile}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                    disabled={creatingProfile || !newProfileName.trim()}
-                  >
-                    {creatingProfile ? 'Creando...' : 'Crear perfil'}
-                  </button>
+                  {createProfileStep === 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateProfileModal(false)
+                          resetCreateProfileModal()
+                        }}
+                        className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                        disabled={creatingProfile}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
+                        disabled={creatingProfile || !newProfileName.trim()}
+                        onClick={() => {
+                          if (newProfileName.trim()) setCreateProfileStep(2)
+                        }}
+                      >
+                        Siguiente
+                      </button>
+                    </>
+                  ) : null}
+
+                  {createProfileStep === 2 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCreateProfileStep(1)}
+                        className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                        disabled={creatingProfile}
+                      >
+                        Atrás
+                      </button>
+                      <button
+                        type="button"
+                        className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition sm:w-auto"
+                        disabled={creatingProfile}
+                        onClick={() => setCreateProfileStep(3)}
+                      >
+                        Siguiente
+                      </button>
+                    </>
+                  ) : null}
+
+                  {createProfileStep === 3 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCreateProfileStep(2)}
+                        className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                        disabled={creatingProfile}
+                      >
+                        Atrás
+                      </button>
+                      <button
+                        type="submit"
+                        className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
+                        disabled={creatingProfile || !newProfileName.trim()}
+                      >
+                        {creatingProfile ? 'Creando...' : 'Crear perfil'}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </form>
             </motion.div>

@@ -1233,6 +1233,15 @@ function isCustomPosition(symbol: Symbol) {
   return storedPosition.x !== defaultPosition.x || storedPosition.y !== defaultPosition.y
 }
 
+/** Rellena imagen/emoji de la plantilla DEMO cuando la fila en BD no los tiene (p. ej. Yo / Tú). */
+function mergeDefaultVisualsForLabel(label: string, existing: Symbol) {
+  const def = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+  return {
+    imageUrl: existing.imageUrl || def?.imageUrl,
+    emoji: existing.emoji ?? def?.emoji,
+  }
+}
+
 export function computeMainGrid(symbols: Symbol[], activeFolder: string | null): Symbol[] {
   const byLabel = new Map(symbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
   const customSymbols = symbols
@@ -1243,6 +1252,7 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
         ...symbol,
         positionX: storedPosition.x,
         positionY: storedPosition.y,
+        ...mergeDefaultVisualsForLabel(symbol.label, symbol),
       }
     })
   const occupiedCells = new Set(customSymbols.map((symbol) => `${symbol.positionX}:${symbol.positionY}`))
@@ -1250,18 +1260,19 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
   const folderSymbols: Symbol[] = activeFolder
     ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => {
       const match = symbols.find((s) => s.label.toLowerCase() === label.toLowerCase())
+      const folderDef = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
       return {
         id: `folder-item-${activeFolder}-${i}`,
         gridId: 'demo',
         label,
-        emoji: match?.emoji || '🧩',
+        emoji: match?.emoji ?? folderDef?.emoji ?? '🧩',
         category: activeFolder,
         posType: 'noun',
         positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
         positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
         color: DEFAULT_SYMBOL_COLOR,
         hidden: false,
-        imageUrl: match?.imageUrl,
+        imageUrl: match?.imageUrl || folderDef?.imageUrl,
         state: 'visible',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1280,6 +1291,7 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
           ...existing,
           positionX: x,
           positionY: y,
+          ...mergeDefaultVisualsForLabel(label, existing),
         })
         return
       }
@@ -1341,6 +1353,7 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
           ...existing,
           positionX: x,
           positionY: y,
+          ...mergeDefaultVisualsForLabel(label, existing),
         })
         return
       }

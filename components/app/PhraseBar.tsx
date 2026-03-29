@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn, useSession } from 'next-auth/react'
 import { ArrowLeft, House, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { db } from '@/lib/dexie/db'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
@@ -45,14 +44,10 @@ export default function PhraseBar({
   speakPhrase,
 }: Props) {
   const router = useRouter()
-  const { data: session } = useSession()
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [conjugated, setConjugated] = useState('')
   const [, setHomeClickCount] = useState(0)
-  const [showAdminPasswordPrompt, setShowAdminPasswordPrompt] = useState(false)
-  const [adminPassword, setAdminPassword] = useState('')
-  const [adminPasswordError, setAdminPasswordError] = useState('')
-  const [isValidatingAdminPassword, setIsValidatingAdminPassword] = useState(false)
+  const [showAdminAccessPrompt, setShowAdminAccessPrompt] = useState(false)
   const homeClickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -68,9 +63,7 @@ export default function PhraseBar({
     setHomeClickCount(prev => {
       const next = prev + 1
       if (next >= 5) {
-        setShowAdminPasswordPrompt(true)
-        setAdminPassword('')
-        setAdminPasswordError('')
+        setShowAdminAccessPrompt(true)
         return 0
       }
       return next
@@ -79,46 +72,14 @@ export default function PhraseBar({
     homeClickTimeout.current = setTimeout(() => setHomeClickCount(0), 2000)
   }
 
-  const closeAdminPasswordPrompt = () => {
-    setShowAdminPasswordPrompt(false)
-    setAdminPassword('')
-    setAdminPasswordError('')
-    setIsValidatingAdminPassword(false)
+  const closeAdminAccessPrompt = () => {
+    setShowAdminAccessPrompt(false)
   }
 
-  const handleAdminAccess = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    const email = session?.user?.email
-    if (!email) {
-      setAdminPasswordError('No se pudo validar la cuenta actual. Vuelve a iniciar sesión.')
-      return
-    }
-
-    setIsValidatingAdminPassword(true)
-    setAdminPasswordError('')
-
-    try {
-      const result = await signIn('credentials', {
-        email,
-        password: adminPassword,
-        redirect: false,
-        callbackUrl: '/admin',
-      })
-
-      if (result?.error) {
-        setAdminPasswordError('La contraseña no es correcta.')
-        return
-      }
-
-      closeAdminPasswordPrompt()
-      router.push('/admin')
-      router.refresh()
-    } catch {
-      setAdminPasswordError('No se pudo validar la contraseña. Inténtalo de nuevo.')
-    } finally {
-      setIsValidatingAdminPassword(false)
-    }
+  const goToAdmin = () => {
+    closeAdminAccessPrompt()
+    router.push('/admin')
+    router.refresh()
   }
 
   const previewText = conjugated || symbols.map(s => s.label).join(' ')
@@ -278,54 +239,30 @@ export default function PhraseBar({
         </div>
       </div>
 
-      {showAdminPasswordPrompt && (
+      {showAdminAccessPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-xl" style={{ background: 'var(--app-modal-backdrop)' }}>
           <div className="ui-modal-panel w-full max-w-sm rounded-[2rem] p-6 text-[var(--app-foreground)]">
-            <h2 className="text-xl font-bold text-[var(--app-foreground)]">Acceso al panel admin</h2>
+            <h2 className="text-xl font-bold text-[var(--app-foreground)]">Panel de administración</h2>
             <p className="mt-2 text-sm text-[var(--app-muted-foreground)]">
-              Introduce la contraseña de la cuenta actual para continuar.
+              Abre el editor de símbolos y ajustes. Solo usuarios con sesión iniciada pueden entrar.
             </p>
 
-            <form onSubmit={handleAdminAccess} className="mt-5 space-y-4">
-              <div className="space-y-1.5">
-                <label htmlFor="admin-password" className="text-sm font-medium text-[var(--app-foreground)]">
-                  Contraseña
-                </label>
-                <input
-                  id="admin-password"
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  autoFocus
-                  required
-                  className="app-input w-full rounded-xl px-4 py-3 text-sm outline-none"
-                  placeholder="Tu contraseña"
-                />
-              </div>
-
-              {adminPasswordError && (
-                <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600 dark:bg-rose-500/15 dark:text-rose-200">
-                  {adminPasswordError}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={closeAdminPasswordPrompt}
-                  className="ui-secondary-button flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isValidatingAdminPassword || adminPassword.length === 0}
-                  className="ui-primary-button flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-70"
-                >
-                  {isValidatingAdminPassword ? 'Validando...' : 'Entrar'}
-                </button>
-              </div>
-            </form>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={closeAdminAccessPrompt}
+                className="ui-secondary-button flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={goToAdmin}
+                className="ui-primary-button flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition"
+              >
+                Continuar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,15 @@ import { normalizeLooseTextForSearch, normalizeTextForLexicon } from '@/lib/lexi
 
 export type PersonKey = 'yo' | 'tu' | 'el' | 'nosotros' | 'vosotros' | 'ellos'
 export type ProfileGender = 'male' | 'female'
+
+/** Tiempo y modo verbal para la frase (por defecto presente indicativo). */
+export type ConjugateWordsOptions = {
+  /** p. ej. `present`, `imperfect`, `future` (coincide con `LexemeForm.tense` en BD). */
+  verbTense?: string
+  /** p. ej. `indicative`, `subjunctive`. */
+  verbMood?: string
+}
+
 export type ConjugationTokenInput = {
   label: string
   lexemeId?: string | null
@@ -180,6 +189,98 @@ function fallbackConjugateVerb(infinitive: string, person: PersonKey) {
   const endingSet = REGULAR_ENDINGS[ending]
   if (!endingSet) return infinitive
   return `${stem}${endingSet[person]}`
+}
+
+const IMPERFECT_INDICATIVE_IRREGULAR: Record<string, Record<PersonKey, string>> = {
+  ser: { yo: 'era', tu: 'eras', el: 'era', nosotros: 'éramos', vosotros: 'erais', ellos: 'eran' },
+  ir: { yo: 'iba', tu: 'ibas', el: 'iba', nosotros: 'íbamos', vosotros: 'ibais', ellos: 'iban' },
+  ver: { yo: 'veía', tu: 'veías', el: 'veía', nosotros: 'veíamos', vosotros: 'veíais', ellos: 'veían' },
+}
+
+/** Pretérito imperfecto indicativo regular (-aba / -ía). */
+function fallbackImperfectIndicative(infinitive: string, person: PersonKey) {
+  const normalized = normalizeTextForLexicon(infinitive)
+  const irr = IMPERFECT_INDICATIVE_IRREGULAR[normalized]
+  if (irr) return irr[person]
+
+  const ending = normalized.slice(-2) as 'ar' | 'er' | 'ir'
+  const stem = normalized.slice(0, -2)
+  const endings =
+    ending === 'ar'
+      ? ({ yo: 'aba', tu: 'abas', el: 'aba', nosotros: 'ábamos', vosotros: 'abais', ellos: 'aban' } as const)
+      : ({ yo: 'ía', tu: 'ías', el: 'ía', nosotros: 'íamos', vosotros: 'íais', ellos: 'ían' } as const)
+  return `${stem}${endings[person]}`
+}
+
+/** Futuro simple indicativo: infinitivo + terminación. */
+function fallbackFutureIndicative(infinitive: string, person: PersonKey) {
+  const normalized = normalizeTextForLexicon(infinitive)
+  const endings: Record<PersonKey, string> = {
+    yo: 'é', tu: 'ás', el: 'á', nosotros: 'emos', vosotros: 'éis', ellos: 'án',
+  }
+  const irregularFuture: Record<string, Record<PersonKey, string>> = {
+    ir: { yo: 'iré', tu: 'irás', el: 'irá', nosotros: 'iremos', vosotros: 'iréis', ellos: 'irán' },
+    tener: { yo: 'tendré', tu: 'tendrás', el: 'tendrá', nosotros: 'tendremos', vosotros: 'tendréis', ellos: 'tendrán' },
+    hacer: { yo: 'haré', tu: 'harás', el: 'hará', nosotros: 'haremos', vosotros: 'haréis', ellos: 'harán' },
+    decir: { yo: 'diré', tu: 'dirás', el: 'dirá', nosotros: 'diremos', vosotros: 'diréis', ellos: 'dirán' },
+    poder: { yo: 'podré', tu: 'podrás', el: 'podrá', nosotros: 'podremos', vosotros: 'podréis', ellos: 'podrán' },
+    poner: { yo: 'pondré', tu: 'pondrás', el: 'pondrá', nosotros: 'pondremos', vosotros: 'pondréis', ellos: 'pondrán' },
+    venir: { yo: 'vendré', tu: 'vendrás', el: 'vendrá', nosotros: 'vendremos', vosotros: 'vendréis', ellos: 'vendrán' },
+    salir: { yo: 'saldré', tu: 'saldrás', el: 'saldrá', nosotros: 'saldremos', vosotros: 'saldréis', ellos: 'saldrán' },
+    querer: { yo: 'querré', tu: 'querrás', el: 'querrá', nosotros: 'querremos', vosotros: 'querréis', ellos: 'querrán' },
+    saber: { yo: 'sabré', tu: 'sabrás', el: 'sabrá', nosotros: 'sabremos', vosotros: 'sabréis', ellos: 'sabrán' },
+    caber: { yo: 'cabré', tu: 'cabrás', el: 'cabrá', nosotros: 'cabremos', vosotros: 'cabréis', ellos: 'cabrán' },
+    haber: { yo: 'habré', tu: 'habrás', el: 'habrá', nosotros: 'habremos', vosotros: 'habréis', ellos: 'habrán' },
+  }
+  const irr = irregularFuture[normalized]
+  if (irr) return irr[person]
+  return `${normalized}${endings[person]}`
+}
+
+/** Presente de subjuntivo regular (-e/-a). */
+function fallbackPresentSubjunctive(infinitive: string, person: PersonKey) {
+  const normalized = normalizeTextForLexicon(infinitive)
+  const subjIrreg: Record<string, Record<PersonKey, string>> = {
+    ser: { yo: 'sea', tu: 'seas', el: 'sea', nosotros: 'seamos', vosotros: 'seáis', ellos: 'sean' },
+    estar: { yo: 'esté', tu: 'estés', el: 'esté', nosotros: 'estemos', vosotros: 'estéis', ellos: 'estén' },
+    ir: { yo: 'vaya', tu: 'vayas', el: 'vaya', nosotros: 'vayamos', vosotros: 'vayáis', ellos: 'vayan' },
+    dar: { yo: 'dé', tu: 'des', el: 'dé', nosotros: 'demos', vosotros: 'deis', ellos: 'den' },
+    saber: { yo: 'sepa', tu: 'sepas', el: 'sepa', nosotros: 'sepamos', vosotros: 'sepáis', ellos: 'sepan' },
+    haber: { yo: 'haya', tu: 'hayas', el: 'haya', nosotros: 'hayamos', vosotros: 'hayáis', ellos: 'hayan' },
+  }
+  const si = subjIrreg[normalized]
+  if (si) return si[person]
+
+  const ending = normalized.slice(-2) as 'ar' | 'er' | 'ir'
+  const stem = normalized.slice(0, -2)
+  if (ending === 'ar') {
+    const e: Record<PersonKey, string> = {
+      yo: 'e', tu: 'es', el: 'e', nosotros: 'emos', vosotros: 'éis', ellos: 'en',
+    }
+    return `${stem}${e[person]}`
+  }
+  const a: Record<PersonKey, string> = {
+    yo: 'a', tu: 'as', el: 'a', nosotros: 'amos', vosotros: 'áis', ellos: 'an',
+  }
+  return `${stem}${a[person]}`
+}
+
+function fallbackFiniteVerb(
+  infinitive: string,
+  person: PersonKey,
+  tense: string,
+  mood: string,
+): string | null {
+  if (mood === 'indicative' && tense === 'imperfect') {
+    return fallbackImperfectIndicative(infinitive, person)
+  }
+  if (mood === 'indicative' && tense === 'future') {
+    return fallbackFutureIndicative(infinitive, person)
+  }
+  if (mood === 'subjunctive' && tense === 'present') {
+    return fallbackPresentSubjunctive(infinitive, person)
+  }
+  return null
 }
 
 function hasLexiconPrismaModels() {
@@ -390,7 +491,7 @@ function applyContextualPosAdjustments(tokens: ResolvedToken[]) {
   })
 }
 
-async function getPresentFormsForLexemes(lexemeIds: string[]) {
+async function getFiniteFormsForLexemes(lexemeIds: string[], tense: string, mood: string) {
   if (!hasLexiconPrismaModels()) return new Map<string, Map<PersonKey, string>>()
   if (lexemeIds.length === 0) return new Map<string, Map<PersonKey, string>>()
 
@@ -398,8 +499,8 @@ async function getPresentFormsForLexemes(lexemeIds: string[]) {
     where: {
       lexemeId: { in: lexemeIds },
       formType: 'finite',
-      mood: 'indicative',
-      tense: 'present',
+      mood,
+      tense,
       person: { in: [1, 2, 3] },
     },
     select: {
@@ -482,10 +583,13 @@ function enrichResolvedTokens(
   })
 }
 
+type FiniteVerbTarget = { tense: string; mood: string }
+
 async function conjugateResolvedVerb(
   token: ResolvedToken,
   person: PersonKey,
   formsByLexemeId: Map<string, Map<PersonKey, string>>,
+  finiteTarget: FiniteVerbTarget,
 ) {
   if (token.lexemeId) {
     const forms = formsByLexemeId.get(token.lexemeId)
@@ -494,6 +598,8 @@ async function conjugateResolvedVerb(
   }
 
   const lemma = token.lemma ?? token.normalized
+  const finite = fallbackFiniteVerb(lemma, person, finiteTarget.tense, finiteTarget.mood)
+  if (finite) return finite
   return fallbackConjugateVerb(lemma, person)
 }
 
@@ -644,7 +750,12 @@ function selectAdjectiveForm(
 export async function conjugateWords(
   rawTokensOrWords: Array<ConjugationTokenInput | string>,
   gender: ProfileGender,
+  options?: ConjugateWordsOptions,
 ) {
+  const finiteTarget: FiniteVerbTarget = {
+    tense: options?.verbTense ?? 'present',
+    mood: options?.verbMood ?? 'indicative',
+  }
   const words = rawTokensOrWords
     .map(item => typeof item === 'string' ? normalizeWord(item) : normalizeWord(item.label))
     .filter(Boolean)
@@ -671,10 +782,12 @@ export async function conjugateWords(
   })()
 
   const [formsByLexemeId, genderVariantMap] = await Promise.all([
-    getPresentFormsForLexemes(
+    getFiniteFormsForLexemes(
       resolvedTokens
         .map(token => token.lexemeId)
         .filter((value): value is string => Boolean(value)),
+      finiteTarget.tense,
+      finiteTarget.mood,
     ),
     getGenderVariantMap(
       resolvedTokens
@@ -696,7 +809,7 @@ export async function conjugateWords(
     const isVerb = token.primaryPos === 'verb' || looksLikeInfinitive(token.original)
 
     if ((token.lemma === 'ir' || token.normalized === 'ir') && next && (next.primaryPos === 'verb' || looksLikeInfinitive(next.original))) {
-      output.push(capitalizeIfNeeded(await conjugateResolvedVerb({ ...token, lemma: 'ir' }, person, formsByLexemeId), startsSentence))
+      output.push(capitalizeIfNeeded(await conjugateResolvedVerb({ ...token, lemma: 'ir' }, person, formsByLexemeId, finiteTarget), startsSentence))
       output.push('a')
       keepNextInfinitive = true
       continue
@@ -715,7 +828,7 @@ export async function conjugateWords(
         continue
       }
 
-      output.push(capitalizeIfNeeded(await conjugateResolvedVerb(token, person, formsByLexemeId), startsSentence))
+      output.push(capitalizeIfNeeded(await conjugateResolvedVerb(token, person, formsByLexemeId, finiteTarget), startsSentence))
       continue
     }
 

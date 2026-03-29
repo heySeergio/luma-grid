@@ -1,16 +1,31 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Check, Loader2, Sparkles, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { startSubscriptionCheckout } from '@/app/actions/plan'
 import { PLAN_FEATURE_BULLETS } from '@/components/plan/PricingCards'
 
-/** Mismas cifras que en PricingCards (UI). */
-const VOICE_MONTH = '9€'
-const VOICE_YEAR = '79€'
-const IDENTITY_MONTH = '24€'
-const IDENTITY_YEAR = '199€'
+/** Importes numéricos (€) — mismas cifras que en PricingCards. */
+const VOICE_MONTH_EUR = 9
+const VOICE_YEAR_EUR = 79
+const IDENTITY_MONTH_EUR = 24
+const IDENTITY_YEAR_EUR = 199
+
+function formatEuro(value: number, fractionDigits = 0): string {
+  return (
+    new Intl.NumberFormat('es-ES', {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(value) + '€'
+  )
+}
+
+function monthlyEquivalentFromAnnual(annualEur: number): string {
+  return formatEuro(annualEur / 12, 2)
+}
+
+type Billing = 'month' | 'year'
 
 type Props = {
   open: boolean
@@ -18,14 +33,9 @@ type Props = {
 }
 
 export default function AdminFreePlanUpsellModal({ open, onDismiss }: Props) {
+  const [billing, setBilling] = useState<Billing>('month')
   const [busy, setBusy] = useState<'voice-m' | 'voice-y' | 'identity-m' | 'identity-y' | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const id = window.setTimeout(() => onDismiss(), 7000)
-    return () => window.clearTimeout(id)
-  }, [open, onDismiss])
 
   if (!open) return null
 
@@ -45,6 +55,9 @@ export default function AdminFreePlanUpsellModal({ open, onDismiss }: Props) {
       setBusy(null)
     }
   }
+
+  const voiceKey = billing === 'month' ? 'voice-m' : 'voice-y'
+  const identityKey = billing === 'month' ? 'identity-m' : 'identity-y'
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">
@@ -94,19 +107,72 @@ export default function AdminFreePlanUpsellModal({ open, onDismiss }: Props) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div
+            className="mb-5 flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-900/80"
+            role="group"
+            aria-label="Periodo de facturación"
+          >
+            <button
+              type="button"
+              onClick={() => setBilling('month')}
+              aria-pressed={billing === 'month'}
+              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                billing === 'month'
+                  ? 'bg-white text-indigo-700 shadow-sm dark:bg-slate-800 dark:text-indigo-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              Plan mensual
+            </button>
+            <button
+              type="button"
+              onClick={() => setBilling('year')}
+              aria-pressed={billing === 'year'}
+              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                billing === 'year'
+                  ? 'bg-white text-indigo-700 shadow-sm dark:bg-slate-800 dark:text-indigo-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              Plan anual
+            </button>
+          </div>
+
+          {error ? (
+            <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-700 break-words dark:text-red-200">
+              {error}
+            </p>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2">
-            <article className="rounded-2xl border-2 border-indigo-400/50 bg-indigo-500/[0.07] p-4 dark:border-indigo-500/40 dark:bg-indigo-500/10">
+            <article className="flex flex-col rounded-2xl border-2 border-indigo-400/50 bg-indigo-500/[0.07] p-5 dark:border-indigo-500/40 dark:bg-indigo-500/10">
               <p className="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Plan Voz</p>
-              <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Más tableros y voz natural</p>
-              <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-semibold text-slate-900 dark:text-white">{VOICE_MONTH}</span>
-                <span className="text-slate-500"> /mes</span>
-                {' · '}
-                <span className="font-semibold text-slate-900 dark:text-white">{VOICE_YEAR}</span>
-                <span className="text-slate-500"> /año</span>
-                <span className="block text-xs text-indigo-800/90 dark:text-indigo-200/90">Anual: ahorra ~27% frente a 12 meses sueltos</span>
+              <p className="mt-2 text-xl font-bold leading-tight text-slate-900 dark:text-white sm:text-2xl">
+                Más tableros y voz natural
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+
+              <div className="mt-4 min-h-[4.5rem]">
+                {billing === 'month' ? (
+                  <p className="flex flex-wrap items-baseline gap-1">
+                    <span className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{formatEuro(VOICE_MONTH_EUR)}</span>
+                    <span className="text-lg font-semibold text-slate-500 dark:text-slate-400">/mes</span>
+                  </p>
+                ) : (
+                  <div>
+                    <p className="flex flex-wrap items-baseline gap-1">
+                      <span className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+                        {monthlyEquivalentFromAnnual(VOICE_YEAR_EUR)}
+                      </span>
+                      <span className="text-lg font-semibold text-slate-500 dark:text-slate-400">/mes</span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Equivalente mensual · pago anual {formatEuro(VOICE_YEAR_EUR)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-700 dark:text-slate-300">
                 {PLAN_FEATURE_BULLETS.voice.map((f) => (
                   <li key={f} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden />
@@ -114,19 +180,46 @@ export default function AdminFreePlanUpsellModal({ open, onDismiss }: Props) {
                   </li>
                 ))}
               </ul>
+
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleCheckout('voice', billing === 'month' ? 'month' : 'year', voiceKey)}
+                className="ui-primary-button mt-5 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
+              >
+                {busy === voiceKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {billing === 'month' ? `Activar Voz (${formatEuro(VOICE_MONTH_EUR)}/mes)` : `Activar Voz (${formatEuro(VOICE_YEAR_EUR)}/año)`}
+              </button>
             </article>
-            <article className="rounded-2xl border border-slate-200 bg-[var(--app-surface)] p-4 dark:border-slate-700">
+
+            <article className="flex flex-col rounded-2xl border border-slate-200 bg-[var(--app-surface)] p-5 dark:border-slate-700">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">Plan Identidad</p>
-              <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Todo lo de Voz y tu voz clonada</p>
-              <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-semibold text-slate-900 dark:text-white">{IDENTITY_MONTH}</span>
-                <span className="text-slate-500"> /mes</span>
-                {' · '}
-                <span className="font-semibold text-slate-900 dark:text-white">{IDENTITY_YEAR}</span>
-                <span className="text-slate-500"> /año</span>
-                <span className="block text-xs text-slate-600 dark:text-slate-400">Anual: ahorra ~31% frente a 12 meses sueltos</span>
+              <p className="mt-2 text-xl font-bold leading-tight text-slate-900 dark:text-white sm:text-2xl">
+                Todo lo de Voz y tu voz clonada
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+
+              <div className="mt-4 min-h-[4.5rem]">
+                {billing === 'month' ? (
+                  <p className="flex flex-wrap items-baseline gap-1">
+                    <span className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{formatEuro(IDENTITY_MONTH_EUR)}</span>
+                    <span className="text-lg font-semibold text-slate-500 dark:text-slate-400">/mes</span>
+                  </p>
+                ) : (
+                  <div>
+                    <p className="flex flex-wrap items-baseline gap-1">
+                      <span className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+                        {monthlyEquivalentFromAnnual(IDENTITY_YEAR_EUR)}
+                      </span>
+                      <span className="text-lg font-semibold text-slate-500 dark:text-slate-400">/mes</span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Equivalente mensual · pago anual {formatEuro(IDENTITY_YEAR_EUR)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-700 dark:text-slate-300">
                 {PLAN_FEATURE_BULLETS.identity.map((f) => (
                   <li key={f} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
@@ -134,55 +227,24 @@ export default function AdminFreePlanUpsellModal({ open, onDismiss }: Props) {
                   </li>
                 ))}
               </ul>
+
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleCheckout('identity', billing === 'month' ? 'month' : 'year', identityKey)}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              >
+                {busy === identityKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {billing === 'month'
+                  ? `Activar Identidad (${formatEuro(IDENTITY_MONTH_EUR)}/mes)`
+                  : `Activar Identidad (${formatEuro(IDENTITY_YEAR_EUR)}/año)`}
+              </button>
             </article>
           </div>
 
-          <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-500">
-            Pago seguro con Stripe. El modal se cierra solo en unos segundos o usa la X.
+          <p className="mt-5 text-center text-xs text-slate-500 dark:text-slate-500">
+            Pago seguro con Stripe. Cierra con la X, el fondo o &quot;Seguir con plan Libre&quot;.
           </p>
-
-          {error ? (
-            <p className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200 break-words">{error}</p>
-          ) : null}
-
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void handleCheckout('voice', 'month', 'voice-m')}
-              className="ui-primary-button flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
-            >
-              {busy === 'voice-m' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Activar Voz — mensual ({VOICE_MONTH}/mes)
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void handleCheckout('voice', 'year', 'voice-y')}
-              className="ui-secondary-button flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-400/50 px-4 py-3 text-sm font-semibold text-slate-800 disabled:opacity-60 dark:text-slate-100"
-            >
-              {busy === 'voice-y' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Activar Voz — anual ({VOICE_YEAR}/año)
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void handleCheckout('identity', 'month', 'identity-m')}
-              className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              {busy === 'identity-m' ? <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> : null}
-              Activar Identidad — mensual ({IDENTITY_MONTH}/mes)
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void handleCheckout('identity', 'year', 'identity-y')}
-              className="rounded-2xl border border-slate-600 bg-slate-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60 dark:border-slate-500 dark:bg-slate-900"
-            >
-              {busy === 'identity-y' ? <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> : null}
-              Activar Identidad — anual ({IDENTITY_YEAR}/año)
-            </button>
-          </div>
         </div>
 
         <div className="flex shrink-0 border-t border-slate-100 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">

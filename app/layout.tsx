@@ -5,6 +5,7 @@ import localFont from 'next/font/local'
 import { Inter } from 'next/font/google'
 import { Providers } from '@/components/Providers'
 import { authOptions } from '@/lib/auth'
+import { getSiteUrl } from '@/lib/seo/siteUrl'
 import './globals.css'
 
 const inter = Inter({
@@ -24,8 +25,14 @@ const openDyslexic = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Luma Grid - Comunicación AAC',
-  description: 'Aplicación de Comunicación Aumentativa y Alternativa',
+  metadataBase: new URL(getSiteUrl()),
+  title: {
+    default: 'Luma Grid · Comunicación AAC con IA en español',
+    template: '%s · Luma Grid',
+  },
+  description:
+    'Luma Grid es una app web de Comunicación Aumentativa y Alternativa (AAC) en español: pictogramas, frases con IA, predicción, voz (sistema y ElevenLabs), modo offline y PWA. Plan gratuito.',
+  applicationName: 'Luma Grid',
   manifest: '/manifest.json',
   icons: {
     icon: [

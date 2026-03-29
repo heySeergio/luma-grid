@@ -58,10 +58,17 @@ export async function getAccountSettings() {
                 email: true,
                 preferredTheme: true,
                 preferredDyslexiaFont: true,
+                password: true,
             }
         })
 
-        return user
+        if (!user) return null
+
+        const { password: _pw, ...rest } = user
+        return {
+            ...rest,
+            hasLocalPassword: Boolean(_pw),
+        }
     } catch (error) {
         if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
             throw error
@@ -74,15 +81,18 @@ export async function getAccountSettings() {
                 name: true,
                 email: true,
                 preferredTheme: true,
+                password: true,
             }
         })
 
-        return fallbackUser
-            ? {
-                ...fallbackUser,
-                preferredDyslexiaFont: false,
-            }
-            : null
+        if (!fallbackUser) return null
+
+        const { password: _pw, ...rest } = fallbackUser
+        return {
+            ...rest,
+            preferredDyslexiaFont: false,
+            hasLocalPassword: Boolean(_pw),
+        }
     }
 }
 
@@ -109,7 +119,7 @@ export async function updateAccountSettings(data: {
     if (!['light', 'dark', 'system'].includes(preferredTheme)) throw new Error('Tema no válido')
 
     const user = await prisma.user.findUnique({
-        where: { id: session.user.id }
+        where: { id: session.user.id },
     })
 
     if (!user) throw new Error('Usuario no encontrado')
@@ -126,6 +136,11 @@ export async function updateAccountSettings(data: {
 
     let password: string | undefined
     if (newPassword) {
+        if (!user.password) {
+            throw new Error(
+                'Esta cuenta solo usa inicio de sesión con Google. No hay contraseña local que cambiar.',
+            )
+        }
         if (!currentPassword) throw new Error('Debes indicar tu contraseña actual')
 
         const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
@@ -151,11 +166,16 @@ export async function updateAccountSettings(data: {
                 email: true,
                 preferredTheme: true,
                 preferredDyslexiaFont: true,
+                password: true,
             }
         })
         revalidatePath('/admin')
         revalidatePath('/tablero')
-        return updatedUser
+        const { password: pw, ...rest } = updatedUser
+        return {
+            ...rest,
+            hasLocalPassword: Boolean(pw),
+        }
     } catch (error) {
         if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
             throw error
@@ -175,15 +195,18 @@ export async function updateAccountSettings(data: {
             name: true,
             email: true,
             preferredTheme: true,
+            password: true,
         }
     })
 
     revalidatePath('/admin')
     revalidatePath('/tablero')
 
+    const { password: pw, ...rest } = fallbackUser
     return {
-        ...fallbackUser,
+        ...rest,
         preferredDyslexiaFont: false,
+        hasLocalPassword: Boolean(pw),
     }
 }
 

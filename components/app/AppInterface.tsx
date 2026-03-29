@@ -14,6 +14,11 @@ import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
 import { getPinnedPhrases, saveQuickPhrase } from '@/app/actions/phrases'
 import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
+import {
+  enqueuePendingUsageEvent,
+  flushPendingUsageEvents,
+  type PendingUsageEventPayload,
+} from '@/lib/dexie/usageSyncQueue'
 import { getVoiceSettings } from '@/app/actions/voiceSettings'
 import { applyProfileGenders } from '@/lib/profileGender'
 import { speakText } from '@/lib/voice/speakClient'
@@ -103,6 +108,20 @@ export default function AppInterface() {
     state: symbol.state,
   }), [])
 
+  const persistSymbolUsage = useCallback((payload: PendingUsageEventPayload) => {
+    void (async () => {
+      try {
+        await recordSymbolUsage(payload)
+      } catch {
+        try {
+          await enqueuePendingUsageEvent(payload)
+        } catch {
+          /* sin red o Dexie no disponible */
+        }
+      }
+    })()
+  }, [])
+
   useEffect(() => {
     setIsOnline(navigator.onLine)
     const handleOnline = () => setIsOnline(true)
@@ -112,6 +131,24 @@ export default function AppInterface() {
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  useEffect(() => {
+    const run = () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        void flushPendingUsageEvents()
+      }
+    }
+    run()
+    window.addEventListener('online', run)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') run()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('online', run)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [])
 
@@ -237,13 +274,14 @@ export default function AppInterface() {
     const sequenceIndex = phraseSequenceRef.current
     phraseSequenceRef.current += 1
 
-    void recordSymbolUsage({
+    persistSymbolUsage({
       profileId: profile.id,
       currentSymbol: {
         id: symbol.id,
         label: normalizedTokenLabel,
         posType: symbol.posType,
         lexemeId: symbol.lexemeId ?? null,
+        category: symbol.category ?? null,
         state: symbol.state,
       },
       previousSymbol: previousSourceSymbol
@@ -252,6 +290,7 @@ export default function AppInterface() {
             label: previousSourceSymbol.label,
             posType: previousSourceSymbol.posType,
             lexemeId: previousSourceSymbol.lexemeId ?? null,
+            category: previousSourceSymbol.category ?? null,
             state: previousSourceSymbol.state,
           }
         : null,
@@ -302,7 +341,7 @@ export default function AppInterface() {
       console.error('Error calculating predictions', err)
       setPredictedIds([])
     }
-  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, profile, selectedSymbols, setFolderHistory, speakSelectedWord, symbols])
+  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, persistSymbolUsage, profile, selectedSymbols, setFolderHistory, speakSelectedWord, symbols])
 
   const handleDeleteLast = () => {
     setSelectedSymbols(prev => prev.slice(0, -1))
@@ -433,7 +472,7 @@ export default function AppInterface() {
                     ? pseudoSymbols[index - 1]
                     : selectedSymbols[selectedSymbols.length - 1]
 
-                void recordSymbolUsage({
+                persistSymbolUsage({
                   profileId: profile.id,
                   currentSymbol: toPredictionInput(pseudoSymbol),
                   previousSymbol: previous ? toPredictionInput(previous) : null,

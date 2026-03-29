@@ -11,7 +11,8 @@ datasource db {
 model User {
   id                     String    @id @default(cuid())
   email                  String    @unique
-  password               String
+  /// Null si la cuenta solo usa OAuth (p. ej. Google).
+  password               String?
   name                   String?
   preferredTheme         String    @default("system") @map("preferred_theme")
   preferredDyslexiaFont  Boolean   @default(false) @map("preferred_dyslexia_font")

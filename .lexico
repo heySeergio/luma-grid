@@ -79,12 +79,13 @@ Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la imp
 
 ---
 
-## 8. Conjugación y reverse lookup — **Parcial**
+## 8. Conjugación y reverse lookup — **Hecho** (motor ampliado; refinado continuo)
 
 - **Reverse lookup:** `LexemeForm` en seed + `detectLexemeForLabel` para formas como `quiero`, `como`, `voy`.
-- **Generación:** `lib/lexicon/conjugation.ts` + reglas presente regular, irregulars fijadas, acuerdo de adjetivos; API `app/api/conjugate/route.ts`.
+- **Generación:** `lib/lexicon/conjugation.ts` + presente, **pretérito imperfecto**, **futuro simple** y **presente de subjuntivo** (fallback regular + irregulares frecuentes); lectura de `LexemeForm` por `tense`/`mood` vía `getFiniteFormsForLexemes`.
+- **API:** `POST /api/conjugate` acepta `verbTense` y `verbMood` (además de `words` / `tokens` / `gender`).
 
-**Evolutivo:** más tiempos/modos, más verbos irregulares en BD, alineación total con un motor de conjugación completo.
+**Evolutivo:** más tiempos (condicional, pretérito), más entradas en BD y motor alineado con un conjugador completo.
 
 ---
 
@@ -100,7 +101,7 @@ Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la imp
 | 6 | Corrección manual en modal | Hecho |
 | 7 | Registro de transiciones de uso | Hecho |
 | 8 | Predictor por score | Hecho |
-| 9 | Conjugación de verbos | Parcial |
+| 9 | Conjugación de verbos | Hecho (imperfecto/futuro/subj. + BD por tiempo/modo) |
 | 10 | Ampliación progresiva del diccionario | Evolutivo |
 
 ---
@@ -110,14 +111,20 @@ Los porcentajes del documento original (35/35/15/10/5) eran orientativos; la imp
 - **Diccionario y formas verbales:** ampliado seed con dominios salud/colegio/ocio y nuevas formas (incluye pretérito en varios verbos frecuentes).
 - **Semántica en predictor:** implementada señal ligera por categoría temática.
 - **Calidad detector:** añadido script de regresión `npm run test:lexicon-detection` para casos `label -> lemma`.
-- **Observabilidad:** añadido `getProfileLexiconObservability(profileId)` (uso 7d, unknown rate, override rate, baja confianza).
-- **Offline / Dexie vs servidor:** documentado en `README.md` el flujo de sincronización y deduplicación sugerido.
+- **Observabilidad:** `getProfileLexiconObservability(profileId)` + **panel en admin** (“Léxico (observabilidad)”) con cobertura, usos 7d, transiciones, unknown rate, overrides y baja confianza.
+- **Offline / Dexie:** cola `pendingSync` + `lib/dexie/usageSyncQueue.ts`: si `recordSymbolUsage` falla (red), se encola; al volver **online** o **visibility** se hace **flush** con reintentos en orden.
+
+---
+
+## CI
+
+- Workflow `.github/workflows/ci.yml`: `npm ci`, `prisma generate`, `tsc`, `lint`, `npm run test:lexicon-detection`.
+- Configurar en el repo el secret **`DATABASE_URL`** apuntando a una base con léxico sembrado; sin él el último paso fallará.
 
 ---
 
 ## Próximos pasos sugeridos (prioridad)
 
-1. **Conjugación:** ampliar a imperfecto/futuro/subjuntivo en `LexemeForm` y motor.
-2. **Admin:** exponer visualmente `getProfileLexiconObservability` (dashboard simple).
-3. **CI:** ejecutar `npm run test:lexicon-detection` en pipeline de PR/deploy.
-4. **Sincronización offline:** implementar cola real Dexie -> servidor con reintentos y dedupe.
+1. **Conjugación:** condicional, pretérito, más `LexemeForm` en seed.
+2. **CI:** asegurar `DATABASE_URL` en GitHub/Vercel y revisar forks públicos (omitir o mock del test si aplica).
+3. **Offline:** extender la cola a frases u otros tipos si hace falta; dedupe fino por `phraseSessionId`+`sequenceIndex` si se detectan duplicados.
