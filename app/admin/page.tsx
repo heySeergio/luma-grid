@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { BarChart2, Check, Columns2, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
@@ -16,6 +15,7 @@ import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfile
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
 import { setProfileGender } from '@/lib/profileGender'
 import { motion, AnimatePresence } from 'framer-motion'
+import { snapTopLeftToCursor } from '@/lib/dnd/snapTopLeftToCursor'
 import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
@@ -79,7 +79,7 @@ const ADMIN_GRID_DIM_MAX = 20
 const ADMIN_PREVIEW_CELL_COL_WIDTH = '7.25rem'
 
 /** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
-const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...', 'Guardando cambios en la nube...'])
+const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...'])
 
 function subscriptionPlanLabel(plan: SubscriptionPlan): string {
   switch (plan) {
@@ -322,15 +322,15 @@ function DraggableGridItem({
   symbol: AdminSymbol
   children: React.ReactNode
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: symbol.id,
     disabled: !isMovableSymbol(symbol),
   })
 
+  // No aplicar `transform` aquí: con <DragOverlay> el overlay sigue el puntero; sumar ambos
+  // desincroniza la posición (muy visible con overflow-x-auto en el grid).
   const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.35 : 1,
-    zIndex: isDragging ? 30 : undefined,
+    opacity: isDragging ? 0 : 1,
   }
 
   return (
@@ -1065,7 +1065,6 @@ export default function AdminPage() {
 
     setSavingSymbols(true)
     setGridSaveFeedback('saving')
-    setStatus('Guardando cambios en la nube...')
     try {
       // El servidor solo hace UPDATE/CREATE de filas que cambiaron (ver saveSymbols).
       await saveSymbols(selectedProfileId, symbols)
@@ -1514,19 +1513,45 @@ export default function AdminPage() {
           </header>
         </div>
 
-        {status && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 pl-4 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 sm:items-center sm:p-4">
-            <p className="min-w-0 flex-1 leading-relaxed">{status}</p>
-            <button
-              type="button"
-              onClick={() => setStatus('')}
-              className="ui-icon-button -mr-1 -mt-0.5 shrink-0 rounded-lg p-1.5 text-emerald-700/80 hover:bg-emerald-700/10 hover:text-emerald-900 dark:text-emerald-200/90 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-100"
-              aria-label="Cerrar aviso"
+        <AnimatePresence initial={false}>
+          {status ? (
+            <motion.div
+              key="admin-status-banner"
+              layout
+              initial={{ opacity: 0, y: -28, scale: 0.94, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={{
+                opacity: 0,
+                y: -14,
+                scale: 0.97,
+                filter: 'blur(4px)',
+                transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] },
+              }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.72 }}
+              className="mb-6 flex origin-top items-start gap-3 overflow-hidden rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 pl-4 text-sm font-medium text-emerald-800 shadow-[0_12px_40px_-18px_rgba(16,185,129,0.35)] dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:shadow-[0_14px_44px_-16px_rgba(16,185,129,0.25)] sm:items-center sm:p-4"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+              <motion.p
+                className="min-w-0 flex-1 leading-relaxed"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.06, duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {status}
+              </motion.p>
+              <motion.button
+                type="button"
+                onClick={() => setStatus('')}
+                className="ui-icon-button -mr-1 -mt-0.5 shrink-0 rounded-lg p-1.5 text-emerald-700/80 hover:bg-emerald-700/10 hover:text-emerald-900 dark:text-emerald-200/90 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-100"
+                aria-label="Cerrar aviso"
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.94 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 28 }}
+              >
+                <X className="h-4 w-4" />
+              </motion.button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-4">
             {/* Sidebar */}
@@ -1795,6 +1820,7 @@ export default function AdminPage() {
 
                   <DndContext
                     sensors={sensors}
+                    modifiers={[snapTopLeftToCursor]}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   >
