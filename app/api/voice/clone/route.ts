@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { elevenLabsAddVoiceFromFiles } from '@/lib/elevenlabs/server'
+import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
 import { canUseVoiceCloning, effectiveSubscriptionPlan, hasActivePaidSubscription } from '@/lib/subscription/plans'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
         { status: 503 },
       )
     }
+
+    await maybeSyncStripeSubscriptionFromStripe(session.user.id)
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },

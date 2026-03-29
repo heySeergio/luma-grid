@@ -1,6 +1,7 @@
 'use client'
 
 import { Volume2 } from 'lucide-react'
+import { stopAllTtsPlayback } from '@/lib/voice/speakClient'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Phrase, Profile } from '@/lib/supabase/types'
 
@@ -19,6 +20,7 @@ export default function QuickPhrases({ phrases, profile, onSpeak, speakText }: P
     if (speakText) {
       await speakText(phrase.text)
     } else {
+      stopAllTtsPlayback()
       const adapter = new WebSpeechAdapter()
       await adapter.speak(phrase.text, profile?.id || '')
     }

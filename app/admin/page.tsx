@@ -1581,72 +1581,6 @@ export default function AdminPage() {
               </div>
 
               <div className="app-panel rounded-2xl p-5">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <BarChart2 size={16} aria-hidden /> Léxico (observabilidad)
-                </h2>
-                {!selectedProfileId ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Selecciona un perfil para ver métricas.</p>
-                ) : lexiconObservabilityLoading ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Cargando métricas…</p>
-                ) : !lexiconObservability?.coverage ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Sin datos de cobertura.</p>
-                ) : (
-                  <div className="space-y-3 text-xs">
-                    <dl className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Cobertura resuelta</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {Math.round(lexiconObservability.coverage.coverageRatio * 100)}%
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Símbolos en revisión</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.coverage.reviewNeededCount}
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Usos (7 días)</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.usageSince7d}
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Transiciones (7 días)</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.transitionSince7d}
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Usos sin lexema (7 días)</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.unknownLexemeUsageSince7d}
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Tasa unknown (7 días)</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {Math.round(lexiconObservability.unknownUsageRate7d * 100)}%
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Overrides manuales / total</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {Math.round(lexiconObservability.overrideRate * 100)}%
-                        </dd>
-                      </div>
-                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
-                        <dt className="text-[var(--app-muted-foreground)]">Baja confianza (visibles)</dt>
-                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.lowConfidenceSymbols}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                )}
-              </div>
-
-              <div className="app-panel rounded-2xl p-5">
                 <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--app-muted-foreground)]">
                   <Settings size={16} /> Configuración
                 </h2>
@@ -1763,6 +1697,72 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+
+              <div className="app-panel rounded-2xl p-5">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <BarChart2 size={16} aria-hidden /> Léxico (observabilidad)
+                </h2>
+                {!selectedProfileId ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Selecciona un perfil para ver métricas.</p>
+                ) : lexiconObservabilityLoading ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Cargando métricas…</p>
+                ) : !lexiconObservability?.coverage ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Sin datos de cobertura.</p>
+                ) : (
+                  <div className="space-y-3 text-xs">
+                    <dl className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Cobertura resuelta</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.coverage.coverageRatio * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Símbolos en revisión</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.coverage.reviewNeededCount}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Usos (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.usageSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Transiciones (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.transitionSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Usos sin lexema (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.unknownLexemeUsageSince7d}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Tasa unknown (7 días)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.unknownUsageRate7d * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Overrides manuales / total</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {Math.round(lexiconObservability.overrideRate * 100)}%
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-[var(--app-surface-muted)] p-2.5">
+                        <dt className="text-[var(--app-muted-foreground)]">Baja confianza (visibles)</dt>
+                        <dd className="mt-0.5 font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          {lexiconObservability.lowConfidenceSymbols}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Main Area */}
@@ -2181,6 +2181,21 @@ export default function AdminPage() {
                   <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
+                      <p className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Plan actual:{' '}
+                        <span className="text-indigo-600 dark:text-indigo-400">
+                          Plan {subscriptionPlanLabel(voicePlan)}
+                        </span>
+                        {voiceSubscriptionActive ? (
+                          <span className="ml-2 inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                            Activo
+                          </span>
+                        ) : voicePlan !== 'free' ? (
+                          <span className="ml-2 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                            Sin pago activo
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {voicePlan === 'free'
                           ? (

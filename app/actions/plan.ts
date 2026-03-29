@@ -7,7 +7,12 @@ import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
 import { priceIdForCheckout } from '@/lib/stripe/plan-mapping'
 import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
-import { effectiveSubscriptionPlan, type SubscriptionPlan } from '@/lib/subscription/plans'
+import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
+import {
+  effectiveSubscriptionPlan,
+  hasActivePaidSubscription,
+  type SubscriptionPlan,
+} from '@/lib/subscription/plans'
 
 export type SubscriptionGateState =
   | { signedIn: false }
@@ -24,6 +29,8 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
     return { signedIn: false }
   }
 
+  await maybeSyncStripeSubscriptionFromStripe(session.user.id)
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -31,6 +38,8 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
       planSelectionCompletedAt: true,
       plan: true,
       stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      planExpiresAt: true,
     },
   })
 
@@ -40,7 +49,8 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
 
   return {
     signedIn: true,
-    needsPlanSelection: user.planSelectionCompletedAt == null,
+    needsPlanSelection:
+      user.planSelectionCompletedAt == null && !hasActivePaidSubscription(user),
     plan: effectiveSubscriptionPlan(user.email, user.plan),
     stripeCustomerId: user.stripeCustomerId,
   }

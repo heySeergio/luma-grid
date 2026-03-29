@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, House, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { db } from '@/lib/dexie/db'
+import { stopAllTtsPlayback } from '@/lib/voice/speakClient'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Phrase, Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
 
@@ -133,6 +135,7 @@ export default function PhraseBar({
       if (speakPhrase) {
         await speakPhrase(phrase)
       } else {
+        stopAllTtsPlayback()
         const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
         await adapter.speak(phrase, profile?.id || '')
       }
@@ -188,7 +191,20 @@ export default function PhraseBar({
                   key={`preview-${symbol.id}-${i}`}
                   className="ui-chip inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl px-3 py-2"
                 >
-                  <span className="text-2xl sm:text-3xl leading-none">{symbol.emoji || '📝'}</span>
+                  {symbol.imageUrl ? (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9">
+                      <Image
+                        src={symbol.imageUrl}
+                        alt={symbol.label}
+                        width={40}
+                        height={40}
+                        className="max-h-full max-w-full object-contain"
+                        unoptimized
+                      />
+                    </span>
+                  ) : (
+                    <span className="text-2xl sm:text-3xl leading-none">{symbol.emoji || '📝'}</span>
+                  )}
                   <span className="mt-1 text-[11px] sm:text-xs font-semibold text-white text-center leading-tight">
                     {symbol.label}
                   </span>

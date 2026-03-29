@@ -5,23 +5,34 @@ import {
   dbPlanFromCheckoutTier,
   resolveDbPlanFromSubscriptionItems,
 } from '@/lib/stripe/plan-mapping'
+import {
+  periodEndFromSubscription,
+  subscriptionIdFromInvoice,
+} from '@/lib/stripe/subscription-helpers'
 
-/** Fin de periodo de facturación (Stripe API reciente: por ítem de suscripción). */
-function periodEndFromSubscription(sub: Stripe.Subscription): Date | null {
-  const end = sub.items.data[0]?.current_period_end
-  if (typeof end === 'number' && end > 0) {
-    return new Date(end * 1000)
-  }
-  return null
-}
+async function findUserIdForStripeCustomer(
+  stripe: Stripe,
+  customerId: string,
+): Promise<string | null> {
+  const byId = await prisma.user.findFirst({
+    where: { stripeCustomerId: customerId },
+    select: { id: true },
+  })
+  if (byId) return byId.id
 
-function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
-  const parent = invoice.parent
-  if (parent?.type === 'subscription_details' && parent.subscription_details?.subscription) {
-    const subRef = parent.subscription_details.subscription
-    return typeof subRef === 'string' ? subRef : subRef.id
+  let customer: Stripe.Customer | Stripe.DeletedCustomer
+  try {
+    customer = await stripe.customers.retrieve(customerId)
+  } catch {
+    return null
   }
-  return null
+  if (customer.deleted || !('email' in customer) || !customer.email) return null
+
+  const u = await prisma.user.findFirst({
+    where: { email: { equals: customer.email.trim(), mode: 'insensitive' } },
+    select: { id: true },
+  })
+  return u?.id ?? null
 }
 
 export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<void> {
@@ -30,7 +41,21 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
-      const userId = session.metadata?.userId
+      let userId = session.metadata?.userId?.trim() || null
+      if (!userId) {
+        const email =
+          session.customer_email ??
+          (session.customer_details as { email?: string | null } | undefined)?.email ??
+          null
+        if (email) {
+          const u = await prisma.user.findFirst({
+            where: { email: { equals: email.trim(), mode: 'insensitive' } },
+            select: { id: true },
+          })
+          userId = u?.id ?? null
+        }
+      }
+
       const planTier = session.metadata?.planTier as 'voice' | 'identity' | undefined
       const cust = session.customer
       const customerId = typeof cust === 'string' ? cust : cust?.id
@@ -46,7 +71,7 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       let expires: Date | null = null
       if (subscriptionId) {
         const sub = await stripe.subscriptions.retrieve(subscriptionId, {
-          expand: ['items.data.price.product'],
+          expand: ['items.data.price'],
         })
         const resolved = resolveDbPlanFromSubscriptionItems(sub.items.data)
         if (resolved) planDb = resolved
@@ -75,22 +100,20 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const subscriptionId = subscriptionIdFromInvoice(invoice)
       if (!customerId || !subscriptionId) break
 
-      const user = await prisma.user.findFirst({
-        where: { stripeCustomerId: customerId },
-        select: { id: true },
-      })
-      if (!user) break
+      const userId = await findUserIdForStripeCustomer(stripe, customerId)
+      if (!userId) break
 
       const sub = await stripe.subscriptions.retrieve(subscriptionId, {
-        expand: ['items.data.price.product'],
+        expand: ['items.data.price'],
       })
       const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data)
       if (!planDb) break
 
       await prisma.user.update({
-        where: { id: user.id },
+        where: { id: userId },
         data: {
           plan: planDb,
+          stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
           planExpiresAt: periodEndFromSubscription(sub),
         },
@@ -103,18 +126,16 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id
       if (!customerId) break
 
-      const user = await prisma.user.findFirst({
-        where: { stripeCustomerId: customerId },
-        select: { id: true },
-      })
-      if (!user) break
+      const userId = await findUserIdForStripeCustomer(stripe, customerId)
+      if (!userId) break
 
       const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data)
       if (planDb) {
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: userId },
           data: {
             plan: planDb,
+            stripeCustomerId: customerId,
             stripeSubscriptionId: sub.id,
             planExpiresAt: periodEndFromSubscription(sub),
           },
@@ -125,9 +146,10 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const tier = sub.metadata?.planTier as string | undefined
       if (tier === 'voice' || tier === 'identity') {
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: userId },
           data: {
             plan: dbPlanFromCheckoutTier(tier),
+            stripeCustomerId: customerId,
             stripeSubscriptionId: sub.id,
             planExpiresAt: periodEndFromSubscription(sub),
           },
@@ -141,14 +163,11 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id
       if (!customerId) break
 
-      const user = await prisma.user.findFirst({
-        where: { stripeCustomerId: customerId },
-        select: { id: true },
-      })
-      if (!user) break
+      const userId = await findUserIdForStripeCustomer(stripe, customerId)
+      if (!userId) break
 
       await prisma.user.update({
-        where: { id: user.id },
+        where: { id: userId },
         data: {
           plan: 'libre',
           stripeSubscriptionId: null,

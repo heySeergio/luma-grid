@@ -9,6 +9,7 @@ import { ELEVENLABS_PRESET_VOICES } from '@/lib/voice/elevenlabsPresets'
 import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import type { TtsMode } from '@/lib/tts/types'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
+import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
 import {
   canUseElevenLabsPresets,
   canUseVoiceCloning,
@@ -47,6 +48,8 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
   if (!session?.user?.id) return null
 
   try {
+    await maybeSyncStripeSubscriptionFromStripe(session.user.id)
+
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
@@ -95,6 +98,8 @@ export async function updateVoiceSettings(data: {
   if (ttsMode !== 'browser' && ttsMode !== 'preset' && ttsMode !== 'custom') {
     throw new Error('Modo de voz no válido')
   }
+
+  await maybeSyncStripeSubscriptionFromStripe(session.user.id)
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },

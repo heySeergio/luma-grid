@@ -39,6 +39,23 @@ export function resolveDbPlanFromProductId(productId: string): 'voz' | 'identida
   return null
 }
 
+/** Mapeo por `price_…` cuando los product IDs en env no coinciden con Stripe. */
+export function resolveDbPlanFromPriceId(priceId: string): 'voz' | 'identidad' | null {
+  const candidates: Array<{ tier: 'voice' | 'identity'; interval: 'month' | 'year' }> = [
+    { tier: 'voice', interval: 'month' },
+    { tier: 'voice', interval: 'year' },
+    { tier: 'identity', interval: 'month' },
+    { tier: 'identity', interval: 'year' },
+  ]
+  for (const { tier, interval } of candidates) {
+    const configured = priceIdForCheckout(tier, interval)
+    if (configured && configured === priceId) {
+      return dbPlanFromCheckoutTier(tier)
+    }
+  }
+  return null
+}
+
 export function resolveDbPlanFromSubscriptionItems(
   items: Stripe.SubscriptionItem[],
 ): 'voz' | 'identidad' | null {
@@ -46,9 +63,15 @@ export function resolveDbPlanFromSubscriptionItems(
     const price = item.price
     const prod = price.product
     const pid = typeof prod === 'string' ? prod : (prod as Stripe.Product)?.id
-    if (!pid) continue
-    const resolved = resolveDbPlanFromProductId(pid)
-    if (resolved) return resolved
+    if (pid) {
+      const resolved = resolveDbPlanFromProductId(pid)
+      if (resolved) return resolved
+    }
+    const priceId = typeof price === 'string' ? price : price.id
+    if (priceId) {
+      const fromPrice = resolveDbPlanFromPriceId(priceId)
+      if (fromPrice) return fromPrice
+    }
   }
   return null
 }

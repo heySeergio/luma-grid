@@ -7,6 +7,7 @@ import { getCachedTtsAudio, setCachedTtsAudio, ttsCacheKey } from '@/lib/tts/ser
 import { currentBillingMonth } from '@/lib/tts/billing'
 import { computeTtsPhraseKey, MAX_PHRASE_CACHE_CHARS, normalizePhraseForCache } from '@/lib/tts/phraseNormalize'
 import type { TtsMode } from '@/lib/tts/types'
+import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
 import {
   canUseElevenLabsPresets,
   canUseVoiceCloning,
@@ -53,6 +54,8 @@ export async function POST(req: Request) {
         { status: 503 },
       )
     }
+
+    await maybeSyncStripeSubscriptionFromStripe(session.user.id)
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },

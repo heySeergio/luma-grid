@@ -10,12 +10,31 @@ export type SpeakVoicePrefs = {
 
 let currentAudio: HTMLAudioElement | null = null
 
+/**
+ * Se incrementa en `stopAllTtsPlayback` y al iniciar cada `speakText`, para que peticiones
+ * o fallbacks antiguos no reproduzcan audio ni Web Speech encima de una lectura nueva.
+ */
+let speakSessionId = 0
+
 /** Mismo límite que en /api/tts: si la petición tarda demasiado, se usa voz del navegador. */
 const ELEVENLABS_FETCH_TIMEOUT_MS = 7_000
 
-async function speakWithWebSpeech(text: string, profileId: string): Promise<void> {
+function cancelBrowserSpeechOnly(): void {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+}
+
+async function speakWithWebSpeech(
+  text: string,
+  profileId: string,
+  stillActive: () => boolean,
+): Promise<void> {
+  if (!stillActive()) return
   try {
+    if (!stillActive()) return
     const adapter = new WebSpeechAdapter(undefined, 1.0, 1.0)
+    if (!stillActive()) return
     await adapter.speak(text, profileId)
   } catch {
     /* Evita rechazos no capturados si Web Speech falla (p. ej. sin voces). */
@@ -23,18 +42,22 @@ async function speakWithWebSpeech(text: string, profileId: string): Promise<void
 }
 
 export function stopAllTtsPlayback(): void {
+  speakSessionId++
   if (currentAudio) {
-    currentAudio.pause()
-    currentAudio.src = ''
+    try {
+      currentAudio.pause()
+      currentAudio.src = ''
+    } catch {
+      /* ignore */
+    }
     currentAudio = null
   }
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel()
-  }
+  cancelBrowserSpeechOnly()
 }
 
 /**
  * TTS unificado: navegador (gratis) o audio desde POST /api/tts (ElevenLabs).
+ * Garantiza que no se solapen voz del sistema y ElevenLabs entre lecturas consecutivas o carreras fetch/audio.
  */
 export async function speakText(
   text: string,
@@ -45,9 +68,12 @@ export async function speakText(
   if (!trimmed) return
 
   stopAllTtsPlayback()
+  const mySessionId = speakSessionId
+  const stillActive = () => mySessionId === speakSessionId
 
   if (prefs.ttsMode === 'browser') {
-    await speakWithWebSpeech(trimmed, profileId)
+    if (!stillActive()) return
+    await speakWithWebSpeech(trimmed, profileId, stillActive)
     return
   }
 
@@ -65,35 +91,48 @@ export async function speakText(
 
     clearTimeout(timeoutId)
 
+    if (!stillActive()) return
+
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
       if (err.code === 'BROWSER_MODE' || err.code === 'ELEVENLABS_TIMEOUT' || res.status === 504) {
-        await speakWithWebSpeech(trimmed, profileId)
+        if (!stillActive()) return
+        await speakWithWebSpeech(trimmed, profileId, stillActive)
         return
       }
       throw new Error(typeof err.error === 'string' ? err.error : 'Error TTS')
     }
 
     const blob = await res.blob()
+
+    if (!stillActive()) return
+
     const url = URL.createObjectURL(blob)
+    if (!stillActive()) {
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    cancelBrowserSpeechOnly()
     const audio = new Audio(url)
     currentAudio = audio
 
     await new Promise<void>((resolve, reject) => {
       audio.onended = () => {
         URL.revokeObjectURL(url)
-        currentAudio = null
+        if (currentAudio === audio) currentAudio = null
         resolve()
       }
       audio.onerror = () => {
         URL.revokeObjectURL(url)
-        currentAudio = null
+        if (currentAudio === audio) currentAudio = null
         reject(new Error('Audio'))
       }
       void audio.play().catch(reject)
     })
   } catch (err) {
     clearTimeout(timeoutId)
+    if (!stillActive()) return
     const aborted =
       (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
       (err instanceof Error && err.name === 'AbortError')
@@ -102,6 +141,7 @@ export async function speakText(
     } else if (process.env.NODE_ENV === 'development') {
       console.warn('[speakText] Fallo TTS (red o API); intentando voz del sistema.', err)
     }
-    await speakWithWebSpeech(trimmed, profileId)
+    if (!stillActive()) return
+    await speakWithWebSpeech(trimmed, profileId, stillActive)
   }
 }

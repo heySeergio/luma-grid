@@ -1,6 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeLooseTextForSearch, normalizeTextForLexicon } from '@/lib/lexicon/normalize'
+import {
+  destinationDefiniteChunk,
+  shouldInsertDestinationArticleAfterIr,
+  type SurfaceContextToken,
+} from '@/lib/lexicon/phraseSurface'
 
 export type PersonKey = 'yo' | 'tu' | 'el' | 'nosotros' | 'vosotros' | 'ellos'
 export type ProfileGender = 'male' | 'female'
@@ -170,8 +175,13 @@ function formatAsQuestion(value: string) {
   return `¿${core}?`
 }
 
+/** Palabras que acaban en -ar/-er/-ir pero no son infinitivos (p. ej. «bar» → «al bar», no «a bar»). */
+const SURFACE_NOT_INFINITIVE = new Set(['bar', 'mar', 'cal', 'col', 'fin', 'mal', 'tal', 'par'])
+
 function looksLikeInfinitive(word: string) {
-  return /(ar|er|ir)$/.test(normalizeTextForLexicon(word))
+  const n = normalizeTextForLexicon(word)
+  if (SURFACE_NOT_INFINITIVE.has(n)) return false
+  return /(ar|er|ir)$/.test(n)
 }
 
 function capitalizeIfNeeded(token: string, shouldCapitalize: boolean) {
@@ -808,11 +818,15 @@ export async function conjugateWords(
     const surfaceOriginal = index === 0 && leadingQuestionToken ? leadingQuestionToken : token.original
     const isVerb = token.primaryPos === 'verb' || looksLikeInfinitive(token.original)
 
-    if ((token.lemma === 'ir' || token.normalized === 'ir') && next && (next.primaryPos === 'verb' || looksLikeInfinitive(next.original))) {
-      output.push(capitalizeIfNeeded(await conjugateResolvedVerb({ ...token, lemma: 'ir' }, person, formsByLexemeId, finiteTarget), startsSentence))
-      output.push('a')
-      keepNextInfinitive = true
-      continue
+    // «Ir a + infinitivo» como perífrasis de movimiento (voy a comer), no «quiero ir a comer».
+    if ((token.lemma === 'ir' || token.normalized === 'ir') && next && looksLikeInfinitive(next.original)) {
+      const prevOut = output[output.length - 1]?.toLowerCase() || ''
+      if (!KEEP_AS_INFINITIVE_AFTER.has(normalizeLooseTextForSearch(prevOut))) {
+        output.push(capitalizeIfNeeded(await conjugateResolvedVerb({ ...token, lemma: 'ir' }, person, formsByLexemeId, finiteTarget), startsSentence))
+        output.push('a')
+        keepNextInfinitive = true
+        continue
+      }
     }
 
     if (isVerb) {
@@ -823,7 +837,34 @@ export async function conjugateWords(
       }
 
       const previous = output[output.length - 1]?.toLowerCase() || ''
-      if (KEEP_AS_INFINITIVE_AFTER.has(normalizeLooseTextForSearch(previous))) {
+      const prevKey = normalizeLooseTextForSearch(previous)
+
+      // Tras «ir» en infinitivo: «a» + siguiente infinitivo (querer ir a comer).
+      if (prevKey === 'ir' && looksLikeInfinitive(token.original)) {
+        output.push('a')
+        output.push(capitalizeIfNeeded(token.lemma ?? surfaceOriginal, startsSentence))
+        continue
+      }
+
+      // Tras «ir» en infinitivo: destino nominal; el léxico a veces marca «Bar» como verbo.
+      if (prevKey === 'ir' && !looksLikeInfinitive(token.original)) {
+        const forcedNoun = {
+          ...token,
+          primaryPos: 'noun' as const,
+          gender: token.gender ?? inferHeuristicGender(token.normalized),
+          number: token.number ?? inferHeuristicNumber(token.normalized),
+        }
+        const tokensForSurface: SurfaceContextToken[] = resolvedTokens.map((t, i) =>
+          i === index ? forcedNoun : t,
+        )
+        if (shouldInsertDestinationArticleAfterIr(tokensForSurface, index)) {
+          output.push(destinationDefiniteChunk(forcedNoun))
+        }
+        output.push(surfaceOriginal.trim().toLowerCase())
+        continue
+      }
+
+      if (KEEP_AS_INFINITIVE_AFTER.has(prevKey)) {
         output.push(capitalizeIfNeeded(token.lemma ?? surfaceOriginal, startsSentence))
         continue
       }
@@ -852,6 +893,13 @@ export async function conjugateWords(
         ? agreeDeterminerSurface(token, agreement.gender, agreement.number)
         : surfaceOriginal
       output.push(capitalizeIfNeeded(determiner, startsSentence))
+      continue
+    }
+
+    if (token.primaryPos === 'noun' && shouldInsertDestinationArticleAfterIr(resolvedTokens, index)) {
+      output.push(destinationDefiniteChunk(token))
+      const lowerNoun = surfaceOriginal.trim().toLowerCase()
+      output.push(startsSentence ? capitalizeIfNeeded(lowerNoun, true) : lowerNoun)
       continue
     }
 
