@@ -38,7 +38,8 @@ import {
   resolveSymbolColor,
 } from '@/lib/ui/symbolColors'
 import { getSpanishPosLabel } from '@/lib/lexicon/posLabels'
-import { femaleVoices, maleVoices } from '@/lib/voice/elevenlabsPresets'
+import { closeAudioContextSafe, connectAudioElementGain } from '@/lib/voice/audioGain'
+import { femaleVoices, getPresetPlaybackGain, maleVoices } from '@/lib/voice/elevenlabsPresets'
 import type { TtsMode } from '@/lib/tts/types'
 import {
   blobToCloneFile,
@@ -433,6 +434,7 @@ export default function AdminPage() {
   const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null)
   const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewAudioContextRef = useRef<AudioContext | null>(null)
   const previewBlobUrlRef = useRef<string | null>(null)
 
   const canUsePresetVoices = voiceSubscriptionActive && (voicePlan === 'voice' || voicePlan === 'identity')
@@ -605,6 +607,8 @@ export default function AdminPage() {
 
   const stopVoicePreviewAndCloneCleanup = useCallback(() => {
     abortCloneRecording()
+    closeAudioContextSafe(previewAudioContextRef.current)
+    previewAudioContextRef.current = null
     previewAudioRef.current?.pause()
     previewAudioRef.current = null
     if (previewBlobUrlRef.current) {
@@ -656,6 +660,8 @@ export default function AdminPage() {
 
   const playPresetPreview = useCallback(async (voiceId: string) => {
     try {
+      closeAudioContextSafe(previewAudioContextRef.current)
+      previewAudioContextRef.current = null
       previewAudioRef.current?.pause()
       if (previewBlobUrlRef.current) {
         URL.revokeObjectURL(previewBlobUrlRef.current)
@@ -685,14 +691,19 @@ export default function AdminPage() {
       previewBlobUrlRef.current = url
       const audio = new Audio(url)
       previewAudioRef.current = audio
+      previewAudioContextRef.current = connectAudioElementGain(audio, getPresetPlaybackGain(voiceId))
       setPreviewPlayingVoiceId(voiceId)
       audio.onended = () => {
+        closeAudioContextSafe(previewAudioContextRef.current)
+        previewAudioContextRef.current = null
         URL.revokeObjectURL(url)
         previewBlobUrlRef.current = null
         previewAudioRef.current = null
         setPreviewPlayingVoiceId((cur) => (cur === voiceId ? null : cur))
       }
       audio.onerror = () => {
+        closeAudioContextSafe(previewAudioContextRef.current)
+        previewAudioContextRef.current = null
         URL.revokeObjectURL(url)
         previewBlobUrlRef.current = null
         previewAudioRef.current = null

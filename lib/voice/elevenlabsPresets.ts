@@ -75,3 +75,17 @@ export const ELEVENLABS_PRESET_VOICES: ElevenLabsPresetVoice[] = [
 export function findPresetByElevenId(elevenVoiceId: string): ElevenLabsPresetVoice | undefined {
   return ELEVENLABS_PRESET_VOICES.find((v) => v.elevenVoiceId === elevenVoiceId)
 }
+
+/**
+ * Ganancia de reproducción para voces naturales (preset) que suenan más bajas que el resto.
+ * Base 1 = nivel nominal del MP3 de ElevenLabs.
+ */
+export function getPresetPlaybackGain(elevenVoiceId: string | null | undefined): number {
+  if (!elevenVoiceId) return 1
+  // Femenino Voz 5: +50%
+  if (elevenVoiceId === femaleVoices[4].voiceId) return 1.5
+  // Masculino Voz 4: +50%, Voz 5: +100%
+  if (elevenVoiceId === maleVoices[3].voiceId) return 1.5
+  if (elevenVoiceId === maleVoices[4].voiceId) return 2
+  return 1
+}
