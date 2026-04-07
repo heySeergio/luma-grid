@@ -44,6 +44,10 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
 
   return (
     <button
+      type="button"
+      data-symbol-id={symbol.id}
+      data-scanner-y={symbol.positionY}
+      data-scanner-x={symbol.positionX}
       onClick={handleClick}
       disabled={isLocked}
       className={`

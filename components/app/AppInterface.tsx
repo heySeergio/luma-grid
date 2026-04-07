@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import SymbolGrid from './SymbolGrid'
 import PhraseBar from './PhraseBar'
 import Keyboard from './Keyboard'
 import QuickPhrases from './QuickPhrases'
+import PhraseCompletionChips from './PhraseCompletionChips'
 import ScannerOverlay from './ScannerOverlay'
 import ProfileSelector from './ProfileSelector'
 import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
@@ -12,7 +13,8 @@ import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymb
 import { detectQuestionType } from '@/lib/lexicon/questions'
 import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
-import { getPinnedPhrases, saveQuickPhrase } from '@/app/actions/phrases'
+import { getPinnedPhrases, getFrequentPhrases, saveQuickPhrase } from '@/app/actions/phrases'
+import { getPhraseCompletionSuggestions, type PhraseCompletionChip } from '@/app/actions/phraseCompletion'
 import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
 import {
   enqueuePendingUsageEvent,
@@ -50,6 +52,10 @@ export default function AppInterface() {
   const [symbols, setSymbols] = useState<Symbol[]>([])
   const [selectedSymbols, setSelectedSymbols] = useState<Symbol[]>([])
   const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
+  const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>([])
+  /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
+  const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
+  const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null)
   const [activeTab, setActiveTab] = useState<TabMode>('grid')
   const [, setIsOnline] = useState(true)
@@ -62,9 +68,11 @@ export default function AppInterface() {
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
 
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
-  const mainOrderedSymbols = shouldUseDefaultGridTemplate
-    ? computeMainGrid(symbols, activeFolder)
-    : symbols
+  const mainOrderedSymbols = useMemo(() => {
+    return shouldUseDefaultGridTemplate
+      ? computeMainGrid(symbols, activeFolder)
+      : symbols
+  }, [shouldUseDefaultGridTemplate, symbols, activeFolder])
 
   const speakSelectedWord = useCallback((text: string) => {
     if (!text.trim()) return
@@ -107,6 +115,18 @@ export default function AppInterface() {
     category: symbol.category ?? null,
     state: symbol.state,
   }), [])
+
+  const toPredictionFromPhraseSelection = useCallback(
+    (symbol: Symbol & { sourceSymbolId?: string }): PredictionInputSymbol => ({
+      id: symbol.sourceSymbolId ?? symbol.id,
+      label: symbol.label,
+      posType: symbol.posType,
+      lexemeId: symbol.lexemeId ?? null,
+      category: symbol.category ?? null,
+      state: symbol.state,
+    }),
+    [],
+  )
 
   const persistSymbolUsage = useCallback((payload: PendingUsageEventPayload) => {
     void (async () => {
@@ -183,6 +203,16 @@ export default function AppInterface() {
     }
   }, [profile])
 
+  const loadFrequentPhrases = useCallback(async () => {
+    if (!profile) return
+    try {
+      const rows = (await getFrequentPhrases(profile.id, 5)) as Phrase[]
+      setFrequentPhrases(rows)
+    } catch (err) {
+      console.error('Error fetching frequent phrases', err)
+    }
+  }, [profile])
+
   const loadAccessConfig = useCallback(async () => {
     setAccessConfig(null)
   }, [])
@@ -208,22 +238,23 @@ export default function AppInterface() {
     setFolderHistory([])
     void loadSymbols()
     void loadPinnedPhrases()
+    void loadFrequentPhrases()
     void loadAccessConfig()
 
     return subscribeToChanges()
-  }, [profile, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadAccessConfig, subscribeToChanges])
+  }, [profile, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadFrequentPhrases, loadAccessConfig, subscribeToChanges])
 
   const handleSymbolSelect = useCallback(async (symbol: Symbol) => {
     const normalizedLabel = symbol.label.toLowerCase()
     if (activeFolder === 'Más verbos' && normalizedLabel === 'más') {
-      setFolderHistory(prev => [...prev, 'Más verbos'])
+      setFolderHistory(prev => [...(prev ?? []), 'Más verbos'])
       setActiveFolder('Más verbos · página 2')
       setPredictedIds([])
       return
     }
 
     if (DEFAULT_FOLDER_CONTENTS[symbol.label] && symbol.label !== activeFolder) {
-      setFolderHistory(prev => (activeFolder ? [...prev, activeFolder] : prev))
+      setFolderHistory(prev => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
       setActiveFolder(symbol.label)
       setPredictedIds([])
       return
@@ -341,7 +372,36 @@ export default function AppInterface() {
       console.error('Error calculating predictions', err)
       setPredictedIds([])
     }
-  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, persistSymbolUsage, profile, selectedSymbols, setFolderHistory, speakSelectedWord, symbols])
+  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, persistSymbolUsage, profile, selectedSymbols, speakSelectedWord, symbols])
+
+  useEffect(() => {
+    if (!profile || selectedSymbols.length === 0) {
+      // Evitar setState con [] en cada render: nuevo [] dispara re-render y bucle infinito en el efecto.
+      setCompletionChips((prev) => {
+        const safe = prev ?? []
+        return safe.length === 0 ? safe : []
+      })
+      return
+    }
+    const inputs = selectedSymbols.map((s) =>
+      toPredictionFromPhraseSelection(s as Symbol & { sourceSymbolId?: string }),
+    )
+    const candidates = mainOrderedSymbols.map((c) => ({
+      id: c.id,
+      label: c.label,
+      posType: c.posType,
+      lexemeId: c.lexemeId ?? null,
+      category: c.category ?? null,
+      state: c.state,
+    }))
+    let cancelled = false
+    void getPhraseCompletionSuggestions(profile.id, inputs, candidates).then((chips) => {
+      if (!cancelled) setCompletionChips(chips)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile, selectedSymbols, mainOrderedSymbols, toPredictionFromPhraseSelection])
 
   const handleDeleteLast = () => {
     setSelectedSymbols(prev => prev.slice(0, -1))
@@ -357,60 +417,138 @@ export default function AppInterface() {
     resetPhraseTracking()
   }
 
-  const handleQuickPhrase = async (phrase: Phrase) => {
-    if (!profile) return
-    try {
-      await saveQuickPhrase(profile.id, phrase.text, phrase.symbolsUsed)
-    } catch (err) {
-      console.error('Error saving quick phrase', err)
-    }
-  }
+  const handleRemoveSymbol = useCallback((phraseEntryId: string) => {
+    setSelectedSymbols((prev) => prev.filter((s) => s.id !== phraseEntryId))
+    setPredictedIds([])
+  }, [])
+
+  const handleCompletionChipPick = useCallback(
+    (symbolId: string) => {
+      const sym = mainOrderedSymbols.find((s) => s.id === symbolId)
+      if (sym) void handleSymbolSelect(sym)
+    },
+    [mainOrderedSymbols, handleSymbolSelect],
+  )
+
+  const handleAfterSpeak = useCallback(
+    async (payload: { text: string; symbolsUsed: { id: string; label: string }[] }) => {
+      if (!profile) return
+      try {
+        await saveQuickPhrase(profile.id, payload.text, payload.symbolsUsed)
+        await loadFrequentPhrases()
+      } catch (err) {
+        console.error('Error saving phrase after speak', err)
+      }
+    },
+    [profile, loadFrequentPhrases],
+  )
+
+  const buildSelectionFromPhrase = useCallback(
+    (phrase: Phrase): Symbol[] => {
+      if (!profile) return []
+      const gridIdFallback = symbols[0]?.gridId ?? `grid-${profile.id}`
+      return phrase.symbolsUsed.map((used, i) => {
+        const gridSym = symbols.find((s) => s.id === used.id)
+        if (gridSym) {
+          return {
+            ...gridSym,
+            label: used.label,
+            sourceSymbolId: gridSym.id,
+            id: `${gridSym.id}-quick-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+          } as Symbol
+        }
+        return {
+          id: `orphan-${used.id}-${Date.now()}-${i}`,
+          gridId: gridIdFallback,
+          label: used.label,
+          category: 'General',
+          posType: 'other',
+          positionX: 0,
+          positionY: 0,
+          color: '#94a3b8',
+          hidden: false,
+          state: 'visible',
+          sourceSymbolId: used.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as Symbol
+      })
+    },
+    [profile, symbols],
+  )
+
+  const handleQuickPhraseTap = useCallback(
+    async (phrase: Phrase) => {
+      if (!profile) return
+      const t = phrase.text?.trim()
+      if (!t) return
+      setSelectedSymbols(buildSelectionFromPhrase(phrase))
+      setPredictedIds([])
+      resetPhraseTracking()
+      setPhraseCompositionReset((k) => k + 1)
+      try {
+        await speakText(t, profile.id, voicePrefs)
+        await saveQuickPhrase(profile.id, phrase.text, phrase.symbolsUsed)
+        await loadFrequentPhrases()
+      } catch (err) {
+        console.error('Error en frase rápida/frecuente:', err)
+      }
+    },
+    [profile, buildSelectionFromPhrase, voicePrefs, loadFrequentPhrases, resetPhraseTracking],
+  )
 
   const cellSize = accessConfig?.grid_cell_size || 'medium'
   const showScanner = accessConfig?.show_scanner || false
-  const scannerPattern = accessConfig?.scanner_pattern || 'row'
+  /** `cell` = recorrido celda a celda (comportamiento clásico lineal). `row` / `quadrant` = escaneo en dos pasos. */
+  const scannerPattern = accessConfig?.scanner_pattern || 'cell'
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
     <div className="theme-page-shell flex h-screen flex-col overflow-hidden text-slate-900 dark:text-slate-100">
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
-        <QuickPhrases
-          phrases={pinnedPhrases}
-          profile={profile}
-          onSpeak={handleQuickPhrase}
-          speakText={(text) => speakText(text, profile?.id ?? '', voicePrefs)}
-        />
+        <QuickPhrases phrases={pinnedPhrases} onSpeak={handleQuickPhraseTap} />
       )}
 
-      {/* Phrase bar */}
-      <PhraseBar
-        symbols={selectedSymbols}
-        profile={profile}
-        voiceConfig={null}
-        canGoBackFolder={activeFolder !== null}
-        onGoBackFolder={() => {
-          setFolderHistory(prev => {
-            if (prev.length === 0) {
-              setActiveFolder(null)
-              return prev
-            }
-            const next = [...prev]
-            const previousFolder = next.pop() || null
-            setActiveFolder(previousFolder)
-            return next
-          })
-        }}
-        onGoHome={() => {
-          setActiveFolder(null)
-          setFolderHistory([])
-          setActiveTab('grid')
-        }}
-        onDeleteLast={handleDeleteLast}
-        onClearAll={handleClearAll}
-        onPhraseSaved={loadPinnedPhrases}
-        speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
-      />
+      {frequentPhrases.length > 0 && (
+        <QuickPhrases title="Frecuentes" phrases={frequentPhrases} onSpeak={handleQuickPhraseTap} />
+      )}
+
+      {/* Phrase bar + sugerencias */}
+      <div className="flex shrink-0 flex-col">
+        <PhraseBar
+          symbols={selectedSymbols}
+          profile={profile}
+          voiceConfig={null}
+          canGoBackFolder={activeFolder !== null}
+          onGoBackFolder={() => {
+            setFolderHistory(prev => {
+              const stack = prev ?? []
+              if (stack.length === 0) {
+                setActiveFolder(null)
+                return stack
+              }
+              const next = [...stack]
+              const previousFolder = next.pop() || null
+              setActiveFolder(previousFolder)
+              return next
+            })
+          }}
+          onGoHome={() => {
+            setActiveFolder(null)
+            setFolderHistory([])
+            setActiveTab('grid')
+          }}
+          onDeleteLast={handleDeleteLast}
+          onClearAll={handleClearAll}
+          onPhraseSaved={loadPinnedPhrases}
+          onRemoveSymbol={handleRemoveSymbol}
+          onAfterSpeak={handleAfterSpeak}
+          speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
+          externalCompositionReset={phraseCompositionReset}
+        />
+        <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
+      </div>
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden relative">

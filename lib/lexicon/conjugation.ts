@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
-import { normalizeLooseTextForSearch, normalizeTextForLexicon } from '@/lib/lexicon/normalize'
+import { IRREGULAR_VERBS_PRESENT } from '@/lib/lexicon/irregularVerbsPresent'
+import { normalizeLooseTextForSearch, normalizeTextForLexicon, stripDiacritics } from '@/lib/lexicon/normalize'
 import {
-  destinationDefiniteChunk,
+  applySpanishPrepositionContractions,
+  destinationPrepositionChunkForIrNoun,
   shouldInsertDestinationArticleAfterIr,
   type SurfaceContextToken,
 } from '@/lib/lexicon/phraseSurface'
@@ -81,22 +83,7 @@ const REGULAR_ENDINGS: Record<'ar' | 'er' | 'ir', Record<PersonKey, string>> = {
   ir: { yo: 'o', tu: 'es', el: 'e', nosotros: 'imos', vosotros: 'is', ellos: 'en' },
 }
 
-const HARD_CODED_IRREGULARS: Record<string, Record<PersonKey, string>> = {
-  ser: { yo: 'soy', tu: 'eres', el: 'es', nosotros: 'somos', vosotros: 'sois', ellos: 'son' },
-  estar: { yo: 'estoy', tu: 'estás', el: 'está', nosotros: 'estamos', vosotros: 'estáis', ellos: 'están' },
-  ir: { yo: 'voy', tu: 'vas', el: 'va', nosotros: 'vamos', vosotros: 'vais', ellos: 'van' },
-  tener: { yo: 'tengo', tu: 'tienes', el: 'tiene', nosotros: 'tenemos', vosotros: 'tenéis', ellos: 'tienen' },
-  hacer: { yo: 'hago', tu: 'haces', el: 'hace', nosotros: 'hacemos', vosotros: 'hacéis', ellos: 'hacen' },
-  querer: { yo: 'quiero', tu: 'quieres', el: 'quiere', nosotros: 'queremos', vosotros: 'queréis', ellos: 'quieren' },
-  poder: { yo: 'puedo', tu: 'puedes', el: 'puede', nosotros: 'podemos', vosotros: 'podéis', ellos: 'pueden' },
-  venir: { yo: 'vengo', tu: 'vienes', el: 'viene', nosotros: 'venimos', vosotros: 'venís', ellos: 'vienen' },
-  decir: { yo: 'digo', tu: 'dices', el: 'dice', nosotros: 'decimos', vosotros: 'decís', ellos: 'dicen' },
-  poner: { yo: 'pongo', tu: 'pones', el: 'pone', nosotros: 'ponemos', vosotros: 'ponéis', ellos: 'ponen' },
-  dar: { yo: 'doy', tu: 'das', el: 'da', nosotros: 'damos', vosotros: 'dais', ellos: 'dan' },
-  ver: { yo: 'veo', tu: 'ves', el: 've', nosotros: 'vemos', vosotros: 'veis', ellos: 'ven' },
-  jugar: { yo: 'juego', tu: 'juegas', el: 'juega', nosotros: 'jugamos', vosotros: 'jugáis', ellos: 'juegan' },
-  dormir: { yo: 'duermo', tu: 'duermes', el: 'duerme', nosotros: 'dormimos', vosotros: 'dormís', ellos: 'duermen' },
-}
+const HARD_CODED_IRREGULARS: Record<string, Record<PersonKey, string>> = IRREGULAR_VERBS_PRESENT
 
 const KEEP_AS_INFINITIVE_AFTER = new Set([
   'quiero', 'quieres', 'quiere', 'queremos', 'queréis', 'quieren',
@@ -104,6 +91,8 @@ const KEEP_AS_INFINITIVE_AFTER = new Set([
   'debo', 'debes', 'debe', 'debemos', 'debéis', 'deben',
   'necesito', 'necesitas', 'necesita', 'necesitamos', 'necesitáis', 'necesitan',
   'voy', 'vas', 'va', 'vamos', 'vais', 'van',
+  // Perífrasis «acabar de + inf.», «antes de + inf.», «después de + inf.», etc.
+  'de',
 ])
 
 const GENDER_PAIRS: Array<[string, string]> = [
@@ -189,6 +178,15 @@ function capitalizeIfNeeded(token: string, shouldCapitalize: boolean) {
   return token.charAt(0).toUpperCase() + token.slice(1)
 }
 
+/** Partículas del tablero (DE, A, Y…) en minúscula dentro de la frase. */
+function normalizeConnectorSurface(surface: string, startsSentence: boolean) {
+  const t = surface.trim()
+  if (startsSentence || t.length === 0) return t
+  const key = normalizeLooseTextForSearch(t)
+  if (key === 'de' || key === 'a' || key === 'y' || key === 'o') return t.toLowerCase()
+  return t
+}
+
 function fallbackConjugateVerb(infinitive: string, person: PersonKey) {
   const normalized = normalizeTextForLexicon(infinitive)
   const irregular = HARD_CODED_IRREGULARS[normalized]
@@ -257,6 +255,18 @@ function fallbackPresentSubjunctive(infinitive: string, person: PersonKey) {
     dar: { yo: 'dé', tu: 'des', el: 'dé', nosotros: 'demos', vosotros: 'deis', ellos: 'den' },
     saber: { yo: 'sepa', tu: 'sepas', el: 'sepa', nosotros: 'sepamos', vosotros: 'sepáis', ellos: 'sepan' },
     haber: { yo: 'haya', tu: 'hayas', el: 'haya', nosotros: 'hayamos', vosotros: 'hayáis', ellos: 'hayan' },
+    tener: { yo: 'tenga', tu: 'tengas', el: 'tenga', nosotros: 'tengamos', vosotros: 'tengáis', ellos: 'tengan' },
+    hacer: { yo: 'haga', tu: 'hagas', el: 'haga', nosotros: 'hagamos', vosotros: 'hagáis', ellos: 'hagan' },
+    decir: { yo: 'diga', tu: 'digas', el: 'diga', nosotros: 'digamos', vosotros: 'digáis', ellos: 'digan' },
+    venir: { yo: 'venga', tu: 'vengas', el: 'venga', nosotros: 'vengamos', vosotros: 'vengáis', ellos: 'vengan' },
+    poner: { yo: 'ponga', tu: 'pongas', el: 'ponga', nosotros: 'pongamos', vosotros: 'pongáis', ellos: 'pongan' },
+    salir: { yo: 'salga', tu: 'salgas', el: 'salga', nosotros: 'salgamos', vosotros: 'salgáis', ellos: 'salgan' },
+    traer: { yo: 'traiga', tu: 'traigas', el: 'traiga', nosotros: 'traigamos', vosotros: 'traigáis', ellos: 'traigan' },
+    poder: { yo: 'pueda', tu: 'puedas', el: 'pueda', nosotros: 'podamos', vosotros: 'podáis', ellos: 'puedan' },
+    querer: { yo: 'quiera', tu: 'quieras', el: 'quiera', nosotros: 'queramos', vosotros: 'queráis', ellos: 'quieran' },
+    conocer: { yo: 'conozca', tu: 'conozcas', el: 'conozca', nosotros: 'conozcamos', vosotros: 'conozcáis', ellos: 'conozcan' },
+    caber: { yo: 'quepa', tu: 'quepas', el: 'quepa', nosotros: 'quepamos', vosotros: 'quepáis', ellos: 'quepan' },
+    valer: { yo: 'valga', tu: 'valgas', el: 'valga', nosotros: 'valgamos', vosotros: 'valgáis', ellos: 'valgan' },
   }
   const si = subjIrreg[normalized]
   if (si) return si[person]
@@ -313,8 +323,11 @@ function inferHeuristicNumber(normalized: string) {
 }
 
 function inferHeuristicGender(normalized: string) {
-  if (normalized.endsWith('a') || normalized.endsWith('as')) return 'fem'
-  if (normalized.endsWith('o') || normalized.endsWith('os')) return 'masc'
+  const n = normalizeTextForLexicon(normalized)
+  if (n.endsWith('a') || n.endsWith('as')) return 'fem'
+  if (n.endsWith('o') || n.endsWith('os')) return 'masc'
+  const strip = stripDiacritics(n)
+  if (/(?:cion|sion|dad|tud|umbre)$/.test(strip)) return 'fem'
   return null
 }
 
@@ -818,6 +831,17 @@ export async function conjugateWords(
     const surfaceOriginal = index === 0 && leadingQuestionToken ? leadingQuestionToken : token.original
     const isVerb = token.primaryPos === 'verb' || looksLikeInfinitive(token.original)
 
+    // «Ir al mercado» / «ir a mercado» sin sujeto: infinitivo «ir», no «voy» (sigue «ir a comer» → voy a comer).
+    if (
+      index === 0 &&
+      (token.lemma === 'ir' || token.normalized === 'ir') &&
+      next &&
+      !looksLikeInfinitive(next.original)
+    ) {
+      output.push(capitalizeIfNeeded('ir', startsSentence))
+      continue
+    }
+
     // «Ir a + infinitivo» como perífrasis de movimiento (voy a comer), no «quiero ir a comer».
     if ((token.lemma === 'ir' || token.normalized === 'ir') && next && looksLikeInfinitive(next.original)) {
       const prevOut = output[output.length - 1]?.toLowerCase() || ''
@@ -858,7 +882,7 @@ export async function conjugateWords(
           i === index ? forcedNoun : t,
         )
         if (shouldInsertDestinationArticleAfterIr(tokensForSurface, index)) {
-          output.push(destinationDefiniteChunk(forcedNoun))
+          output.push(destinationPrepositionChunkForIrNoun(tokensForSurface, index, forcedNoun))
         }
         output.push(surfaceOriginal.trim().toLowerCase())
         continue
@@ -897,15 +921,18 @@ export async function conjugateWords(
     }
 
     if (token.primaryPos === 'noun' && shouldInsertDestinationArticleAfterIr(resolvedTokens, index)) {
-      output.push(destinationDefiniteChunk(token))
+      output.push(destinationPrepositionChunkForIrNoun(resolvedTokens, index, token))
       const lowerNoun = surfaceOriginal.trim().toLowerCase()
       output.push(startsSentence ? capitalizeIfNeeded(lowerNoun, true) : lowerNoun)
       continue
     }
 
-    output.push(capitalizeIfNeeded(surfaceOriginal, startsSentence))
+    output.push(capitalizeIfNeeded(normalizeConnectorSurface(surfaceOriginal, startsSentence), startsSentence))
   }
 
-  const phrase = output.join(' ')
-  return leadingQuestionToken ? formatAsQuestion(phrase) : phrase
+  const raw = output.join(' ')
+  const phrase = applySpanishPrepositionContractions(
+    leadingQuestionToken ? formatAsQuestion(raw) : raw,
+  )
+  return phrase
 }

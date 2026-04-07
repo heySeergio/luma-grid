@@ -3,6 +3,7 @@
 import { useRef, useCallback } from 'react'
 import { Apple, BookOpen, Heart, MapPin, Sparkles, Users } from 'lucide-react'
 import SymbolCell from './SymbolCell'
+import { shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
 import type { Symbol } from '@/lib/supabase/types'
 import type { GridCellSize } from '@/lib/supabase/types'
 
@@ -117,13 +118,13 @@ export default function SymbolGrid({
         )
       })}
 
-      {sorted.map(symbol => {
+      {sorted.map((symbol, idx) => {
         const posX = symbol.positionX
         const posY = symbol.positionY
 
         return (
           <div
-            key={symbol.id}
+            key={`${symbol.gridId ?? 'main'}-${posX}-${posY}-${symbol.id}-${idx}`}
             style={{
               gridColumnStart: posX + 1,
               gridRowStart: posY + 1,
@@ -136,7 +137,7 @@ export default function SymbolGrid({
                 isPredicted={predictedIds.includes(symbol.id)}
                 cellSize={cellSize}
                 sizeClass={sizeMap[cellSize]}
-                isFolder={symbol.id.startsWith('folder-')}
+                isFolder={shouldShowFolderBadge(symbol)}
                 onSelect={handleSelect}
               />
             )}

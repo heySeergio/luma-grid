@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { BarChart2, Check, Columns2, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BarChart2, Check, Columns2, Download, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
 import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
-import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
+import { getLexiconCatalogStats, getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid } from '@/lib/data/defaultSymbols'
 import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfileGender, updateProfileGridSize } from '@/app/actions/profiles'
+import { exportProfileBoardJson } from '@/app/actions/profileExport'
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
 import { setProfileGender } from '@/lib/profileGender'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -77,6 +78,13 @@ const ADMIN_GRID_DIM_MIN = 1
 const ADMIN_GRID_DIM_MAX = 20
 /** Ancho fijo de celda en vista previa admin; la altura sigue aspect-video (16/9). */
 const ADMIN_PREVIEW_CELL_COL_WIDTH = '7.25rem'
+
+const COVERAGE_REVIEW_REASON_LABEL = {
+  sin_lexema: 'Sin lexema',
+  baja_confianza: 'Baja confianza',
+  tipo_generico: 'Tipo genérico',
+  normalizacion_pendiente: 'Normalización pendiente',
+} as const
 
 /** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
 const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...'])
@@ -373,6 +381,7 @@ export default function AdminPage() {
   const [selectedProfileId, setSelectedProfileId] = useState('')
   const [lexiconObservability, setLexiconObservability] = useState<Awaited<ReturnType<typeof getProfileLexiconObservability>>>(null)
   const [lexiconObservabilityLoading, setLexiconObservabilityLoading] = useState(false)
+  const [lexiconCatalogStats, setLexiconCatalogStats] = useState<Awaited<ReturnType<typeof getLexiconCatalogStats>>>(null)
   const [symbols, setSymbols] = useState<AdminSymbol[]>([])
   const [symbolsBaselineJson, setSymbolsBaselineJson] = useState('')
   const symbolsProfileLoadGen = useRef(0)
@@ -439,6 +448,14 @@ export default function AdminPage() {
 
   const canUsePresetVoices = voiceSubscriptionActive && (voicePlan === 'voice' || voicePlan === 'identity')
   const canUseCustomVoice = voiceSubscriptionActive && voicePlan === 'identity'
+
+  const voiceTtsQuotaExceeded = useMemo(
+    () =>
+      voiceSubscriptionActive &&
+      voiceMonthlyLimit > 0 &&
+      voiceCharsUsed > voiceMonthlyLimit,
+    [voiceSubscriptionActive, voiceMonthlyLimit, voiceCharsUsed],
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -896,6 +913,20 @@ export default function AdminPage() {
     void fetchSymbols()
   }, [selectedProfileId])
 
+  useEffect(() => {
+    let cancelled = false
+    void getLexiconCatalogStats()
+      .then((data) => {
+        if (!cancelled) setLexiconCatalogStats(data)
+      })
+      .catch(() => {
+        if (!cancelled) setLexiconCatalogStats(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const selectedProfile = profiles.find(p => p.id === selectedProfileId)
 
   useEffect(() => {
@@ -1058,6 +1089,30 @@ export default function AdminPage() {
       setSavingAccountSettings(false)
     }
   }
+
+  const handleExportBoard = useCallback(async () => {
+    if (!selectedProfileId) return
+    try {
+      const res = await exportProfileBoardJson(selectedProfileId)
+      if (!res.ok) {
+        setStatus(`❌ ${res.error}`)
+        return
+      }
+      const blob = new Blob([res.data], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setStatus('✅ Tablero exportado (JSON).')
+    } catch (err) {
+      console.error(err)
+      setStatus('❌ Error al exportar el tablero.')
+    }
+  }, [selectedProfileId])
 
   const handleSaveAll = async () => {
     if (!selectedProfileId || savingSymbols) return
@@ -1442,7 +1497,7 @@ export default function AdminPage() {
       <div className="mx-auto min-w-0 max-w-7xl">
         <div className="mb-6 min-w-0 sm:mb-8">
           <header className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
-            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-start lg:gap-x-6 lg:gap-y-3">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-start lg:gap-x-6 lg:gap-y-3">
               <div className="flex min-w-0 flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center lg:col-span-1">
                 <BrandLockup
                   href="/"
@@ -1469,6 +1524,16 @@ export default function AdminPage() {
               </Link>
               <button
                 type="button"
+                onClick={() => void handleExportBoard()}
+                disabled={!selectedProfileId || loadingData || symbolsLoadPending}
+                title={!selectedProfileId ? 'Selecciona un perfil' : 'Descargar copia del tablero en JSON'}
+                className="ui-secondary-button inline-flex w-full items-center justify-center self-center rounded-full px-4 py-2 text-sm font-medium text-[var(--app-foreground)] transition disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end"
+              >
+                <Download className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+                Exportar JSON
+              </button>
+              <button
+                type="button"
                 onClick={() => void handleSaveAll()}
                 disabled={!selectedProfileId || !hasUnsavedGridChanges || savingSymbols || loadingData || symbolsLoadPending}
                 title={
@@ -1479,7 +1544,7 @@ export default function AdminPage() {
                       : undefined
                 }
                 className={[
-                  'relative inline-flex w-full items-center justify-center self-center overflow-visible rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end',
+                  'relative inline-flex w-full items-center justify-center self-center overflow-visible rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45 sm:col-span-2 lg:col-span-1 lg:col-start-4 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end',
                   gridSavePhase === 'idle'
                     ? 'bg-slate-200 text-slate-900 shadow-sm dark:bg-slate-600 dark:text-white'
                     : 'bg-slate-900 text-white shadow-sm dark:bg-slate-950',
@@ -1738,6 +1803,22 @@ export default function AdminPage() {
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <BarChart2 size={16} aria-hidden /> Léxico (observabilidad)
                 </h2>
+                {lexiconCatalogStats ? (
+                  <p className="mb-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2 text-[11px] leading-snug text-slate-600 dark:border-slate-600/60 dark:bg-slate-900/40 dark:text-slate-400">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Catálogo global:</span>{' '}
+                    {lexiconCatalogStats.totalLexemes} lemas
+                    {' · '}
+                    curados {lexiconCatalogStats.curatedCount}, ampliados {lexiconCatalogStats.extendedCount}
+                    {lexiconCatalogStats.degraded ? (
+                      <span className="text-amber-700 dark:text-amber-300"> (tier: ejecuta migrate)</span>
+                    ) : null}
+                    <br />
+                    Símbolos con lexema enlazado (todos los perfiles):{' '}
+                    <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
+                      {lexiconCatalogStats.symbolsWithLexemeCount}
+                    </span>
+                  </p>
+                ) : null}
                 {!selectedProfileId ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400">Selecciona un perfil para ver métricas.</p>
                 ) : lexiconObservabilityLoading ? (
@@ -1796,6 +1877,33 @@ export default function AdminPage() {
                         </dd>
                       </div>
                     </dl>
+                    {lexiconObservability.coverage.reviewItems.length > 0 ? (
+                      <div className="border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
+                        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted-foreground)]">
+                          Muestra de símbolos a revisar
+                        </p>
+                        <ul className="max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200/60 bg-white/40 p-2 dark:border-slate-600/60 dark:bg-slate-900/35">
+                          {lexiconObservability.coverage.reviewItems.map((item) => (
+                            <li
+                              key={item.id}
+                              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-slate-100/90 pb-1.5 text-[11px] leading-snug last:border-b-0 last:pb-0 dark:border-slate-700/50"
+                            >
+                              <span className="font-semibold text-slate-800 dark:text-slate-100">&ldquo;{item.label}&rdquo;</span>
+                              <span className="rounded bg-amber-100/90 px-1 py-0 text-[10px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                                {COVERAGE_REVIEW_REASON_LABEL[item.reason]}
+                              </span>
+                              {item.suggestedLemma ? (
+                                <span className="text-[var(--app-muted-foreground)]">
+                                  Sugerido: <span className="font-medium text-slate-700 dark:text-slate-300">{item.suggestedLemma}</span>
+                                  {' '}
+                                  ({getSpanishPosLabel(item.suggestedPosType)})
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1863,7 +1971,7 @@ export default function AdminPage() {
                               <motion.div
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                className="group relative flex aspect-video w-full min-h-0 min-w-0 flex-col"
+                                className="group relative flex aspect-video w-full min-h-0 min-w-0 flex-col overflow-visible"
                               >
                                 <DraggableGridItem symbol={symbol}>
                                   <button
@@ -1901,7 +2009,7 @@ export default function AdminPage() {
                                       deleteSymbol(symbol.id)
                                     }}
                                     type="button"
-                                    className="absolute -right-1 -top-1 hidden h-5 w-5 place-items-center rounded-full bg-rose-500 text-white shadow-sm group-hover:grid z-10"
+                                    className="absolute right-1 top-1 z-10 hidden h-5 w-5 place-items-center rounded-full bg-rose-500 text-white shadow-sm group-hover:grid"
                                   >
                                     <Trash2 size={10} />
                                   </button>
@@ -2549,6 +2657,22 @@ export default function AdminPage() {
                         </>
                       )}
                     </p>
+
+                    {voiceSubscriptionActive && voiceTtsQuotaExceeded ? (
+                      <div
+                        role="status"
+                        className="rounded-xl border border-amber-300/90 bg-amber-50/95 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/40 dark:text-amber-100"
+                      >
+                        <p className="font-medium">Has superado la referencia mensual de caracteres de voz de tu plan.</p>
+                        <p className="mt-1.5 text-amber-900/90 dark:text-amber-200/95">
+                          Considera ampliar el plan en{' '}
+                          <Link href="/plan" className="font-semibold underline underline-offset-2">
+                            Planes y precios
+                          </Link>
+                          . Si el uso de ElevenLabs queda limitado, se puede pasar a voz del navegador; el contador sigue registrando el consumo.
+                        </p>
+                      </div>
+                    ) : null}
 
                     <div className="grid gap-2 sm:grid-cols-3">
                       <button

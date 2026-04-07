@@ -149,6 +149,15 @@ model Lexeme {
   transitivity     String?
   frequencyScore   Float?                @map("frequency_score")
   aacPriority      Int?                  @map("aac_priority")
+  /// Bucket semántico AAC: core | actions | people | places | objects | emotions | time | colors | numbers | other
+  semanticLayer    String                @default("other") @map("semantic_layer")
+  /// Palabras de alta frecuencia comunicativa (prioridad en predicción / futuras UIs)
+  isCore           Boolean               @default(false) @map("is_core")
+  /// curated = Fase 1–2 / seed; extended = ampliado (menor peso en predicción vía app)
+  lexemeTier       String                @default("curated") @map("lexeme_tier")
+  /// Origen opcional de pictograma (p. ej. arasaac); la imagen en tablero sigue en Symbol.imageUrl
+  pictogramSource  String?               @map("pictogram_source")
+  pictogramKey     String?               @map("pictogram_key")
   source           String                @default("seed")
   forms            LexemeForm[]
   aliases          LexemeAlias[]
@@ -162,6 +171,9 @@ model Lexeme {
   @@unique([normalizedLemma, primaryPos])
   @@index([primaryPos])
   @@index([aacPriority])
+  @@index([semanticLayer])
+  @@index([isCore])
+  @@index([lexemeTier])
   @@map("lexemes")
 }
 

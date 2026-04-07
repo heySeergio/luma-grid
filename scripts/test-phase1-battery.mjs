@@ -1,6 +1,17 @@
+/**
+ * Batería Fase 1 (~50 etiquetas): prisma/data/phase1-detection-battery.json
+ * Misma lógica que scripts/test-lexicon-detection.mjs (consulta Prisma).
+ *
+ * Uso: node scripts/test-phase1-battery.mjs
+ */
+
 import './load-env-database.mjs'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const prisma = new PrismaClient()
 
 const DIACRITIC_REGEX = /[\u0300-\u036f]/g
@@ -82,53 +93,46 @@ async function detectForLabel(label) {
   return { method: 'unknown', lemma: null }
 }
 
-const TEST_CASES = [
-  { label: '¿Qué?', expectedLemma: 'qué' },
-  { label: 'Quiero', expectedLemma: 'querer' },
-  { label: 'COMO', expectedLemma: 'comer' },
-  { label: 'aqui', expectedLemma: 'aquí' },
-  { label: 'Mami', expectedLemma: 'mamá' },
-  { label: 'Papi', expectedLemma: 'papá' },
-  { label: 'rápidamente', expectedMethod: 'heuristic' },
-]
-
 async function main() {
-  let failed = 0
+  const path = join(__dirname, '..', 'prisma', 'data', 'phase1-detection-battery.json')
+  const { cases } = JSON.parse(readFileSync(path, 'utf8'))
 
-  for (const testCase of TEST_CASES) {
+  let failed = 0
+  let ok = 0
+
+  for (const testCase of cases) {
     const result = await detectForLabel(testCase.label)
-    const lemmaOk = testCase.expectedLemma ? result.lemma === testCase.expectedLemma : true
-    const methodOk = testCase.expectedMethod ? result.method === testCase.expectedMethod : true
-    const pass = lemmaOk && methodOk
+
+    let pass = false
+    if (testCase.expectUnknown) {
+      pass = result.method === 'unknown' && result.lemma === null
+    } else if (testCase.expectedLemma != null) {
+      pass = result.lemma === testCase.expectedLemma
+    } else {
+      pass = result.lemma === null
+    }
 
     if (!pass) {
       failed += 1
       console.error(
-        `[FAIL] "${testCase.label}" -> lemma="${result.lemma}" method="${result.method}"`,
+        `[FAIL] "${testCase.label}" -> lemma="${result.lemma}" method="${result.method}" (esperado: ${testCase.expectedLemma ?? 'null/unknown'})`,
       )
-      if (testCase.expectedLemma) {
-        console.error(`       Esperado lemma="${testCase.expectedLemma}"`)
-      }
-      if (testCase.expectedMethod) {
-        console.error(`       Esperado method="${testCase.expectedMethod}"`)
-      }
     } else {
+      ok += 1
       console.log(`[OK]   "${testCase.label}" -> lemma="${result.lemma}" method="${result.method}"`)
     }
   }
 
-  if (failed > 0) {
-    console.error(`\nResultado: ${failed} fallo(s) de ${TEST_CASES.length} caso(s).`)
-    process.exitCode = 1
-    return
-  }
+  console.log(`\nResumen: ${ok} OK, ${failed} fallos de ${cases.length} casos.`)
 
-  console.log(`\nResultado: ${TEST_CASES.length} caso(s) verificados correctamente.`)
+  if (failed > 0) {
+    process.exitCode = 1
+  }
 }
 
 main()
   .catch((error) => {
-    console.error('Error ejecutando pruebas de detección léxica:', error)
+    console.error('Error en batería Fase 1:', error)
     process.exit(1)
   })
   .finally(async () => {

@@ -2,11 +2,16 @@
 
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getSemanticLayerPredictionBoost } from '@/lib/lexicon/semanticLayer'
 import { getQuestionCandidateScore, type QuestionType } from '@/lib/lexicon/questions'
+import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
+import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+import { isMissingLexemeColumnError } from '@/lib/prisma/lexemeColumnErrors'
+import { EXTENDED_TIER_PREDICTION_FACTOR } from '@/lib/lexicon/lexemeTier'
 import { prisma } from '@/lib/prisma'
 import type { PosType } from '@/lib/supabase/types'
 
-type PredictionSymbolInput = {
+export type PredictionSymbolInput = {
   id: string
   label: string
   posType: PosType
@@ -36,6 +41,61 @@ function hasLexiconPrismaModels() {
 
 function isForeignKeyConstraintError(error: unknown) {
   return error instanceof Error && error.message.toLowerCase().includes('foreign key constraint')
+}
+
+type LexemePredictionRow = {
+  id: string
+  aacPriority: number | null
+  frequencyScore: number | null
+  semanticLayer: string | null
+  lexemeTier: string
+}
+
+async function fetchLexemeRowsForPrediction(ids: string[]): Promise<LexemePredictionRow[]> {
+  const where = { id: { in: ids.length > 0 ? ids : ['__none__'] } }
+  try {
+    const rows = await prisma.lexeme.findMany({
+      where,
+      select: {
+        id: true,
+        aacPriority: true,
+        frequencyScore: true,
+        semanticLayer: true,
+        lexemeTier: true,
+      },
+    })
+    return rows.map((r) => ({
+      ...r,
+      lexemeTier: r.lexemeTier ?? 'curated',
+    }))
+  } catch (error) {
+    const tierMissingInClientOrDb =
+      isMissingLexemeColumnError(error) || isUnknownPrismaFieldError(error, ['lexemeTier'])
+    if (!tierMissingInClientOrDb) throw error
+    try {
+      const rows = await prisma.lexeme.findMany({
+        where,
+        select: {
+          id: true,
+          aacPriority: true,
+          frequencyScore: true,
+          semanticLayer: true,
+        },
+      })
+      return rows.map((r) => ({ ...r, semanticLayer: r.semanticLayer ?? null, lexemeTier: 'curated' }))
+    } catch (e2) {
+      if (!isMissingLexemeColumnError(e2)) throw e2
+      const rows = await prisma.lexeme.findMany({
+        where,
+        select: {
+          id: true,
+          aacPriority: true,
+          frequencyScore: true,
+        },
+      })
+      return rows.map((r) => ({ ...r, semanticLayer: null, lexemeTier: 'curated' }))
+    }
+  }
 }
 
 function getPersistableSymbolId(symbolId: string | null | undefined) {
@@ -180,6 +240,111 @@ function getCategorySemanticScore(
   return 0.14
 }
 
+/** Verbos que en infinitivo suelen ir tras querer/poder/deber… (objetivo de frase). */
+const MODAL_AUXILIARY_LEMMAS = new Set([
+  'querer',
+  'poder',
+  'deber',
+  'necesitar',
+  'soler',
+  'preferir',
+  'intentar',
+  'tratar',
+  'empezar',
+  'volver',
+  'dejar',
+])
+
+/**
+ * Tras un modal + otro verbo en infinitivo: penalizar psicológicos poco útiles en AAC simple
+ * («querer gustar») y favorecer acciones concretas (ir, comer, dar…).
+ */
+function getModalFollowingVerbScore(
+  currentSymbol: PredictionSymbolInput,
+  candidate: PredictionSymbolInput,
+): number {
+  if (candidate.posType !== 'verb') return 0.4
+
+  const cur = normalizeTextForLexicon(currentSymbol.label)
+  if (!MODAL_AUXILIARY_LEMMAS.has(cur)) return 0.4
+
+  const cand = normalizeTextForLexicon(candidate.label)
+
+  const awkwardAfterModal = new Set([
+    'gustar',
+    'parecer',
+    'doler',
+    'apetecer',
+    'encantar',
+    'importar',
+    'interesar',
+    'faltar',
+    'sobrar',
+    'molestar',
+  ])
+
+  if (awkwardAfterModal.has(cand)) return 0.03
+
+  const strongAfterModal = new Set([
+    'ir',
+    'ver',
+    'comer',
+    'beber',
+    'hacer',
+    'dar',
+    'estar',
+    'ser',
+    'tener',
+    'decir',
+    'salir',
+    'venir',
+    'poner',
+    'pasar',
+    'tomar',
+    'hablar',
+    'jugar',
+    'comprar',
+    'dormir',
+    'buscar',
+    'llamar',
+    'ayudar',
+    'caminar',
+    'bailar',
+    'cantar',
+    'leer',
+    'escribir',
+    'aprender',
+    'entrar',
+    'vivir',
+    'trabajar',
+    'descansar',
+    'cocinar',
+    'mirar',
+    'escuchar',
+    'abrir',
+    'cerrar',
+    'subir',
+    'bajar',
+    'correr',
+    'andar',
+    'pedir',
+    'traer',
+    'llevar',
+    'quedar',
+    'empezar',
+    'volver',
+    'llegar',
+    'usar',
+    'lavar',
+    'bañar',
+    'duchar',
+  ])
+
+  if (strongAfterModal.has(cand)) return 0.95
+
+  return 0.52
+}
+
 async function getHistoricalSequenceScores(
   profileId: string,
   recentSymbols: PredictionSymbolInput[],
@@ -308,10 +473,11 @@ export async function getPredictionCandidates({
       .map((candidate) => ({
         id: candidate.id,
         score:
-          getGrammarScore(currentSymbol.posType, candidate.posType, currentSymbol.label) * 0.42 +
-          getContextPatternScore(recentSymbols, candidate) * 0.18 +
-          getQuestionCandidateScore(phraseQuestionType, candidate) * 0.25 +
-          getCategorySemanticScore(currentSymbol, recentSymbols, candidate) * 0.15,
+          getGrammarScore(currentSymbol.posType, candidate.posType, currentSymbol.label) * 0.34 +
+          getContextPatternScore(recentSymbols, candidate) * 0.16 +
+          getQuestionCandidateScore(phraseQuestionType, candidate) * 0.22 +
+          getCategorySemanticScore(currentSymbol, recentSymbols, candidate) * 0.11 +
+          getModalFollowingVerbScore(currentSymbol, candidate) * 0.17,
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_PREDICTIONS)
@@ -321,6 +487,16 @@ export async function getPredictionCandidates({
   const candidateLexemeIds = filteredCandidates
     .map(candidate => candidate.lexemeId)
     .filter((value): value is string => Boolean(value))
+
+  const allLexemeIdsForLayers = Array.from(
+    new Set(
+      [
+        ...candidateLexemeIds,
+        currentSymbol.lexemeId ?? null,
+        ...recentSymbols.map((s) => s.lexemeId ?? null),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  )
 
   const [transitionRows, lexemeRows, historicalSequenceScores] = await Promise.all([
     prisma.predictionTransition.findMany({
@@ -337,18 +513,7 @@ export async function getPredictionCandidates({
         lastUsedAt: true,
       },
     }),
-    prisma.lexeme.findMany({
-      where: {
-        id: {
-          in: candidateLexemeIds.length > 0 ? candidateLexemeIds : ['__none__'],
-        },
-      },
-      select: {
-        id: true,
-        aacPriority: true,
-        frequencyScore: true,
-      },
-    }),
+    fetchLexemeRowsForPrediction(allLexemeIdsForLayers),
     getHistoricalSequenceScores(profileId, recentSymbols, filteredCandidates),
   ])
 
@@ -370,6 +535,18 @@ export async function getPredictionCandidates({
     const questionScore = getQuestionCandidateScore(phraseQuestionType, candidate)
     const categorySemanticScore = getCategorySemanticScore(currentSymbol, recentSymbols, candidate)
     const lexeme = candidate.lexemeId ? lexemeById.get(candidate.lexemeId) : undefined
+    const anchorCurrentLayer = currentSymbol.lexemeId
+      ? lexemeById.get(currentSymbol.lexemeId)?.semanticLayer
+      : null
+    const prevInPhrase = recentSymbols[recentSymbols.length - 1]
+    const anchorPreviousLayer = prevInPhrase?.lexemeId
+      ? lexemeById.get(prevInPhrase.lexemeId)?.semanticLayer
+      : null
+    const semanticLayerScore = getSemanticLayerPredictionBoost(
+      lexeme?.semanticLayer,
+      anchorCurrentLayer ?? null,
+      anchorPreviousLayer ?? null,
+    )
     const transition = candidate.lexemeId ? transitionByLexemeId.get(candidate.lexemeId) : undefined
     const historicalSequence = candidate.lexemeId
       ? historicalSequenceScores.get(candidate.lexemeId)
@@ -381,20 +558,27 @@ export async function getPredictionCandidates({
       : 0
     const historicalSequenceScore = historicalSequence?.score ?? 0
     const historicalSequenceRecency = historicalSequence?.recency ?? 0
-    const aacPriorityScore = lexeme?.aacPriority ? Math.min(1, lexeme.aacPriority / 100) : 0.25
+    const tierFactor = lexeme?.lexemeTier === 'extended' ? EXTENDED_TIER_PREDICTION_FACTOR : 1
+    const aacPriorityScore =
+      (lexeme?.aacPriority ? Math.min(1, lexeme.aacPriority / 100) : 0.25) * tierFactor
     const frequencyScore = lexeme?.frequencyScore ?? 0.35
+    const coreBoost = 0
+    const modalFollowingScore = getModalFollowingVerbScore(currentSymbol, candidate)
 
     const score =
-      grammarScore * 0.17 +
-      contextPatternScore * 0.15 +
-      questionScore * 0.15 +
-      categorySemanticScore * 0.08 +
-      historicalSequenceScore * 0.18 +
-      transitionScore * 0.13 +
-      aacPriorityScore * 0.1 +
-      frequencyScore * 0.05 +
+      grammarScore * 0.15 +
+      contextPatternScore * 0.14 +
+      questionScore * 0.14 +
+      categorySemanticScore * 0.06 +
+      semanticLayerScore * 0.06 +
+      modalFollowingScore * 0.09 +
+      historicalSequenceScore * 0.17 +
+      transitionScore * 0.12 +
+      aacPriorityScore * 0.09 +
+      frequencyScore * 0.02 +
       recencyScore * 0.03 +
-      historicalSequenceRecency * 0.01
+      historicalSequenceRecency * 0.01 +
+      coreBoost
 
     return {
       id: candidate.id,

@@ -1,4 +1,4 @@
-import type { Symbol } from '@/lib/supabase/types'
+import type { PosType, Symbol } from '@/lib/supabase/types'
 import {
   DEFAULT_FIXED_CELL_COLOR,
   DEFAULT_FOLDER_COLOR,
@@ -1190,6 +1190,31 @@ export const DEFAULT_FOLDER_CONTENTS: Record<string, string[]> = {
   ],
 }
 
+const DEMO_FOLDER_LABEL_KEYS_LOWER = new Set(
+  Object.keys(DEFAULT_FOLDER_CONTENTS).map((k) => k.toLowerCase()),
+)
+
+/** Celda que abre una carpeta en la demo (p. ej. «Más verbos»): icono y estilo carpeta en el tablero principal. */
+export function isDemoFolderLabel(label: string): boolean {
+  return DEMO_FOLDER_LABEL_KEYS_LOWER.has(label.trim().toLowerCase())
+}
+
+/**
+ * Indica si la celda debe mostrar el icono de carpeta (esquina): solo al abrir otra carpeta,
+ * no para pictos normales dentro de una carpeta (`folder-item-`), salvo que el propio picto sea
+ * una carpeta anidada (etiqueta en `DEFAULT_FOLDER_CONTENTS`).
+ */
+export function shouldShowFolderBadge(symbol: Symbol): boolean {
+  const id = String(symbol.id)
+  if (id.startsWith('folder-item-')) {
+    return isDemoFolderLabel(symbol.label)
+  }
+  if (id.startsWith('folder-')) {
+    return true
+  }
+  return isDemoFolderLabel(symbol.label)
+}
+
 export const MAIN_GRID_TEMPLATE: string[][] = [
   ['Yo', 'Tú', 'Querer', 'Gustar', 'Ir', 'Dar', 'Charla rápida', '¿Qué?', '¿Quién?', '¿Dónde?', '¿Cuándo?', '¿Cómo?', '¿Por qué?', ''],
   ['Él', 'Ella', 'Poner', 'Necesitar', 'Ser', 'Sentir', 'Y', 'Alimentos', '', 'Objetos', '', 'Lugares', '', 'Cuerpo'],
@@ -1261,13 +1286,19 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
     ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => {
       const match = symbols.find((s) => s.label.toLowerCase() === label.toLowerCase())
       const folderDef = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+      const posType: PosType =
+        match?.posType
+        ?? folderDef?.posType
+        ?? (activeFolder === 'Más verbos' || activeFolder.startsWith('Más verbos ·')
+          ? 'verb'
+          : 'noun')
       return {
         id: `folder-item-${activeFolder}-${i}`,
         gridId: 'demo',
         label,
         emoji: match?.emoji ?? folderDef?.emoji ?? '🧩',
         category: activeFolder,
-        posType: 'noun',
+        posType,
         positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
         positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
         color: DEFAULT_SYMBOL_COLOR,

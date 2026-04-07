@@ -26,6 +26,33 @@ export async function getPinnedPhrases(profileId: string) {
     }))
 }
 
+export async function getFrequentPhrases(profileId: string, take = 5) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return []
+
+  const profile = await prisma.profile.findFirst({
+    where: { id: profileId, userId: session.user.id },
+    select: { id: true },
+  })
+  if (!profile) return []
+
+  const phrases = await prisma.phrase.findMany({
+    where: { profileId },
+    orderBy: { useCount: 'desc' },
+    take,
+  })
+
+  return phrases.map((p) => ({
+    id: p.id,
+    profileId: p.profileId,
+    text: p.text,
+    symbolsUsed: JSON.parse(p.symbolsUsed) as Phrase['symbolsUsed'],
+    createdAt: p.createdAt.toISOString(),
+    isPinned: p.isPinned,
+    useCount: p.useCount,
+  }))
+}
+
 export async function saveQuickPhrase(profileId: string, text: string, symbolsUsed: Phrase['symbolsUsed']) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')

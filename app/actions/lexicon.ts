@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+import { isMissingLexemeColumnError } from '@/lib/prisma/lexemeColumnErrors'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon, tokenizePhraseInput } from '@/lib/lexicon/normalize'
 
@@ -279,5 +280,51 @@ export async function getProfileLexiconObservability(profileId: string) {
     unknownUsageRate7d,
     lowConfidenceSymbols,
     overrideRate,
+  }
+}
+
+export type LexiconCatalogStats = {
+  totalLexemes: number
+  curatedCount: number
+  extendedCount: number
+  symbolsWithLexemeCount: number
+  degraded?: boolean
+}
+
+/** Conteos globales del catálogo (Fase 3 observabilidad); requiere sesión. */
+export async function getLexiconCatalogStats(): Promise<LexiconCatalogStats | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return null
+
+  try {
+    const [totalLexemes, tierGroups, symbolsWithLexemeCount] = await Promise.all([
+      prisma.lexeme.count(),
+      prisma.lexeme.groupBy({
+        by: ['lexemeTier'],
+        _count: { _all: true },
+      }),
+      prisma.symbol.count({ where: { lexemeId: { not: null } } }),
+    ])
+    const curatedCount = tierGroups.find((g) => g.lexemeTier === 'curated')?._count._all ?? 0
+    const extendedCount = tierGroups.find((g) => g.lexemeTier === 'extended')?._count._all ?? 0
+    return {
+      totalLexemes,
+      curatedCount,
+      extendedCount,
+      symbolsWithLexemeCount,
+    }
+  } catch (error) {
+    if (!isMissingLexemeColumnError(error) && !isUnknownPrismaFieldError(error, ['lexemeTier'])) throw error
+    const [totalLexemes, symbolsWithLexemeCount] = await Promise.all([
+      prisma.lexeme.count(),
+      prisma.symbol.count({ where: { lexemeId: { not: null } } }),
+    ])
+    return {
+      totalLexemes,
+      curatedCount: totalLexemes,
+      extendedCount: 0,
+      symbolsWithLexemeCount,
+      degraded: true,
+    }
   }
 }

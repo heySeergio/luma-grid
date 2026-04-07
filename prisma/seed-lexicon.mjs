@@ -20,12 +20,50 @@ function makeSurface(surface, extra = {}) {
   }
 }
 
+function inferSemanticLayer(lemma, primaryPos) {
+  const l = lemma.trim().toLowerCase()
+  if (primaryPos === 'verb') return 'actions'
+  if (primaryPos === 'pronoun') return 'core'
+  if (['no', 'sí', 'más', 'menos', 'aquí', 'ahí', 'bien', 'mal'].includes(l)) return 'core'
+  if (primaryPos === 'adverb') {
+    if (/^(cuándo|cómo|dónde|por qué)$/i.test(l)) return 'time'
+    return 'other'
+  }
+  if (primaryPos === 'noun') {
+    const people = ['mamá', 'papá', 'abuelo', 'abuela', 'hermano', 'hermana', 'personas', 'persona', 'amigo', 'amiga', 'profesor', 'profesora', 'médico', 'médica', 'doctor', 'doctora']
+    if (people.some((p) => l === p || l.startsWith(p))) return 'people'
+    const places = ['casa', 'cole', 'hospital', 'baño', 'cocina', 'parque', 'escuela']
+    if (places.some((p) => l.includes(p))) return 'places'
+    const emotions = ['alegría', 'miedo', 'rabia', 'tristeza', 'calma']
+    if (emotions.some((p) => l.includes(p))) return 'emotions'
+    const time = ['hoy', 'mañana', 'ayer', 'ahora', 'tiempo', 'hora']
+    if (time.some((p) => l === p || l.includes(p))) return 'time'
+    return 'objects'
+  }
+  if (primaryPos === 'adj') return 'other'
+  return 'other'
+}
+
+function inferIsCore(lemma, primaryPos, aacPriority) {
+  const l = lemma.trim().toLowerCase()
+  if (['yo', 'tú', 'él', 'ella', 'nosotros', 'ellos', 'ellas', 'vosotros', 'vosotras'].includes(l)) return true
+  if (['no', 'sí', 'más'].includes(l)) return true
+  if (primaryPos === 'pronoun') return true
+  if (typeof aacPriority === 'number' && aacPriority >= 78) return true
+  return false
+}
+
 function makeLexemeEntry(lemma, primaryPos, extra = {}) {
+  const aacPriority = extra.aacPriority ?? 40
+  const semanticLayer = extra.semanticLayer ?? inferSemanticLayer(lemma, primaryPos)
+  const isCore = extra.isCore ?? inferIsCore(lemma, primaryPos, aacPriority)
   return {
     lemma,
     primaryPos,
-    aacPriority: extra.aacPriority ?? 40,
+    aacPriority,
     frequencyScore: extra.frequencyScore ?? 0.6,
+    semanticLayer,
+    isCore,
     ...extra,
     forms: extra.forms ?? [makeSurface(lemma)],
   }
@@ -1050,6 +1088,10 @@ async function upsertLexeme(entry) {
       transitivity: entry.transitivity ?? null,
       frequencyScore: entry.frequencyScore ?? null,
       aacPriority: entry.aacPriority ?? null,
+      semanticLayer: entry.semanticLayer ?? inferSemanticLayer(entry.lemma, entry.primaryPos),
+      isCore: entry.isCore ?? inferIsCore(entry.lemma, entry.primaryPos, entry.aacPriority ?? null),
+      pictogramSource: entry.pictogramSource ?? null,
+      pictogramKey: entry.pictogramKey ?? null,
       source: entry.source ?? 'seed',
     },
     create: {
@@ -1065,6 +1107,10 @@ async function upsertLexeme(entry) {
       transitivity: entry.transitivity ?? null,
       frequencyScore: entry.frequencyScore ?? null,
       aacPriority: entry.aacPriority ?? null,
+      semanticLayer: entry.semanticLayer ?? inferSemanticLayer(entry.lemma, entry.primaryPos),
+      isCore: entry.isCore ?? inferIsCore(entry.lemma, entry.primaryPos, entry.aacPriority ?? null),
+      pictogramSource: entry.pictogramSource ?? null,
+      pictogramKey: entry.pictogramKey ?? null,
       source: entry.source ?? 'seed',
     },
   })

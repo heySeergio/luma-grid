@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, House, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, House, Play, RotateCcw, Trash2, X } from 'lucide-react'
 import { db } from '@/lib/dexie/db'
 import { stopAllTtsPlayback } from '@/lib/voice/speakClient'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
@@ -21,6 +21,7 @@ type ConjugationTokenInput = {
 }
 
 interface Props {
+  /** Orden canónico (sujeto → verbo → …) para mostrar y reproducir. */
   symbols: Symbol[]
   profile: LocalProfile | null
   voiceConfig: VoiceConfig | null
@@ -30,8 +31,14 @@ interface Props {
   onDeleteLast: () => void
   onClearAll: () => void
   onPhraseSaved?: () => void
+  /** Quitar una palabra concreta de la selección (id de la entrada en la frase). */
+  onRemoveSymbol?: (phraseEntryId: string) => void
+  /** Tras reproducir con éxito: persistir en servidor (frases frecuentes). */
+  onAfterSpeak?: (payload: { text: string; symbolsUsed: { id: string; label: string }[] }) => void
   /** Si existe, sustituye Web Speech (p. ej. ElevenLabs vía /api/tts). */
   speakPhrase?: (phrase: string) => Promise<void>
+  /** Al cambiar (p. ej. frase rápida inyectada), limpia la línea de conjugación previa. */
+  externalCompositionReset?: number
 }
 
 export default function PhraseBar({
@@ -43,7 +50,10 @@ export default function PhraseBar({
   onDeleteLast,
   onClearAll,
   onPhraseSaved,
+  onRemoveSymbol,
+  onAfterSpeak,
   speakPhrase,
+  externalCompositionReset = 0,
 }: Props) {
   const router = useRouter()
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -51,6 +61,12 @@ export default function PhraseBar({
   const [, setHomeClickCount] = useState(0)
   const [showAdminAccessPrompt, setShowAdminAccessPrompt] = useState(false)
   const homeClickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (externalCompositionReset > 0) {
+      setConjugated('')
+    }
+  }, [externalCompositionReset])
 
   useEffect(() => {
     return () => {
@@ -140,13 +156,19 @@ export default function PhraseBar({
         await adapter.speak(phrase, profile?.id || '')
       }
 
+      const symbolsUsedForServer = symbols.map((s) => {
+        const src = (s as Symbol & { sourceSymbolId?: string }).sourceSymbolId
+        return { id: src ?? s.id, label: s.label }
+      })
+      onAfterSpeak?.({ text: phrase, symbolsUsed: symbolsUsedForServer })
+
       // Save to local history
       if (profile) {
         const localPhrase: Phrase = {
           id: `local-${Date.now()}`,
           profileId: profile.id,
           text: phrase,
-          symbolsUsed: symbols.map(s => ({ id: s.id, label: s.label })),
+          symbolsUsed: symbolsUsedForServer,
           isPinned: false,
           useCount: 1,
           createdAt: new Date().toISOString(),
@@ -159,7 +181,7 @@ export default function PhraseBar({
     } finally {
       setIsSpeaking(false)
     }
-  }, [symbols, profile, isSpeaking, onPhraseSaved, conjugatePhrase, speakPhrase])
+  }, [symbols, profile, isSpeaking, onPhraseSaved, onAfterSpeak, conjugatePhrase, speakPhrase])
 
   return (
     <>
@@ -189,8 +211,18 @@ export default function PhraseBar({
               {symbols.map((symbol, i) => (
                 <div
                   key={`preview-${symbol.id}-${i}`}
-                  className="ui-chip inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl px-3 py-2"
+                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl px-3 py-2"
                 >
+                  {onRemoveSymbol ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveSymbol(symbol.id)}
+                      className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full bg-slate-900/80 text-white opacity-0 shadow transition hover:bg-rose-600 group-hover:opacity-100"
+                      aria-label={`Quitar ${symbol.label}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
                   {symbol.imageUrl ? (
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9">
                       <Image
