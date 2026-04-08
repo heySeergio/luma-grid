@@ -31,6 +31,7 @@ type TabMode = 'grid' | 'keyboard'
 
 type LocalProfile = Profile & {
   isDemo?: boolean
+  isOpeningProfile?: boolean
   gridCols?: number
   gridRows?: number
   communication_gender?: 'male' | 'female'
@@ -67,12 +68,30 @@ export default function AppInterface() {
   const phraseSequenceRef = useRef(0)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
 
+  const profileId = profile?.id ?? ''
+
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
   const mainOrderedSymbols = useMemo(() => {
-    return shouldUseDefaultGridTemplate
-      ? computeMainGrid(symbols, activeFolder)
-      : symbols
-  }, [shouldUseDefaultGridTemplate, symbols, activeFolder])
+    if (shouldUseDefaultGridTemplate) {
+      return computeMainGrid(symbols, activeFolder)
+    }
+    const cols = Math.max(1, profile?.gridCols ?? 14)
+    const rows = Math.max(1, profile?.gridRows ?? 8)
+    const inBounds = (s: (typeof symbols)[number]) => {
+      const x = s.positionX ?? 0
+      const y = s.positionY ?? 0
+      return x >= 0 && y >= 0 && x < cols && y < rows
+    }
+    const onMain = symbols.filter((s) => (s.gridId ?? 'main') === 'main' && inBounds(s))
+    if (!activeFolder) return onMain
+    return symbols.filter((s) => s.gridId === activeFolder && inBounds(s))
+  }, [
+    shouldUseDefaultGridTemplate,
+    symbols,
+    activeFolder,
+    profile?.gridCols,
+    profile?.gridRows,
+  ])
 
   const speakSelectedWord = useCallback((text: string) => {
     if (!text.trim()) return
@@ -177,41 +196,49 @@ export default function AppInterface() {
       const dbProfiles = await getProfiles() as LocalProfile[]
       const profilesWithGender = applyProfileGenders(dbProfiles) as LocalProfile[]
       setProfiles(profilesWithGender)
-      setProfile(profilesWithGender[0] ?? null)
+      setProfile((prev) => {
+        if (profilesWithGender.length === 0) return null
+        if (prev) {
+          const match = profilesWithGender.find((p) => p.id === prev.id)
+          if (match) return match
+        }
+        const opening = profilesWithGender.find((p) => p.isOpeningProfile)
+        return opening ?? profilesWithGender[0] ?? null
+      })
     } catch (err) {
       console.error('Error fetching profiles', err)
     }
   }, [])
 
   const loadSymbols = useCallback(async () => {
-    if (!profile) return
+    if (!profileId) return
     try {
-      const dbSymbols = await getProfileSymbols(profile.id) as Symbol[]
+      const dbSymbols = await getProfileSymbols(profileId) as Symbol[]
       setSymbols(dbSymbols)
     } catch (err) {
       console.error('Error fetching symbols', err)
     }
-  }, [profile])
+  }, [profileId])
 
   const loadPinnedPhrases = useCallback(async () => {
-    if (!profile) return
+    if (!profileId) return
     try {
-      const phrases = await getPinnedPhrases(profile.id) as Phrase[]
+      const phrases = await getPinnedPhrases(profileId) as Phrase[]
       setPinnedPhrases(phrases)
     } catch (err) {
       console.error('Error fetching pinned phrases', err)
     }
-  }, [profile])
+  }, [profileId])
 
   const loadFrequentPhrases = useCallback(async () => {
-    if (!profile) return
+    if (!profileId) return
     try {
-      const rows = (await getFrequentPhrases(profile.id, 5)) as Phrase[]
+      const rows = (await getFrequentPhrases(profileId, 5)) as Phrase[]
       setFrequentPhrases(rows)
     } catch (err) {
       console.error('Error fetching frequent phrases', err)
     }
-  }, [profile])
+  }, [profileId])
 
   const loadAccessConfig = useCallback(async () => {
     setAccessConfig(null)
@@ -231,9 +258,13 @@ export default function AppInterface() {
   }, [loadProfiles])
 
   useEffect(() => {
-    if (!profile) return
+    if (!profileId) return
 
     resetPhraseTracking()
+    setSymbols([])
+    setPredictedIds([])
+    setSelectedSymbols([])
+    setCompletionChips([])
     setActiveFolder(null)
     setFolderHistory([])
     void loadSymbols()
@@ -242,25 +273,41 @@ export default function AppInterface() {
     void loadAccessConfig()
 
     return subscribeToChanges()
-  }, [profile, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadFrequentPhrases, loadAccessConfig, subscribeToChanges])
+  }, [profileId, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadFrequentPhrases, loadAccessConfig, subscribeToChanges])
 
   const handleSymbolSelect = useCallback(async (symbol: Symbol) => {
     const normalizedLabel = symbol.label.toLowerCase()
-    if (activeFolder === 'Más verbos' && normalizedLabel === 'más') {
-      setFolderHistory(prev => [...(prev ?? []), 'Más verbos'])
-      setActiveFolder('Más verbos · página 2')
+
+    if (shouldUseDefaultGridTemplate) {
+      if (activeFolder === 'Más verbos' && normalizedLabel === 'más') {
+        setFolderHistory(prev => [...(prev ?? []), 'Más verbos'])
+        setActiveFolder('Más verbos · página 2')
+        setPredictedIds([])
+        return
+      }
+      if (DEFAULT_FOLDER_CONTENTS[symbol.label] && symbol.label !== activeFolder) {
+        setFolderHistory(prev => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
+        setActiveFolder(symbol.label)
+        setPredictedIds([])
+        return
+      }
+    } else if (
+      symbol.category === 'Carpetas' &&
+      symbol.id &&
+      !String(symbol.id).startsWith('folder-')
+    ) {
+      setFolderHistory((prev) => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
+      setActiveFolder(symbol.id)
       setPredictedIds([])
       return
     }
 
-    if (DEFAULT_FOLDER_CONTENTS[symbol.label] && symbol.label !== activeFolder) {
-      setFolderHistory(prev => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
-      setActiveFolder(symbol.label)
-      setPredictedIds([])
-      return
-    }
-
-    if (normalizedLabel === 'números' || normalizedLabel === 'numeros' || normalizedLabel === 'teclado') {
+    if (
+      symbol.opensKeyboard ||
+      normalizedLabel === 'números' ||
+      normalizedLabel === 'numeros' ||
+      normalizedLabel === 'teclado'
+    ) {
       setActiveTab('keyboard')
       setActiveFolder(null)
       setFolderHistory([])
@@ -372,7 +419,17 @@ export default function AppInterface() {
       console.error('Error calculating predictions', err)
       setPredictedIds([])
     }
-  }, [activeFolder, ensurePhraseSessionId, mainOrderedSymbols, persistSymbolUsage, profile, selectedSymbols, speakSelectedWord, symbols])
+  }, [
+    activeFolder,
+    ensurePhraseSessionId,
+    mainOrderedSymbols,
+    persistSymbolUsage,
+    profile,
+    selectedSymbols,
+    shouldUseDefaultGridTemplate,
+    speakSelectedWord,
+    symbols,
+  ])
 
   useEffect(() => {
     if (!profile || selectedSymbols.length === 0) {
@@ -504,7 +561,7 @@ export default function AppInterface() {
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
-    <div className="theme-page-shell flex h-screen flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+    <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
         <QuickPhrases phrases={pinnedPhrases} onSpeak={handleQuickPhraseTap} />
@@ -515,7 +572,7 @@ export default function AppInterface() {
       )}
 
       {/* Phrase bar + sugerencias */}
-      <div className="flex shrink-0 flex-col">
+      <div className="flex min-h-0 shrink-0 flex-col">
         <PhraseBar
           symbols={selectedSymbols}
           profile={profile}
@@ -551,7 +608,7 @@ export default function AppInterface() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
         {activeTab === 'grid' ? (
           <SymbolGrid
             symbols={mainOrderedSymbols}

@@ -30,6 +30,9 @@ model User {
   planExpiresAt            DateTime? @map("plan_expires_at")
   /// null = debe elegir plan tras login/registro
   planSelectionCompletedAt DateTime? @map("plan_selection_completed_at")
+  /// Perfil que se carga al abrir /tablero (independiente de `Profile.is_demo`, tablero demo fijo).
+  defaultProfileId         String?   @map("default_profile_id")
+  defaultProfile           Profile?  @relation("UserDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
   profiles                 Profile[]
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -80,7 +83,10 @@ model Profile {
   name        String
   userId      String               @map("user_id")
   user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Usuarios que abren el tablero con este perfil por defecto.
+  defaultForUsers User[]           @relation("UserDefaultProfile")
   gender      String               @default("male") // "male" | "female"
+  /// Tablero demo fijo (plantilla, restaurar layout); no indica qué perfil abre al entrar.
   isDemo      Boolean              @default(false) @map("is_demo")
   gridRows    Int                  @default(8) @map("grid_rows")
   gridCols    Int                  @default(14) @map("grid_cols")
@@ -113,6 +119,8 @@ model Symbol {
   color                 String
   hidden                Boolean            @default(false) // Deprecated, keeping for backwards compatibility
   state                 String             @default("visible") // "visible" | "locked" | "hidden"
+  /// En el tablero, al pulsar abre la pestaña teclado (además de etiquetas Teclado / Números).
+  opensKeyboard         Boolean            @default(false) @map("opens_keyboard")
   usageEvents           SymbolUsageEvent[]
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")

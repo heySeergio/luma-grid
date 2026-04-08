@@ -60,6 +60,7 @@ export async function exportProfileBoardJson(profileId: string): Promise<
       color: s.color,
       hidden: s.hidden,
       state: s.state,
+      opensKeyboard: s.opensKeyboard,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),

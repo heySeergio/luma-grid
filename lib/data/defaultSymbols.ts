@@ -1226,6 +1226,22 @@ export const MAIN_GRID_TEMPLATE: string[][] = [
   ['Bien', 'Mal', 'Mucho', 'Diferente', 'Muy', 'También', 'Teclado', 'Números', '', 'Aficiones', '', 'Frases hechas', '', 'Más'],
 ]
 
+/**
+ * Primera aparición de cada etiqueta en la plantilla demo (MAIN_GRID_TEMPLATE).
+ * Sirve para resetear posiciones en BD cuando el tablero queda descolocado.
+ */
+export function getDemoTemplatePositionMap(): Map<string, { x: number; y: number }> {
+  const m = new Map<string, { x: number; y: number }>()
+  MAIN_GRID_TEMPLATE.forEach((row, y) => {
+    row.forEach((label, x) => {
+      if (!label || !String(label).trim()) return
+      const k = String(label).trim().toLowerCase()
+      if (!m.has(k)) m.set(k, { x, y })
+    })
+  })
+  return m
+}
+
 export const FIXED_COLUMNS = 7
 export const TOTAL_COLUMNS = 14
 

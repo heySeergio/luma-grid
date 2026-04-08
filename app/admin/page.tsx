@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { BarChart2, Check, Columns2, Download, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BarChart2, Check, Columns2, Download, Eye, LayoutGrid, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
@@ -10,8 +10,18 @@ import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getLexiconCatalogStats, getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
-import { computeMainGrid } from '@/lib/data/defaultSymbols'
-import { createProfile, deleteProfile, getProfiles, updateProfile, updateProfileGender, updateProfileGridSize } from '@/app/actions/profiles'
+import { computeMainGrid, DEFAULT_FOLDER_CONTENTS } from '@/lib/data/defaultSymbols'
+import {
+  createProfile,
+  deleteProfile,
+  getProfiles,
+  reassignOpeningProfileAwayFrom,
+  setDefaultOpeningProfile,
+  updateProfile,
+  updateProfileGender,
+  updateProfileGridSize,
+} from '@/app/actions/profiles'
+import { resetDemoProfilePositionsToTemplate } from '@/app/actions/demoRepair'
 import { exportProfileBoardJson } from '@/app/actions/profileExport'
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
 import { setProfileGender } from '@/lib/profileGender'
@@ -109,6 +119,8 @@ type AdminProfile = {
   gender?: string
   communication_gender?: string
   isDemo?: boolean
+  /** Perfil que abre al entrar en /tablero (campo `users.default_profile_id`). */
+  isOpeningProfile?: boolean
   gridRows?: number
   gridCols?: number
   createdAt?: Date | string
@@ -140,6 +152,8 @@ type AdminSymbol = {
   color: string
   hidden?: boolean
   state?: string | null
+  /** En /tablero, abre la pestaña teclado al pulsar. */
+  opensKeyboard?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   created_at?: string
@@ -198,6 +212,7 @@ const EMPTY_SYMBOL: Omit<AdminSymbol, 'id' | 'createdAt' | 'updatedAt' | 'gridId
   positionY: 0,
   color: DEFAULT_SYMBOL_COLOR,
   state: 'visible',
+  opensKeyboard: false,
 }
 
 function normalizeThemePreference(value: string | null | undefined): ThemePreference {
@@ -286,6 +301,7 @@ function stableGridSnapshot(symbols: AdminSymbol[]): string {
         state: s.state ?? 'visible',
         gridId: s.gridId ?? s.grid_id ?? 'main',
         hidden: Boolean(s.hidden),
+        opensKeyboard: Boolean(s.opensKeyboard),
       }
     })
     .sort((a, b) => String(a.id).localeCompare(String(b.id)))
@@ -391,7 +407,8 @@ export default function AdminPage() {
   const [loadingData, setLoadingData] = useState(false)
   const [symbolsLoadPending, setSymbolsLoadPending] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
-  const [savingGrid, setSavingGrid] = useState(false)
+  /** Filas/columnas pendientes hasta pulsar «Guardar cambios» (no perfil demo). */
+  const [pendingGridDimensions, setPendingGridDimensions] = useState<{ rows: number; cols: number } | null>(null)
   const [editingSymbol, setEditingSymbol] = useState<AdminSymbol | null>(null)
   const [lexemePreview, setLexemePreview] = useState<LexemePreview | null>(null)
   const [detectingLexeme, setDetectingLexeme] = useState(false)
@@ -414,9 +431,18 @@ export default function AdminPage() {
   const [markEditedProfileAsDefault, setMarkEditedProfileAsDefault] = useState(false)
   const [savingProfileChanges, setSavingProfileChanges] = useState(false)
   const [deletingProfileId, setDeletingProfileId] = useState('')
+  const [settingDefaultProfileId, setSettingDefaultProfileId] = useState('')
+  const [repairingDemoLayout, setRepairingDemoLayout] = useState(false)
+  /** Celda vacía en la que el usuario abrió el menú crear botón / crear carpeta */
+  const [splitEmptyCell, setSplitEmptyCell] = useState<{ x: number; y: number } | null>(null)
+  /** Modal nativo: nombre de carpeta nueva (sustituye window.prompt) */
+  const [createFolderModal, setCreateFolderModal] = useState<{ x: number; y: number } | null>(null)
+  const [createFolderName, setCreateFolderName] = useState('')
   const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
   const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
+  /** Evita mismatch de hidratación en botones que dependen de estado cargado tras mount (SSR vs cliente). */
+  const [adminHydrated, setAdminHydrated] = useState(false)
 
   const [voiceTtsMode, setVoiceTtsMode] = useState<TtsMode>('browser')
   const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
@@ -467,6 +493,8 @@ export default function AdminPage() {
 
   const selectedProfileIdRef = useRef(selectedProfileId)
   selectedProfileIdRef.current = selectedProfileId
+  const symbolsRef = useRef(symbols)
+  symbolsRef.current = symbols
 
   const loadData = useCallback(async () => {
     setLoadingData(true)
@@ -501,7 +529,8 @@ export default function AdminPage() {
         effectiveProfileId = ''
         setSelectedProfileId('')
       } else if (!currentPid || !fetchedProfiles.some((profile) => profile.id === currentPid)) {
-        effectiveProfileId = fetchedProfiles[0].id
+        const opening = fetchedProfiles.find((p) => p.isOpeningProfile)
+        effectiveProfileId = opening?.id ?? fetchedProfiles[0].id
         setSelectedProfileId(effectiveProfileId)
       }
 
@@ -843,6 +872,10 @@ export default function AdminPage() {
   }, [loadData])
 
   useEffect(() => {
+    setAdminHydrated(true)
+  }, [])
+
+  useEffect(() => {
     if (!status) return
     if (ADMIN_STATUS_SKIP_AUTO_DISMISS.has(status)) return
     const id = window.setTimeout(() => setStatus(''), 7000)
@@ -914,6 +947,37 @@ export default function AdminPage() {
   }, [selectedProfileId])
 
   useEffect(() => {
+    setActiveFolder(null)
+    setEditingSymbol(null)
+    setActiveDraggedSymbolId(null)
+    setSplitEmptyCell(null)
+    setPendingGridDimensions(null)
+  }, [selectedProfileId])
+
+  useEffect(() => {
+    setSplitEmptyCell(null)
+  }, [activeFolder])
+
+  useEffect(() => {
+    if (editingSymbol) setSplitEmptyCell(null)
+  }, [editingSymbol])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (createFolderModal) {
+          setCreateFolderModal(null)
+          setCreateFolderName('')
+        } else {
+          setSplitEmptyCell(null)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [createFolderModal])
+
+  useEffect(() => {
     let cancelled = false
     void getLexiconCatalogStats()
       .then((data) => {
@@ -928,6 +992,16 @@ export default function AdminPage() {
   }, [])
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId)
+
+  /** Solo el perfil marcado en BD como demo (`isDemo === true`), no otro perfil aunque se llame igual. */
+  const isSelectedDemoProfile = useMemo(
+    () =>
+      Boolean(
+        selectedProfileId &&
+          profiles.some((p) => p.id === selectedProfileId && p.isDemo === true),
+      ),
+    [profiles, selectedProfileId],
+  )
 
   useEffect(() => {
     if (!selectedProfile) return
@@ -993,17 +1067,16 @@ export default function AdminPage() {
     }
   }, [editingSymbol])
 
-  const handleGridSizeUpdate = async (rows: number, cols: number) => {
-    if (!selectedProfile) return
-    setSavingGrid(true)
-    try {
-      await updateProfileGridSize(selectedProfile.id, rows, cols)
-      const data = await getProfiles()
-      setProfiles(data)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setSavingGrid(false)
+  const handleGridSizeUpdate = (rows: number, cols: number) => {
+    if (!selectedProfile || isSelectedDemoProfile) return
+    const r = Math.min(ADMIN_GRID_DIM_MAX, Math.max(ADMIN_GRID_DIM_MIN, Math.floor(rows)))
+    const c = Math.min(ADMIN_GRID_DIM_MAX, Math.max(ADMIN_GRID_DIM_MIN, Math.floor(cols)))
+    const pr = selectedProfile.gridRows ?? 8
+    const pc = selectedProfile.gridCols ?? 14
+    if (r === pr && c === pc) {
+      setPendingGridDimensions(null)
+    } else {
+      setPendingGridDimensions({ rows: r, cols: c })
     }
   }
 
@@ -1115,18 +1188,39 @@ export default function AdminPage() {
   }, [selectedProfileId])
 
   const handleSaveAll = async () => {
-    if (!selectedProfileId || savingSymbols) return
-    if (symbolsBaselineJson === '' || stableGridSnapshot(symbols) === symbolsBaselineJson) return
+    if (!selectedProfileId || savingSymbols || !selectedProfile) return
+    const dimsDirty =
+      !isSelectedDemoProfile &&
+      pendingGridDimensions !== null &&
+      (pendingGridDimensions.rows !== (selectedProfile.gridRows ?? 8) ||
+        pendingGridDimensions.cols !== (selectedProfile.gridCols ?? 14))
+    const symbolsDirty =
+      symbolsBaselineJson !== '' && stableGridSnapshot(symbols) !== symbolsBaselineJson
+    if (!dimsDirty && !symbolsDirty) return
 
     setSavingSymbols(true)
     setGridSaveFeedback('saving')
+    setStatus('')
     try {
-      // El servidor solo hace UPDATE/CREATE de filas que cambiaron (ver saveSymbols).
-      await saveSymbols(selectedProfileId, symbols)
-      const freshSymbols = await getProfileSymbols(selectedProfileId)
-      setSymbols(freshSymbols)
-      setSymbolsBaselineJson(stableGridSnapshot(freshSymbols))
-      setStatus('✅ Cambios guardados correctamente.')
+      if (dimsDirty && pendingGridDimensions) {
+        await updateProfileGridSize(selectedProfileId, pendingGridDimensions.rows, pendingGridDimensions.cols)
+        const data = await getProfiles()
+        setProfiles(data)
+        setPendingGridDimensions(null)
+      }
+      if (symbolsDirty) {
+        await saveSymbols(selectedProfileId, symbols)
+        const freshSymbols = await getProfileSymbols(selectedProfileId)
+        setSymbols(freshSymbols)
+        setSymbolsBaselineJson(stableGridSnapshot(freshSymbols))
+      }
+      setStatus(
+        dimsDirty && symbolsDirty
+          ? '✅ Dimensiones del grid y símbolos guardados.'
+          : dimsDirty
+            ? '✅ Dimensiones del grid guardadas.'
+            : '✅ Cambios guardados correctamente.',
+      )
       setGridSaveFeedback('saved')
     } catch (err) {
       console.error(err)
@@ -1139,13 +1233,13 @@ export default function AdminPage() {
 
   const deleteSymbol = async (symbolId: string) => {
     if (symbolId.startsWith('new-') || symbolId.startsWith('fixed-') || symbolId.startsWith('template-')) {
-      setSymbols(prev => prev.filter(s => s.id !== symbolId))
+      setSymbols((prev) => prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId))
       return
     }
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
       setSymbols((prev) => {
-        const next = prev.filter((s) => s.id !== symbolId)
+        const next = prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId)
         setSymbolsBaselineJson(stableGridSnapshot(next))
         return next
       })
@@ -1155,19 +1249,33 @@ export default function AdminPage() {
     }
   }
 
+  const closeEditingSymbolModal = useCallback(() => {
+    setEditingSymbol(null)
+    setLexemePreview(null)
+    setDetectingLexeme(false)
+  }, [])
+
   const handleEditSave = () => {
     if (!editingSymbol) return
     setSymbols(prev => {
       const existing = prev.find(s => s.id === editingSymbol.id)
       if (existing) {
-        return prev.map(s => s.id === editingSymbol.id ? editingSymbol : s)
+        return prev.map((s) =>
+          s.id === editingSymbol.id
+            ? { ...editingSymbol, gridId: editingSymbol.gridId ?? s.gridId ?? 'main' }
+            : s,
+        )
       } else {
         // Create new
-        const newSym = { ...editingSymbol, id: `new-${Date.now()}` }
+        const newSym = {
+          ...editingSymbol,
+          id: `new-${Date.now()}`,
+          gridId: editingSymbol.gridId ?? 'main',
+        }
         return [...prev, newSym]
       }
     })
-    setEditingSymbol(null)
+    closeEditingSymbolModal()
   }
 
   const handleDeleteEditingSymbol = async () => {
@@ -1177,8 +1285,10 @@ export default function AdminPage() {
     if (!symbolId) return
 
     if (symbolId.startsWith('new-') || symbolId.startsWith('fixed-') || symbolId.startsWith('template-')) {
-      setSymbols(prev => prev.filter(s => s.id !== editingSymbol.id))
-      setEditingSymbol(null)
+      setSymbols((prev) =>
+        prev.filter((s) => s.id !== editingSymbol.id && s.gridId !== editingSymbol.id),
+      )
+      closeEditingSymbolModal()
       setStatus('Símbolo eliminado.')
       return
     }
@@ -1186,11 +1296,11 @@ export default function AdminPage() {
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
       setSymbols((prev) => {
-        const next = prev.filter((s) => s.id !== editingSymbol.id)
+        const next = prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId)
         setSymbolsBaselineJson(stableGridSnapshot(next))
         return next
       })
-      setEditingSymbol(null)
+      closeEditingSymbolModal()
       setStatus('Símbolo eliminado.')
     } catch (error) {
       console.error(error)
@@ -1253,7 +1363,7 @@ export default function AdminPage() {
   const openEditProfileModal = (profile: AdminProfile) => {
     setProfileBeingEdited(profile)
     setEditProfileName(profile.name)
-    setMarkEditedProfileAsDefault(false)
+    setMarkEditedProfileAsDefault(Boolean(profile.isOpeningProfile))
   }
 
   const handleEditProfile = async (e: React.FormEvent) => {
@@ -1266,8 +1376,12 @@ export default function AdminPage() {
       await updateProfile({
         profileId: profileBeingEdited.id,
         name: editProfileName,
-        makeDefault: !profileBeingEdited.isDemo && markEditedProfileAsDefault,
       })
+      if (markEditedProfileAsDefault) {
+        await setDefaultOpeningProfile(profileBeingEdited.id)
+      } else if (profileBeingEdited.isOpeningProfile) {
+        await reassignOpeningProfileAwayFrom(profileBeingEdited.id)
+      }
       await loadData()
       setProfileBeingEdited(null)
       setEditProfileName('')
@@ -1309,10 +1423,59 @@ export default function AdminPage() {
     }
   }
 
-  const shouldUseDefaultGridTemplate = Boolean(selectedProfile?.isDemo)
+  const handleSetDefaultProfile = async (profile: AdminProfile) => {
+    if (profile.isOpeningProfile || settingDefaultProfileId) return
+    setSettingDefaultProfileId(profile.id)
+    setStatus('')
+    try {
+      await setDefaultOpeningProfile(profile.id)
+      await loadData()
+      setStatus('✅ Perfil seleccionado actualizado.')
+    } catch (error) {
+      console.error(error)
+      setStatus('❌ No se pudo establecer el perfil seleccionado.')
+    } finally {
+      setSettingDefaultProfileId('')
+    }
+  }
+
+  const handleRepairDemoLayout = useCallback(async () => {
+    if (!selectedProfileId || !isSelectedDemoProfile || repairingDemoLayout) return
+    setRepairingDemoLayout(true)
+    setStatus('')
+    try {
+      const { realigned } = await resetDemoProfilePositionsToTemplate(selectedProfileId)
+      const syms = await getProfileSymbols(selectedProfileId)
+      setSymbols(syms)
+      setSymbolsBaselineJson(stableGridSnapshot(syms))
+      setGridSaveFeedback('idle')
+      setStatus(
+        realigned > 0
+          ? `✅ Tablero demo alineado (${realigned} celda(s) corregidas).`
+          : '✅ Las posiciones del demo ya coincidían con la plantilla.',
+      )
+    } catch (error) {
+      console.error(error)
+      setStatus('❌ No se pudo restaurar la plantilla del demo.')
+    } finally {
+      setRepairingDemoLayout(false)
+    }
+  }, [selectedProfileId, isSelectedDemoProfile, repairingDemoLayout])
+
+  const shouldUseDefaultGridTemplate = isSelectedDemoProfile
+  /** En perfiles propios, `activeFolder` es el id del símbolo carpeta (no la etiqueta). En demo, el nombre de plantilla. */
+  const activeFolderTitle = useMemo(() => {
+    if (!activeFolder) return null
+    if (shouldUseDefaultGridTemplate) return activeFolder
+    const folderSym = symbols.find((s) => s.id === activeFolder)
+    return folderSym?.label ?? activeFolder
+  }, [activeFolder, shouldUseDefaultGridTemplate, symbols])
+
   const mainGridSymbols = shouldUseDefaultGridTemplate
     ? computeMainGrid(symbols as unknown as BoardSymbol[], activeFolder) as AdminSymbol[]
-    : symbols
+    : activeFolder
+      ? symbols.filter((s) => s.gridId === activeFolder)
+      : symbols.filter((s) => (s.gridId ?? 'main') === 'main')
   const draggableSymbolsById = useMemo(() => {
     return new Map(mainGridSymbols.filter((symbol) => isMovableSymbol(symbol)).map((symbol) => [symbol.id, symbol]))
   }, [mainGridSymbols])
@@ -1342,6 +1505,33 @@ export default function AdminPage() {
         return searchableText.includes(normalizedQuery)
       })
   }, [listSearch, listStateFilter, mainGridSymbols])
+
+  const demoFolderNames = useMemo(
+    () => Object.keys(DEFAULT_FOLDER_CONTENTS).sort((a, b) => a.localeCompare(b, 'es')),
+    [],
+  )
+
+  const findNextEmptyGridPosition = useCallback(() => {
+    const gridCols = pendingGridDimensions?.cols ?? selectedProfile?.gridCols ?? 14
+    const gridRows = pendingGridDimensions?.rows ?? selectedProfile?.gridRows ?? 8
+    for (let y = 0; y < gridRows; y += 1) {
+      for (let x = 0; x < gridCols; x += 1) {
+        const occupied = mainGridSymbols.some((symbol) => {
+          const position = getSymbolPosition(symbol)
+          return position.x === x && position.y === y
+        })
+        if (!occupied) return { x, y }
+      }
+    }
+    const sortedSymbols = [...mainGridSymbols].sort(sortSymbolsByPosition)
+    const lastSymbol = sortedSymbols[sortedSymbols.length - 1]
+    const lastPosition = lastSymbol ? getSymbolPosition(lastSymbol) : { x: 0, y: 0 }
+    const nextIndex = lastPosition.y * gridCols + lastPosition.x + 1
+    return {
+      x: nextIndex % gridCols,
+      y: Math.floor(nextIndex / gridCols),
+    }
+  }, [mainGridSymbols, selectedProfile?.gridCols, selectedProfile?.gridRows, pendingGridDimensions])
 
   const handleDragStart = (event: DragStartEvent) => {
     if (activeFolder) return
@@ -1400,45 +1590,56 @@ export default function AdminPage() {
   }
 
   const handleCreateSymbolFromList = () => {
-    const gridCols = selectedProfile?.gridCols || 14
-    const gridRows = selectedProfile?.gridRows || 8
-    let nextPosition = { x: 0, y: 0 }
-
-    let foundEmptySlot = false
-    for (let y = 0; y < gridRows; y += 1) {
-      for (let x = 0; x < gridCols; x += 1) {
-        const occupied = mainGridSymbols.some((symbol) => {
-          const position = getSymbolPosition(symbol)
-          return position.x === x && position.y === y
-        })
-
-        if (!occupied) {
-          nextPosition = { x, y }
-          foundEmptySlot = true
-          break
-        }
-      }
-
-      if (foundEmptySlot) break
-    }
-
-    if (!foundEmptySlot) {
-      const sortedSymbols = [...mainGridSymbols].sort(sortSymbolsByPosition)
-      const lastSymbol = sortedSymbols[sortedSymbols.length - 1]
-      const lastPosition = lastSymbol ? getSymbolPosition(lastSymbol) : { x: 0, y: 0 }
-      const nextIndex = lastPosition.y * gridCols + lastPosition.x + 1
-      nextPosition = {
-        x: nextIndex % gridCols,
-        y: Math.floor(nextIndex / gridCols),
-      }
-    }
-
+    const nextPosition = findNextEmptyGridPosition()
     setEditingSymbol({
       id: `draft-${Date.now()}`,
       ...EMPTY_SYMBOL,
+      gridId: !shouldUseDefaultGridTemplate && activeFolder ? activeFolder : 'main',
       positionX: nextPosition.x,
       positionY: nextPosition.y,
     })
+  }
+
+  const openCreateFolderModal = (x: number, y: number) => {
+    if (!selectedProfileId || symbolsLoadPending) return
+    if (isSelectedDemoProfile) {
+      setStatus('En el tablero demo no se pueden crear carpetas nuevas.')
+      setSplitEmptyCell(null)
+      return
+    }
+    setCreateFolderName('')
+    setCreateFolderModal({ x, y })
+  }
+
+  const closeCreateFolderModal = () => {
+    setCreateFolderModal(null)
+    setCreateFolderName('')
+  }
+
+  const confirmCreateFolder = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!createFolderModal) return
+    const trimmed = createFolderName.trim()
+    if (!trimmed) {
+      setStatus('El nombre de la carpeta no puede estar vacío.')
+      return
+    }
+    const { x, y } = createFolderModal
+    setEditingSymbol({
+      id: `draft-${Date.now()}`,
+      ...EMPTY_SYMBOL,
+      label: trimmed,
+      category: 'Carpetas',
+      emoji: '📁',
+      posType: 'noun',
+      gridId: 'main',
+      positionX: x,
+      positionY: y,
+    })
+    closeCreateFolderModal()
+    setSplitEmptyCell(null)
+    setViewMode('grid')
+    setStatus('')
   }
 
   const applyLexemeAlternative = (alternative: LexemeAlternative) => {
@@ -1455,10 +1656,16 @@ export default function AdminPage() {
   }
 
   const hasUnsavedGridChanges = useMemo(() => {
-    if (!selectedProfileId) return false
-    if (symbolsBaselineJson === '') return false
-    return stableGridSnapshot(symbols) !== symbolsBaselineJson
-  }, [symbols, symbolsBaselineJson, selectedProfileId])
+    if (!selectedProfileId || !selectedProfile) return false
+    const dimsDirty =
+      !isSelectedDemoProfile &&
+      pendingGridDimensions !== null &&
+      (pendingGridDimensions.rows !== (selectedProfile.gridRows ?? 8) ||
+        pendingGridDimensions.cols !== (selectedProfile.gridCols ?? 14))
+    const symbolsDirty =
+      symbolsBaselineJson !== '' && stableGridSnapshot(symbols) !== symbolsBaselineJson
+    return dimsDirty || symbolsDirty
+  }, [symbols, symbolsBaselineJson, selectedProfileId, selectedProfile, isSelectedDemoProfile, pendingGridDimensions])
 
   useEffect(() => {
     if (gridSaveFeedback !== 'saved') return
@@ -1481,16 +1688,32 @@ export default function AdminPage() {
   const showCreateProfileStepDebug =
     session?.user?.email?.toLowerCase() === DEBUG_CREATE_PROFILE_STEP_EMAIL
 
-  const previewGridCols = selectedProfile?.gridCols || 14
-  const previewGridRows = selectedProfile?.gridRows || 8
+  const previewGridCols =
+    pendingGridDimensions?.cols ?? selectedProfile?.gridCols ?? 14
+  const previewGridRows =
+    pendingGridDimensions?.rows ?? selectedProfile?.gridRows ?? 8
   const canAddPreviewColumn = (previewGridCols < ADMIN_GRID_DIM_MAX)
   const canAddPreviewRow = (previewGridRows < ADMIN_GRID_DIM_MAX)
-  const canDecDimRows = previewGridRows > ADMIN_GRID_DIM_MIN && !savingGrid && !symbolsLoadPending
-  const canIncDimRows = (previewGridRows < ADMIN_GRID_DIM_MAX) && !savingGrid && !symbolsLoadPending
-  const canDecDimCols = previewGridCols > ADMIN_GRID_DIM_MIN && !savingGrid && !symbolsLoadPending
-  const canIncDimCols = (previewGridCols < ADMIN_GRID_DIM_MAX) && !savingGrid && !symbolsLoadPending
+  const canDecDimRows =
+    previewGridRows > ADMIN_GRID_DIM_MIN && !savingSymbols && !symbolsLoadPending
+  const canIncDimRows =
+    previewGridRows < ADMIN_GRID_DIM_MAX && !savingSymbols && !symbolsLoadPending
+  const canDecDimCols =
+    previewGridCols > ADMIN_GRID_DIM_MIN && !savingSymbols && !symbolsLoadPending
+  const canIncDimCols =
+    previewGridCols < ADMIN_GRID_DIM_MAX && !savingSymbols && !symbolsLoadPending
   const dimStepperBtnClass =
     'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white transition hover:bg-white/10 disabled:pointer-events-none disabled:opacity-35'
+
+  const blockProfileHeaderActions =
+    !adminHydrated || !selectedProfileId || loadingData || symbolsLoadPending
+  const blockGridResizeChrome =
+    !adminHydrated ||
+    !selectedProfile ||
+    isSelectedDemoProfile ||
+    savingSymbols ||
+    symbolsLoadPending ||
+    Boolean(activeFolder)
 
   return (
     <div className="theme-page-shell min-h-screen min-w-0 overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
@@ -1525,7 +1748,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => void handleExportBoard()}
-                disabled={!selectedProfileId || loadingData || symbolsLoadPending}
+                disabled={blockProfileHeaderActions}
                 title={!selectedProfileId ? 'Selecciona un perfil' : 'Descargar copia del tablero en JSON'}
                 className="ui-secondary-button inline-flex w-full items-center justify-center self-center rounded-full px-4 py-2 text-sm font-medium text-[var(--app-foreground)] transition disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end"
               >
@@ -1535,12 +1758,14 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => void handleSaveAll()}
-                disabled={!selectedProfileId || !hasUnsavedGridChanges || savingSymbols || loadingData || symbolsLoadPending}
+                disabled={
+                  blockProfileHeaderActions || !hasUnsavedGridChanges || savingSymbols
+                }
                 title={
                   !selectedProfileId
                     ? 'Selecciona un perfil'
                     : !hasUnsavedGridChanges
-                      ? 'No hay cambios en el tablero del perfil seleccionado'
+                      ? 'No hay cambios (símbolos o tamaño del grid) en el perfil seleccionado'
                       : undefined
                 }
                 className={[
@@ -1659,6 +1884,32 @@ export default function AdminPage() {
                         {p.name}
                       </button>
                       <button
+                        onClick={() => void handleSetDefaultProfile(p)}
+                        disabled={Boolean(p.isOpeningProfile) || Boolean(settingDefaultProfileId)}
+                        className={`ui-icon-button inline-flex h-8 w-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-50 ${
+                          p.isOpeningProfile
+                            ? 'text-indigo-600 dark:text-indigo-300'
+                            : 'text-slate-500 dark:text-slate-300'
+                        }`}
+                        type="button"
+                        aria-label={
+                          p.isOpeningProfile
+                            ? `Perfil seleccionado al abrir el tablero: ${p.name}`
+                            : `Establecer ${p.name} como perfil al abrir el tablero`
+                        }
+                        title={
+                          p.isOpeningProfile
+                            ? 'Este perfil se abre al entrar al tablero'
+                            : 'Usar este perfil al abrir el tablero'
+                        }
+                      >
+                        {settingDefaultProfileId === p.id ? (
+                          <Loader2 size={14} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Eye size={14} aria-hidden />
+                        )}
+                      </button>
+                      <button
                         onClick={() => openEditProfileModal(p)}
                         className="ui-icon-button inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 dark:text-slate-300"
                         type="button"
@@ -1672,13 +1923,34 @@ export default function AdminPage() {
                         className="ui-icon-button inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300"
                         type="button"
                         aria-label={`Eliminar perfil ${p.name}`}
-                        title={p.isDemo ? 'El perfil por defecto no se puede eliminar' : 'Eliminar perfil'}
+                        title={p.isDemo ? 'El tablero demo fijo no se puede eliminar' : 'Eliminar perfil'}
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
                 </div>
+
+                {isSelectedDemoProfile ? (
+                  <div className="mt-4 border-t border-slate-200/80 pt-4 dark:border-slate-700/80">
+                    <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Tablero de demostración fijo: si las celdas se descolocan, restablece la plantilla.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleRepairDemoLayout()}
+                      disabled={repairingDemoLayout || savingSymbols || symbolsLoadPending || Boolean(activeFolder)}
+                      className="ui-secondary-button flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {repairingDemoLayout ? (
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                      ) : (
+                        <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+                      )}
+                      Restaurar plantilla demo
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="app-panel rounded-2xl p-5">
@@ -1714,29 +1986,12 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="app-panel rounded-2xl p-5">
-                <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vista</h2>
-                <div className="ui-floating-panel flex overflow-hidden rounded-2xl p-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
-                      }`}
-                  >
-                    <LayoutGrid size={16} /> Grid
-                  </button>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
-                      }`}
-                  >
-                    <List size={16} /> Lista
-                  </button>
-                </div>
-              </div>
-
-              {selectedProfile && !selectedProfile.isDemo && (
+              {selectedProfile && !isSelectedDemoProfile && (
                 <div className="app-panel rounded-2xl p-5">
                   <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Dimensiones</h2>
+                  <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                    Ajusta filas y columnas y pulsa <span className="font-semibold text-slate-600 dark:text-slate-300">Guardar cambios</span> arriba para aplicarlas en el servidor.
+                  </p>
                   <div className="overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 text-white shadow-inner dark:border-slate-700/90">
                     <div className="border-b border-white/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Tamaño del grid
@@ -1907,23 +2162,97 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+
+              <div className="app-panel rounded-2xl p-5">
+                <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vista</h2>
+                <div className="ui-floating-panel flex overflow-hidden rounded-2xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('grid')}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                      }`}
+                  >
+                    <LayoutGrid size={16} /> Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                      }`}
+                  >
+                    <List size={16} /> Lista
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Main Area */}
             <div className="min-w-0 lg:col-span-3">
               {viewMode === 'grid' ? (
                 <div className="app-panel min-w-0 overflow-hidden rounded-2xl p-4 sm:p-6">
-                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                        {activeFolder ? `Editando carpeta: ${activeFolder}` : 'Vista Previa del Grid'}
-                      </h2>
-                      {activeFolder && (
-                        <button onClick={() => setActiveFolder(null)} className="mt-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
-                          &larr; Volver al grid principal
+                  <div className="mb-4 flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          {activeFolderTitle ? `Editando carpeta: ${activeFolderTitle}` : 'Vista Previa del Grid'}
+                        </h2>
+                        {activeFolder ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveFolder(null)}
+                            className="mt-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          >
+                            &larr; Volver al grid principal
+                          </button>
+                        ) : null}
+                      </div>
+                      {!symbolsLoadPending && isSelectedDemoProfile && !activeFolder ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleRepairDemoLayout()}
+                          disabled={repairingDemoLayout || savingSymbols}
+                          className="ui-secondary-button inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold sm:w-auto disabled:pointer-events-none disabled:opacity-50"
+                          title="Corrige el tablero si las celdas quedaron descolocadas tras editar o arrastrar"
+                        >
+                          {repairingDemoLayout ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          ) : (
+                            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+                          )}
+                          Restaurar plantilla demo
                         </button>
-                      )}
+                      ) : null}
                     </div>
+
+                    {!symbolsLoadPending && isSelectedDemoProfile && !activeFolder ? (
+                      <div className="flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-3 dark:border-slate-600/60 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Editar contenido
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                          <label htmlFor="admin-demo-folder-picker" className="sr-only">
+                            Elegir carpeta del tablero demo para editar su contenido
+                          </label>
+                          <select
+                            id="admin-demo-folder-picker"
+                            key={`${selectedProfileId}-demo-folder`}
+                            defaultValue=""
+                            className="app-input min-h-[44px] min-w-0 max-w-full flex-1 rounded-xl px-3 py-2 text-sm"
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v) setActiveFolder(v)
+                            }}
+                          >
+                            <option value="">Carpeta del tablero demo…</option>
+                            {demoFolderNames.map((name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <DndContext
@@ -2019,6 +2348,8 @@ export default function AdminPage() {
                           )
                         }
 
+                        const isSplitHere = splitEmptyCell?.x === x && splitEmptyCell?.y === y
+
                         return (
                           <DroppableGridCell
                             key={`cell-${x}-${y}`}
@@ -2026,13 +2357,59 @@ export default function AdminPage() {
                             className="flex min-h-0 min-w-0 w-full"
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
-                            <button
-                              onClick={() => setEditingSymbol({ id: `draft-${Date.now()}`, ...EMPTY_SYMBOL, positionX: x, positionY: y })}
-                              type="button"
-                              className="group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15"
-                            >
-                              <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
-                            </button>
+                            {isSplitHere ? (
+                              <div
+                                className="flex aspect-video w-full min-w-0 overflow-hidden rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 dark:border-slate-500/60 dark:bg-slate-950/45"
+                                role="group"
+                                aria-label="Crear contenido en celda vacía"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSymbol({
+                                      id: `draft-${Date.now()}`,
+                                      ...EMPTY_SYMBOL,
+                                      gridId:
+                                        !shouldUseDefaultGridTemplate && activeFolder ? activeFolder : 'main',
+                                      positionX: x,
+                                      positionY: y,
+                                    })
+                                    setSplitEmptyCell(null)
+                                  }}
+                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 border-r border-slate-500/40 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 dark:border-slate-500/50 dark:text-slate-100"
+                                >
+                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
+                                    <Plus size={14} strokeWidth={2.5} className="text-white dark:text-white" aria-hidden />
+                                  </span>
+                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
+                                    CREAR BOTÓN
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateFolderModal(x, y)}
+                                  disabled={isSelectedDemoProfile}
+                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-100"
+                                  title={isSelectedDemoProfile ? 'No disponible en el tablero demo' : undefined}
+                                >
+                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
+                                    <FolderOpen size={15} strokeWidth={2.25} className="text-white dark:text-white" aria-hidden />
+                                  </span>
+                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
+                                    CREAR CARPETA
+                                  </span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setSplitEmptyCell({ x, y })}
+                                type="button"
+                                className="group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15"
+                                aria-label="Añadir en celda vacía"
+                              >
+                                <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
+                              </button>
+                            )}
                           </DroppableGridCell>
                         )
                       })}
@@ -2042,13 +2419,7 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
-                        disabled={
-                          !selectedProfile ||
-                          savingGrid ||
-                          symbolsLoadPending ||
-                          Boolean(activeFolder) ||
-                          !canAddPreviewColumn
-                        }
+                        disabled={blockGridResizeChrome || !canAddPreviewColumn}
                         title={
                           symbolsLoadPending
                             ? 'Cargando tablero…'
@@ -2069,13 +2440,7 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
-                        disabled={
-                          !selectedProfile ||
-                          savingGrid ||
-                          symbolsLoadPending ||
-                          Boolean(activeFolder) ||
-                          !canAddPreviewRow
-                        }
+                        disabled={blockGridResizeChrome || !canAddPreviewRow}
                         title={
                           symbolsLoadPending
                             ? 'Cargando tablero…'
@@ -2476,7 +2841,7 @@ export default function AdminPage() {
                     <button
                       type="button"
                       onClick={() => void signOut({ callbackUrl: '/' })}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 sm:w-auto"
+                      className="dyslexia-comfort-btn inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 sm:w-auto"
                     >
                       <LogOut size={16} aria-hidden />
                       Cerrar sesión
@@ -2486,7 +2851,7 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Tema</label>
-                      <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="dyslexia-settings-option-grid dyslexia-theme-options grid gap-2 sm:grid-cols-3">
                         {THEME_OPTIONS.map((option) => {
                           const Icon = option.icon
                           const isActive = accountPreferredTheme === option.value
@@ -2513,7 +2878,7 @@ export default function AdminPage() {
                       <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
                         Tipografía adaptada a dislexia
                       </label>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="dyslexia-settings-option-grid grid gap-2 sm:grid-cols-2">
                         {DYSLEXIA_FONT_OPTIONS.map((option) => {
                           const isActive = accountPreferredDyslexiaFont === option.value
                           return (
@@ -2901,19 +3266,24 @@ export default function AdminPage() {
               exit={{ opacity: 0 }}
               className="absolute inset-0 backdrop-blur-xl"
               style={{ background: 'var(--app-modal-backdrop)' }}
-              onClick={() => setEditingSymbol(null)}
+              onClick={() => closeEditingSymbolModal()}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(90dvh,880px)] sm:max-w-2xl sm:rounded-[2rem] lg:max-w-5xl xl:max-w-6xl"
+              onPointerDown={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <h3 className="pr-2 text-lg font-bold text-slate-800 sm:text-xl dark:text-slate-100">
                   {editingSymbol.id ? 'Editar Símbolo' : 'Nuevo Símbolo'}
                 </h3>
-                <button onClick={() => setEditingSymbol(null)} className="ui-icon-button shrink-0 rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => closeEditingSymbolModal()}
+                  className="ui-icon-button shrink-0 rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                >
                   <X size={20} />
                 </button>
               </div>
@@ -3082,11 +3452,71 @@ export default function AdminPage() {
                     {editingSymbol.category === 'Carpetas' && (
                       <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
                         <button
-                          onClick={() => {
-                            setActiveFolder(editingSymbol.label)
-                            setEditingSymbol(null)
+                          type="button"
+                          disabled={savingSymbols}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void (async () => {
+                              const sym = editingSymbol
+                              if (!sym) return
+                              const sid = String(sym.id ?? '')
+                              if (sid.startsWith('draft-')) {
+                                setStatus(
+                                  'Pulsa «Guardar en Grid» abajo para añadir la carpeta al tablero; luego podrás editar su contenido.',
+                                )
+                                return
+                              }
+                              if (sid.startsWith('new-')) {
+                                if (!selectedProfileId) return
+                                setSavingSymbols(true)
+                                setStatus('')
+                                try {
+                                  await saveSymbols(selectedProfileId, symbolsRef.current)
+                                  const fresh = await getProfileSymbols(selectedProfileId)
+                                  const px = sym.positionX ?? sym.position_x ?? 0
+                                  const py = sym.positionY ?? sym.position_y ?? 0
+                                  const labelNorm = typeof sym.label === 'string' ? sym.label.trim() : ''
+                                  const match = fresh.find(
+                                    (s) =>
+                                      s.category === 'Carpetas' &&
+                                      typeof s.label === 'string' &&
+                                      s.label.trim() === labelNorm &&
+                                      (s.positionX ?? 0) === px &&
+                                      (s.positionY ?? 0) === py,
+                                  )
+                                  if (!match) {
+                                    setStatus(
+                                      '❌ No se localizó la carpeta tras guardar. Pulsa «Guardar cambios» arriba y vuelve a intentarlo.',
+                                    )
+                                    return
+                                  }
+                                  setSymbols(fresh)
+                                  setSymbolsBaselineJson(stableGridSnapshot(fresh))
+                                  const folderKey = isSelectedDemoProfile ? match.label : match.id
+                                  closeEditingSymbolModal()
+                                  startTransition(() => {
+                                    setActiveFolder(String(folderKey))
+                                  })
+                                  setGridSaveFeedback('idle')
+                                } catch (err) {
+                                  console.error(err)
+                                  setStatus(
+                                    '❌ No se pudo guardar la carpeta. Revisa la conexión o los límites del plan e inténtalo de nuevo.',
+                                  )
+                                } finally {
+                                  setSavingSymbols(false)
+                                }
+                                return
+                              }
+                              const folderKey = isSelectedDemoProfile ? sym.label : sym.id
+                              closeEditingSymbolModal()
+                              startTransition(() => {
+                                setActiveFolder(String(folderKey))
+                              })
+                            })()
                           }}
-                          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-orange-100 px-4 py-3 font-semibold text-orange-700 transition hover:bg-orange-200 dark:bg-orange-500/15 dark:text-orange-200 dark:hover:bg-orange-500/25"
+                          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-orange-100 px-4 py-3 font-semibold text-orange-700 transition hover:bg-orange-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-500/15 dark:text-orange-200 dark:hover:bg-orange-500/25"
                         >
                           <FolderOpen size={18} /> Editar contenido de la carpeta
                         </button>
@@ -3204,6 +3634,26 @@ export default function AdminPage() {
                         ))}
                       </div>
                     </div>
+
+                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-600/60 dark:bg-slate-900/30">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editingSymbol.opensKeyboard)}
+                        onChange={(e) =>
+                          setEditingSymbol({ ...editingSymbol, opensKeyboard: e.target.checked })
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          Abre el teclado al pulsar
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                          En el tablero, esta celda cambia a la pestaña teclado en lugar de añadir la etiqueta a la frase.
+                          Sigue aplicando también si la etiqueta es «Teclado» o «Números».
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -3218,10 +3668,15 @@ export default function AdminPage() {
                     Eliminar símbolo
                   </button>
                 )}
-                <button onClick={() => setEditingSymbol(null)} className="ui-secondary-button order-2 w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:order-none sm:w-auto dark:text-slate-300">
+                <button
+                  type="button"
+                  onClick={() => closeEditingSymbolModal()}
+                  className="ui-secondary-button order-2 w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:order-none sm:w-auto dark:text-slate-300"
+                >
                   Cancelar
                 </button>
                 <button
+                  type="button"
                   onClick={handleEditSave}
                   className="ui-primary-button order-1 w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:order-none sm:w-auto"
                 >
@@ -3231,6 +3686,86 @@ export default function AdminPage() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {createFolderModal ? (
+          <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 backdrop-blur-xl"
+              style={{ background: 'var(--app-modal-backdrop)' }}
+              onClick={closeCreateFolderModal}
+              aria-hidden
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-folder-modal-title"
+              className="ui-modal-panel relative z-[1] w-full max-w-md rounded-t-[1.75rem] sm:rounded-[2rem]"
+            >
+              <form onSubmit={confirmCreateFolder} className="flex flex-col">
+                <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-5 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-200">
+                      <FolderOpen size={20} aria-hidden />
+                    </span>
+                    <div>
+                      <h3 id="create-folder-modal-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                        Nueva carpeta
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        El nombre aparecerá en el tablero como picto carpeta.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeCreateFolderModal}
+                    className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                    aria-label="Cerrar"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="space-y-4 p-4 sm:p-5">
+                  <div>
+                    <label htmlFor="create-folder-name" className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      Nombre de la carpeta
+                    </label>
+                    <input
+                      id="create-folder-name"
+                      type="text"
+                      value={createFolderName}
+                      onChange={(e) => setCreateFolderName(e.target.value)}
+                      className="app-input w-full rounded-xl px-4 py-3 text-sm"
+                      placeholder="Ej. Mi rutina"
+                      autoFocus
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={closeCreateFolderModal}
+                      className="ui-secondary-button rounded-2xl px-5 py-2.5 text-sm font-semibold"
+                    >
+                      Cancelar
+                    </button>
+                    <button type="submit" className="ui-primary-button rounded-2xl px-5 py-2.5 text-sm font-semibold">
+                      Crear carpeta
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -3500,23 +4035,20 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {!profileBeingEdited.isDemo && (
-                  <label className="ui-secondary-button mt-4 flex items-start gap-3 rounded-2xl p-4 text-sm text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={markEditedProfileAsDefault}
-                      onChange={(e) => setMarkEditedProfileAsDefault(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
-                    />
-                    <span>Establecer este perfil como por defecto.</span>
-                  </label>
-                )}
-
-                {profileBeingEdited.isDemo && (
-                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                    Este es el perfil por defecto actual y no se puede eliminar.
+                <label className="ui-secondary-button mt-4 flex items-start gap-3 rounded-2xl p-4 text-sm text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={markEditedProfileAsDefault}
+                    onChange={(e) => setMarkEditedProfileAsDefault(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                  />
+                  <span>Marcar este perfil como seleccionado al abrir el tablero.</span>
+                </label>
+                {profileBeingEdited.isDemo ? (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Este perfil es el tablero demo fijo (plantilla); no se puede eliminar.
                   </p>
-                )}
+                ) : null}
 
                 <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                   <button

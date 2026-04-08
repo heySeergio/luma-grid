@@ -32,6 +32,7 @@ function mapPrismaSymbolToClient(
         color: string
         hidden: boolean
         state: string
+        opensKeyboard?: boolean
         createdAt: Date
         updatedAt: Date
     },
@@ -53,6 +54,7 @@ function mapPrismaSymbolToClient(
         color: s.color,
         hidden: s.hidden,
         state: s.state,
+        opensKeyboard: Boolean(s.opensKeyboard),
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
     }
@@ -81,6 +83,28 @@ type SymbolInput = {
     state?: string | null
     gridId?: string | null
     grid_id?: string | null
+    opensKeyboard?: boolean
+    opens_keyboard?: boolean
+}
+
+function effectiveGridDimensions(profile: { gridCols: number; gridRows: number }) {
+    return {
+        cols: Math.max(1, profile.gridCols),
+        rows: Math.max(1, profile.gridRows),
+    }
+}
+
+/** Evita símbolos con coordenadas fuera del grid (columnas CSS implícitas comprimidas en /tablero). */
+function filterSymbolInputsToGridBounds(
+    symbols: SymbolInput[],
+    cols: number,
+    rows: number,
+): SymbolInput[] {
+    return symbols.filter((s) => {
+        const x = s.positionX ?? s.position_x ?? 0
+        const y = s.positionY ?? s.position_y ?? 0
+        return x >= 0 && y >= 0 && x < cols && y < rows
+    })
 }
 
 /** Alineado con `persistSymbols`: creación de fila nueva vs actualización de existente. */
@@ -107,6 +131,7 @@ type SymbolRowForDiff = {
     state: string
     gridId: string
     normalizedLabel: string
+    opensKeyboard: boolean
 }
 
 /** Si devuelve true, el payload coincide con la fila: no hace falta enrich ni UPDATE. */
@@ -133,6 +158,9 @@ function symbolInputMatchesDb(sym: SymbolInput, db: SymbolRowForDiff): boolean {
 
     const gridId = sym.gridId ?? sym.grid_id ?? 'main'
     if (gridId !== db.gridId) return false
+
+    const opensKb = Boolean(sym.opensKeyboard ?? sym.opens_keyboard)
+    if (opensKb !== db.opensKeyboard) return false
 
     const manual = Boolean(sym.manualGrammarOverride ?? sym.manual_grammar_override)
     if (manual !== db.manualGrammarOverride) return false
@@ -264,6 +292,7 @@ async function enrichSymbolInput(sym: SymbolInput) {
         color: normalizeSymbolColor(sym.color ?? DEFAULT_SYMBOL_COLOR),
         state: sym.state ?? 'visible',
         gridId: sym.gridId ?? sym.grid_id ?? 'main',
+        opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
     }
 }
 
@@ -327,7 +356,15 @@ async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
             ]),
         )
     } catch (error) {
-        if (isUnknownPrismaFieldError(error, ['normalizedLabel', 'posConfidence', 'manualGrammarOverride', 'lexemeId'])) {
+        if (
+            isUnknownPrismaFieldError(error, [
+                'normalizedLabel',
+                'posConfidence',
+                'manualGrammarOverride',
+                'lexemeId',
+                'opensKeyboard',
+            ])
+        ) {
             return null
         }
         throw error
@@ -349,6 +386,7 @@ function buildSymbolWriteData(
         color: enriched.color,
         state: enriched.state,
         gridId: enriched.gridId,
+        opensKeyboard: enriched.opensKeyboard,
         ...(includeLexicalFields
             ? {
                 normalizedLabel: enriched.normalizedLabel,
@@ -391,6 +429,42 @@ async function persistSymbols(
     }, SYMBOL_PERSIST_TX)
 }
 
+/** Cliente Prisma antiguo o migración pendiente: `opensKeyboard` puede no existir en el schema generado. */
+async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowForDiff[]> {
+    const selectBase = {
+        id: true,
+        label: true,
+        emoji: true,
+        imageUrl: true,
+        category: true,
+        posType: true,
+        posConfidence: true,
+        manualGrammarOverride: true,
+        lexemeId: true,
+        positionX: true,
+        positionY: true,
+        color: true,
+        state: true,
+        gridId: true,
+        normalizedLabel: true,
+    } as const
+
+    try {
+        const rows = await prisma.symbol.findMany({
+            where: { profileId },
+            select: { ...selectBase, opensKeyboard: true },
+        })
+        return rows as SymbolRowForDiff[]
+    } catch (error) {
+        if (!isUnknownPrismaFieldError(error, ['opensKeyboard'])) throw error
+        const rows = await prisma.symbol.findMany({
+            where: { profileId },
+            select: selectBase,
+        })
+        return rows.map((r) => ({ ...r, opensKeyboard: false }))
+    }
+}
+
 export async function getProfileSymbols(profileId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
@@ -401,6 +475,8 @@ export async function getProfileSymbols(profileId: string) {
     })
 
     if (!profile) return []
+
+    const { cols, rows } = effectiveGridDimensions(profile)
 
     const [symbols, backfilledById] = await Promise.all([
         prisma.symbol.findMany({
@@ -416,7 +492,15 @@ export async function getProfileSymbols(profileId: string) {
             return backfilled ? { ...symbol, ...backfilled } : symbol
         })
 
-    return merged.map((row) => mapPrismaSymbolToClient(row))
+    const inBounds = merged.filter(
+        (row) =>
+            row.positionX >= 0 &&
+            row.positionY >= 0 &&
+            row.positionX < cols &&
+            row.positionY < rows,
+    )
+
+    return inBounds.map((row) => mapPrismaSymbolToClient(row))
 }
 
 export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
@@ -429,6 +513,22 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
 
     if (!profile) throw new Error('Perfil no encontrado')
 
+    const { cols, rows } = effectiveGridDimensions(profile)
+
+    await prisma.symbol.deleteMany({
+        where: {
+            profileId,
+            OR: [
+                { positionX: { lt: 0 } },
+                { positionY: { lt: 0 } },
+                { positionX: { gte: cols } },
+                { positionY: { gte: rows } },
+            ],
+        },
+    })
+
+    const symbolsInBounds = filterSymbolInputsToGridBounds(symbols, cols, rows)
+
     const owner = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: { email: true, plan: true },
@@ -436,7 +536,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
     const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
     // Cuota Plan Libre: solo al añadir botones/carpetas nuevos (ids new- / template / fixed-left).
     // Cambiar imagen, texto, posición, etc. en símbolos ya guardados no aplica límite.
-    if (plan === 'free' && !profile.isDemo && symbols.some(isPersistCreate)) {
+    if (plan === 'free' && !profile.isDemo && symbolsInBounds.some(isPersistCreate)) {
         const symbolsOnOtherNonDemoProfiles = await prisma.symbol.count({
             where: {
                 profile: {
@@ -446,50 +546,39 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
                 },
             },
         })
-        if (symbolsOnOtherNonDemoProfiles + symbols.length > FREE_MAX_TOTAL_SYMBOLS) {
+        if (symbolsOnOtherNonDemoProfiles + symbolsInBounds.length > FREE_MAX_TOTAL_SYMBOLS) {
             throw new Error(
                 `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total en tus perfiles (el tablero Demo no cuenta). Incluye carpetas. Visita /plan para ampliar el plan o reduce símbolos.`,
             )
         }
     }
 
-    const existingRows = await prisma.symbol.findMany({
-        where: { profileId },
-        select: {
-            id: true,
-            label: true,
-            emoji: true,
-            imageUrl: true,
-            category: true,
-            posType: true,
-            posConfidence: true,
-            manualGrammarOverride: true,
-            lexemeId: true,
-            positionX: true,
-            positionY: true,
-            color: true,
-            state: true,
-            gridId: true,
-            normalizedLabel: true,
-        },
-    })
+    const existingRows = await loadSymbolRowsForSaveDiff(profileId)
     const existingById = new Map<string, SymbolRowForDiff>(existingRows.map((r) => [r.id, r]))
-    const indicesToWrite = computeIndicesToWrite(symbols, existingById)
+    const indicesToWrite = computeIndicesToWrite(symbolsInBounds, existingById)
 
     const enrichedSymbols = await Promise.all(
-        symbols.map((sym, i) =>
+        symbolsInBounds.map((sym, i) =>
             indicesToWrite.has(i) ? enrichSymbolInput(sym) : Promise.resolve(null),
         ),
     )
 
     try {
-        await persistSymbols(profileId, symbols, enrichedSymbols, true)
+        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, true)
     } catch (error) {
-        if (!isUnknownPrismaFieldError(error, ['normalizedLabel', 'posConfidence', 'manualGrammarOverride', 'lexemeId'])) {
+        if (
+            !isUnknownPrismaFieldError(error, [
+                'normalizedLabel',
+                'posConfidence',
+                'manualGrammarOverride',
+                'lexemeId',
+                'opensKeyboard',
+            ])
+        ) {
             throw error
         }
 
-        await persistSymbols(profileId, symbols, enrichedSymbols, false)
+        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false)
     }
 
     revalidatePath('/admin')
@@ -500,14 +589,22 @@ export async function deleteSymbolAction(profileId: string, symbolId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
+    const owner = { userId: session.user.id }
+
+    await prisma.symbol.deleteMany({
+        where: {
+            profileId,
+            gridId: symbolId,
+            profile: owner,
+        },
+    })
+
     const deleted = await prisma.symbol.deleteMany({
         where: {
             id: symbolId,
             profileId,
-            profile: {
-                userId: session.user.id
-            }
-        }
+            profile: owner,
+        },
     })
 
     if (deleted.count === 0) throw new Error('Símbolo no encontrado')

@@ -66,6 +66,11 @@ export async function createUserWithPasswordAndDemo(opts: {
       })),
     })
 
+    await tx.user.update({
+      where: { id: created.id },
+      data: { defaultProfileId: profileId },
+    })
+
     return created
   })
 }
@@ -124,6 +129,11 @@ export async function findOrCreateUserFromOAuth(opts: {
         hidden: symbol.hidden,
         state: 'visible',
       })),
+    })
+
+    await tx.user.update({
+      where: { id: created.id },
+      data: { defaultProfileId: profileId },
     })
 
     return created

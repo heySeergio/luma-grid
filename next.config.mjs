@@ -16,8 +16,8 @@ const withPwaWrapped = withPWA({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   /** Evita errores MODULE_NOT_FOUND ./vendor-chunks/jose.js con NextAuth en build (Windows / PWA). */
+  serverExternalPackages: ['jose'],
   experimental: {
-    serverComponentsExternalPackages: ['jose'],
     /** Default ~1 MB: las imágenes en base64 en `saveSymbols` se truncan y el servidor cree que no hubo cambios (emoji sigue, imagen no). */
     serverActions: {
       bodySizeLimit: '4mb',

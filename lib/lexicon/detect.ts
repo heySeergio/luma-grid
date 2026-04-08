@@ -56,6 +56,25 @@ const PRONOUNS = new Set([
 ])
 const ADVERBS = new Set(['no', 'si', 'sí', 'más', 'menos', 'ahora', 'aqui', 'aquí', 'alli', 'allí'])
 
+/**
+ * Sustantivos frecuentes en AAC que terminan en -ado (y parecen participio/adjetivo).
+ * La heurística genérica `…ado` → adj clasifica mal p. ej. «teclado», «mercado», «estado».
+ */
+const HEURISTIC_NOUN_LEMMAS = new Set([
+  'teclado',
+  'mercado',
+  'estado',
+  'resultado',
+  'lado',
+  'dado',
+  'pescado',
+  'helado',
+  'pecado',
+  'cuidado',
+  'jurado',
+  'pasado',
+])
+
 function buildCandidate(
   lexeme: {
     id: string
@@ -116,20 +135,33 @@ function heuristicCandidates(normalizedLabel: string, normalizedLooseLabel: stri
     if (PREPOSITIONS.has(normalizedLabel) || PREPOSITIONS.has(normalizedLooseLabel)) return 'prep'
     if (CONJUNCTIONS.has(normalizedLabel) || CONJUNCTIONS.has(normalizedLooseLabel)) return 'conj'
     if (ADVERBS.has(normalizedLabel) || ADVERBS.has(normalizedLooseLabel)) return 'adverb'
+    if (HEURISTIC_NOUN_LEMMAS.has(normalizedLabel) || HEURISTIC_NOUN_LEMMAS.has(normalizedLooseLabel)) {
+      return 'noun'
+    }
     if (normalizedLabel.endsWith('ar') || normalizedLabel.endsWith('er') || normalizedLabel.endsWith('ir')) return 'verb'
     if (normalizedLabel.endsWith('mente')) return 'adverb'
-    if (normalizedLabel.endsWith('ado') || normalizedLabel.endsWith('ada') || normalizedLabel.endsWith('oso') || normalizedLabel.endsWith('osa')) return 'adj'
+    // No usar `-ada` aquí: colisiona con sustantivos (entrada, comida, vida, moneda…).
+    if (
+      normalizedLabel.endsWith('ado') ||
+      normalizedLabel.endsWith('oso') ||
+      normalizedLabel.endsWith('osa')
+    ) {
+      return 'adj'
+    }
     return null
   })()
 
   if (!heuristicPos) return []
+
+  const confidence =
+    heuristicPos === 'verb' ? 0.45 : heuristicPos === 'noun' ? 0.43 : 0.4
 
   return [{
     lexemeId: '',
     lemma: normalizedLabel,
     primaryPos: heuristicPos,
     symbolPosType: mapLexicalPosToSymbolPosType(heuristicPos),
-    confidence: heuristicPos === 'verb' ? 0.45 : 0.4,
+    confidence,
     method: 'heuristic',
   }]
 }

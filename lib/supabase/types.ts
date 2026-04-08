@@ -43,6 +43,8 @@ export interface Symbol {
   color: string
   hidden: boolean
   state: string
+  /** Si es true, en el tablero esta celda abre el teclado al pulsarse. */
+  opensKeyboard?: boolean
   arasaacId?: number
   createdAt: string
   updatedAt: string

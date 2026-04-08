@@ -1,5 +1,5 @@
 /**
- * Verificación interna del plan en mejora.md (artefactos, JSON, núcleo de import, Prisma).
+ * Verificación interna del pipeline léxico (artefactos, JSON, núcleo de import, Prisma).
  *
  * - Sin BD: comprueba rutas, parsea datos, valida phase3 staging, ejecuta `prisma validate`,
  *   comprobaciones sobre `lexemePhaseImportCore` y coherencia factor tier ↔ predicción.
@@ -23,9 +23,8 @@ const root = join(__dirname, '..')
 const fullMode = process.argv.includes('--full')
 const skipDb = process.env.MEJORA_SKIP_DB === '1'
 
-/** Rutas relativas al repo documentadas en mejora.md */
+/** Rutas relativas al pipeline léxico en el repo */
 const REQUIRED_FILES = [
-  'mejora.md',
   'scripts/load-env-database.mjs',
   'scripts/prisma-env.mjs',
   'scripts/lib/lexemePhaseImportCore.mjs',

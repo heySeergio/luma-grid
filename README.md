@@ -2,6 +2,8 @@
 
 Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y alternativa en español. Combina un tablero de símbolos, construcción de frases, voz, perfiles configurables, panel de administración y una capa léxica que ayuda a conjugar, clasificar palabras y mejorar la predicción contextual.
 
+**Descripción orientada a familias y equipos no técnicos:** [PROYECTO.md](./PROYECTO.md).
+
 ## Qué hace el proyecto
 
 - Permite comunicarse mediante un grid de símbolos y carpetas temáticas.
@@ -17,7 +19,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
   Selección de símbolos, carpetas, frases rápidas, teclado y reproducción de voz.
 
 - `Panel de administración`
-  Gestión de perfiles, símbolos, posiciones, grid, categorías, colores, cuenta y revisión léxica.
+  Gestión de perfiles (incl. perfil seleccionado al abrir el tablero), símbolos, posiciones, grid, carpetas en tablero demo y en perfiles propios, categorías, colores, cuenta y revisión léxica.
 
 - `Autenticación`
   Login y registro con `NextAuth` + credenciales.
@@ -36,7 +38,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
 
 ## Stack técnico
 
-- `Next.js 14` con `App Router`
+- `Next.js 16` con `App Router`
 - `React 18`
 - `TypeScript`
 - `Tailwind CSS`
@@ -152,7 +154,7 @@ Flujo general:
 4. Se guarda el análisis en el símbolo.
 5. La predicción reutiliza esa información junto al historial del perfil.
 
-El plan original de esta arquitectura está documentado en [`.lexico`](./.lexico).
+La arquitectura léxica vive en el código: modelo en `prisma/schema.prisma`, datos semilla en `prisma/seed-lexicon.mjs`, lógica en `lib/lexicon/` y acciones en `app/actions/lexicon.ts` y `app/actions/predictions.ts`.
 
 ## Interfaz AAC
 
@@ -251,6 +253,22 @@ npm run lint
 npm run seed:lexicon
 npm run test:lexicon-detection
 ```
+
+### Restaurar posiciones del tablero demo (BD)
+
+Si el perfil **demo** quedó descolocado (coordenadas en base de datos distintas de la plantilla), con `DATABASE_URL` cargada (`.env` / `.env.local`):
+
+```bash
+npm run repair:demo-email
+```
+
+Por defecto actúa sobre `sergio.tdc.tdc@gmail.com`. Otro usuario:
+
+```bash
+REPAIR_EMAIL=correo@ejemplo.com npm run repair:demo-email
+```
+
+En el panel **Admin** también hay el botón **Restaurar plantilla demo** (sidebar, con el perfil demo seleccionado, y en la cabecera de la vista grid).
 
 ## Notas de desarrollo
 

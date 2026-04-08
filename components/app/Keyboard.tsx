@@ -50,9 +50,9 @@ export default function Keyboard({ onTextAdd }: Props) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 bg-transparent p-2">
+    <div className="flex h-full min-h-0 flex-col gap-2 bg-transparent p-2">
       {/* Input line */}
-      <div className="grid grid-cols-12 gap-1.5">
+      <div className="grid shrink-0 grid-cols-12 gap-1.5">
         <div className="app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] px-4 py-2 text-2xl font-semibold text-slate-800 dark:text-slate-100">
           {currentText || <span className="text-slate-400 dark:text-slate-500">Escribe aquí...</span>}
         </div>
@@ -73,9 +73,8 @@ export default function Keyboard({ onTextAdd }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 grid gap-1.5" style={{ gridTemplateRows: '7fr 3fr' }}>
-        {/* 70% teclado */}
-        <div className="min-h-0 grid gap-1.5 grid-rows-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+        <div className="grid min-h-0 flex-1 grid-rows-5 gap-1.5">
           {/* Number row */}
           <div className="grid grid-cols-10 gap-1.5">
             {NUMBER_ROW.map(key => (
@@ -133,33 +132,24 @@ export default function Keyboard({ onTextAdd }: Props) {
           </div>
         </div>
 
-        {/* 30% panel inferior */}
-        <div className="min-h-0 grid grid-cols-4 gap-1.5">
-          {Array.from({ length: 8 }).map((_, idx) => {
-            const pred = predictions[idx]
-            if (pred) {
-              return (
-                <button
-                  key={`pred-${idx}`}
-                  onClick={() => {
-                    const newWords = [...words]
-                    newWords[newWords.length - 1] = pred
-                    setCurrentText(newWords.join(' ') + ' ')
-                  }}
-                  className="ui-soft-badge h-full min-h-[56px] rounded-[1.25rem] px-2 py-1 text-center text-xl font-semibold shadow-sm transition hover:brightness-105"
-                >
-                  {pred}
-                </button>
-              )
-            }
-            return (
-              <div
-                key={`empty-${idx}`}
-                className="ui-empty-slot h-full min-h-[56px] rounded-[1.25rem]"
-              />
-            )
-          })}
-        </div>
+        {predictions.length > 0 ? (
+          <div className="grid shrink-0 grid-cols-4 gap-1.5" style={{ gridAutoRows: 'minmax(48px, auto)' }}>
+            {predictions.map((pred, idx) => (
+              <button
+                key={`pred-${idx}`}
+                type="button"
+                onClick={() => {
+                  const newWords = [...words]
+                  newWords[newWords.length - 1] = pred
+                  setCurrentText(newWords.join(' ') + ' ')
+                }}
+                className="ui-soft-badge min-h-[48px] rounded-[1.25rem] px-2 py-1 text-center text-xl font-semibold shadow-sm transition hover:brightness-105"
+              >
+                {pred}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   )

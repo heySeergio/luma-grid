@@ -8,14 +8,15 @@ export const runtime = 'nodejs'
 
 export async function GET(
   _req: Request,
-  context: { params: { voiceId: string } },
+  context: { params: Promise<{ voiceId: string }> },
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const raw = context.params.voiceId
+  const { voiceId: voiceIdParam } = await context.params
+  const raw = voiceIdParam
   const voiceId = decodeURIComponent(raw ?? '')
 
   if (!voiceId) {

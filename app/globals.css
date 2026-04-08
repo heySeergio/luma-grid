@@ -131,6 +131,85 @@ body.font-dyslexia-enabled select {
   font-family: var(--font-open-dyslexic), var(--font-app-sans), sans-serif;
 }
 
+/* OpenDyslexic: métricas más altas → más aire en inputs, botones y tarjetas de ajustes */
+body.font-dyslexia-enabled {
+  line-height: 1.5;
+}
+
+body.font-dyslexia-enabled .app-input,
+body.font-dyslexia-enabled select.app-input,
+body.font-dyslexia-enabled textarea.app-input {
+  min-height: 2.875rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  line-height: 1.45;
+}
+
+body.font-dyslexia-enabled .ui-primary-button,
+body.font-dyslexia-enabled .ui-secondary-button {
+  min-height: 2.75rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  line-height: 1.35;
+}
+
+body.font-dyslexia-enabled .ui-key-button {
+  min-height: 2.625rem;
+  line-height: 1.35;
+}
+
+body.font-dyslexia-enabled .ui-icon-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+body.font-dyslexia-enabled .font-dyslexia-preview {
+  line-height: 1.45;
+}
+
+/** Tarjetas «Tema» / «Tipografía dislexia» en modal cuenta (clase en admin) */
+body.font-dyslexia-enabled .dyslexia-settings-option-grid > button {
+  min-height: 4.5rem;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+}
+
+body.font-dyslexia-enabled .dyslexia-settings-option-grid > button .flex.items-center.gap-2 {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+
+body.font-dyslexia-enabled .dyslexia-settings-option-grid > button span,
+body.font-dyslexia-enabled .dyslexia-settings-option-grid > button p {
+  overflow-wrap: break-word;
+  hyphens: auto;
+  line-height: 1.4;
+}
+
+/* Tres columnas estrechas rompen «Seguir sistema»; con OpenDyslexic máx. 2 columnas hasta viewport ancho */
+body.font-dyslexia-enabled .dyslexia-theme-options {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  body.font-dyslexia-enabled .dyslexia-theme-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  body.font-dyslexia-enabled .dyslexia-theme-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+body.font-dyslexia-enabled .dyslexia-comfort-btn {
+  min-height: 2.875rem;
+  padding-top: 0.625rem !important;
+  padding-bottom: 0.625rem !important;
+  line-height: 1.35;
+}
+
 input,
 textarea,
 select,

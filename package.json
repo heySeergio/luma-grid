@@ -4,16 +4,17 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/prisma-env.mjs generate",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "clean": "node scripts/clean-next.js",
     "dev:clean": "npm run clean && npm run dev",
-    "build": "node scripts/prisma-env.mjs generate && next build",
-    "build:with-migrate": "node scripts/prisma-env.mjs migrate deploy && node scripts/prisma-env.mjs generate && next build",
+    "build": "node scripts/prisma-env.mjs generate && next build --webpack",
+    "build:with-migrate": "node scripts/prisma-env.mjs migrate deploy && node scripts/prisma-env.mjs generate && next build --webpack",
     "migrate:deploy": "node scripts/prisma-env.mjs migrate deploy",
+    "migrate:resolve": "node scripts/prisma-env.mjs migrate resolve",
     "prisma:generate": "node scripts/prisma-env.mjs generate",
     "prisma:validate": "node scripts/prisma-env.mjs validate",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "seed:lexicon": "node prisma/seed-lexicon.mjs",
     "lexicon:extract-demo-labels": "node scripts/extract-demo-labels.mjs",
     "lexicon:import-phase1": "node scripts/import-phase1-lexemes.mjs",
@@ -26,7 +27,8 @@
     "db:migrate": "node scripts/prisma-migrate-envlocal.mjs",
     "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs",
     "test:lexicon-detection": "node scripts/test-lexicon-detection.mjs",
-    "test:mejora-plan": "node scripts/test-mejora-plan.mjs"
+    "test:mejora-plan": "node scripts/test-mejora-plan.mjs",
+    "repair:demo-email": "node scripts/repair-demo-by-email.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed-lexicon.mjs"
@@ -46,7 +48,7 @@
     "jose": "^4.15.9",
     "lucide-react": "^1.6.0",
     "md5": "^2.3.0",
-    "next": "14.2.35",
+    "next": "16.2.2",
     "next-auth": "^4.24.13",
     "next-pwa": "^5.6.0",
     "next-themes": "^0.4.6",
@@ -64,8 +66,8 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "better-sqlite3": "^12.8.0",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.2",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"

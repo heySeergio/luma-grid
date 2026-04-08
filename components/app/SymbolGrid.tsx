@@ -2,8 +2,15 @@
 
 import { useRef, useCallback } from 'react'
 import { Apple, BookOpen, Heart, MapPin, Sparkles, Users } from 'lucide-react'
-import SymbolCell from './SymbolCell'
+import SymbolCell, { type SymbolGridDensity } from './SymbolCell'
 import { shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
+
+function getGridDensity(gridCols: number, gridRows: number): SymbolGridDensity {
+  const n = Math.max(1, gridCols * gridRows)
+  if (n <= 12) return 'sparse'
+  if (n <= 42) return 'comfortable'
+  return 'dense'
+}
 import type { Symbol } from '@/lib/supabase/types'
 import type { GridCellSize } from '@/lib/supabase/types'
 
@@ -64,7 +71,7 @@ export default function SymbolGrid({
 
   if (symbols.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-lg text-gray-400 dark:text-slate-500">
+      <div className="flex h-full min-h-0 items-center justify-center text-lg text-gray-400 dark:text-slate-500">
         No hay símbolos disponibles
       </div>
     )
@@ -80,10 +87,25 @@ export default function SymbolGrid({
     sorted.reduce((acc, symbol) => Math.max(acc, symbol.positionY + 1), 0)
   )
 
+  const gridDensity = getGridDensity(gridCols, gridRows)
+  const gapPad =
+    gridDensity === 'sparse'
+      ? 'gap-2 md:gap-3 p-3 md:p-4'
+      : gridDensity === 'comfortable'
+        ? 'gap-2 p-2 md:p-3'
+        : 'gap-1.5 p-2 md:p-3'
+  const folderIconSize = gridDensity === 'sparse' ? 28 : gridDensity === 'comfortable' ? 24 : 20
+  const folderLabelClass =
+    gridDensity === 'sparse'
+      ? 'text-sm font-bold md:text-base'
+      : gridDensity === 'comfortable'
+        ? 'text-xs font-bold md:text-sm'
+        : 'text-[11px] font-bold md:text-xs'
+
   return (
     <div
       ref={gridRef}
-      className="aac-grid-surface grid h-full content-start gap-1.5 overflow-hidden p-2 md:p-3"
+      className={`aac-grid-surface grid h-full min-h-0 content-stretch overflow-hidden ${gapPad}`}
       style={{
         gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${Math.max(maxRow, 1)}, minmax(0, 1fr))`
@@ -109,9 +131,9 @@ export default function SymbolGrid({
             aria-label={`Abrir carpeta ${folder.name}`}
           >
             <div className="ui-chip mb-1 rounded-2xl p-2">
-              <FolderIcon size={20} />
+              <FolderIcon size={folderIconSize} />
             </div>
-            <span className="w-full text-center text-[11px] font-bold leading-tight line-clamp-2 md:text-xs">
+            <span className={`w-full text-center leading-tight line-clamp-2 ${folderLabelClass}`}>
               {folder.name}
             </span>
           </button>
@@ -137,6 +159,7 @@ export default function SymbolGrid({
                 isPredicted={predictedIds.includes(symbol.id)}
                 cellSize={cellSize}
                 sizeClass={sizeMap[cellSize]}
+                gridDensity={gridDensity}
                 isFolder={shouldShowFolderBadge(symbol)}
                 onSelect={handleSelect}
               />

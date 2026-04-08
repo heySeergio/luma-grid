@@ -19,7 +19,7 @@ export default function QuickPhrases({ phrases, onSpeak, title = 'Rápidas' }: P
   }
 
   return (
-    <div className="shrink-0 px-3 pt-3">
+    <div className="min-h-0 shrink-0 px-3 pt-3">
       <div className="ui-toolbar-shell flex flex-wrap items-center gap-1.5 overflow-hidden rounded-[1.6rem] px-3 py-2">
         <span className="ui-soft-badge shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold">⭐ {title}</span>
         {visiblePhrases.map(phrase => (

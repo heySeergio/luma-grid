@@ -7,16 +7,27 @@ import type { Symbol } from '@/lib/supabase/types'
 import type { GridCellSize } from '@/lib/supabase/types'
 import { getSymbolTextColor, resolveSymbolColor } from '@/lib/ui/symbolColors'
 
+export type SymbolGridDensity = 'sparse' | 'comfortable' | 'dense'
+
 interface Props {
   symbol: Symbol
   isPredicted: boolean
   cellSize: GridCellSize
   sizeClass: string
+  /** Tableros con pocas celdas: tipografía e imagen más grandes. */
+  gridDensity?: SymbolGridDensity
   isFolder?: boolean
   onSelect: (symbol: Symbol) => void
 }
 
-export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = false, onSelect }: Props) {
+export default function SymbolCell({
+  symbol,
+  isPredicted,
+  sizeClass,
+  gridDensity = 'dense',
+  isFolder = false,
+  onSelect,
+}: Props) {
   const [isPopping, setIsPopping] = useState(false)
   const isLocked = symbol.state === 'locked'
   const backgroundColor = useMemo(() => resolveSymbolColor(symbol.color) || 'var(--app-surface-elevated)', [symbol.color])
@@ -28,19 +39,36 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
     setTimeout(() => setIsPopping(false), 200)
     onSelect(symbol)
   }
+  const emojiSizeFull: Record<SymbolGridDensity, string> = {
+    sparse: 'text-4xl sm:text-5xl md:text-6xl lg:text-7xl',
+    comfortable: 'text-3xl sm:text-4xl md:text-5xl',
+    dense: 'text-2xl md:text-3xl',
+  }
+
+  const labelSizeFull: Record<SymbolGridDensity, string> = {
+    sparse: 'text-sm sm:text-base md:text-lg',
+    comfortable: 'text-xs sm:text-sm md:text-base',
+    dense: 'text-xs md:text-sm',
+  }
+
   const emojiSize: Record<string, string> = {
     'h-16': 'text-2xl',
     'h-24': 'text-4xl',
     'h-32': 'text-5xl',
-    'h-full': 'text-2xl md:text-3xl',
+    'h-full': emojiSizeFull[gridDensity],
   }
 
   const labelSize: Record<string, string> = {
     'h-16': 'text-xs',
     'h-24': 'text-sm',
     'h-32': 'text-base',
-    'h-full': 'text-xs md:text-sm',
+    'h-full': labelSizeFull[gridDensity],
   }
+
+  const imageBoxPx = gridDensity === 'sparse' ? 120 : gridDensity === 'comfortable' ? 88 : 64
+  const folderBadgeSize = gridDensity === 'sparse' ? 14 : gridDensity === 'comfortable' ? 12 : 10
+  const cellPadding =
+    gridDensity === 'sparse' ? 'p-2 sm:p-2.5 md:p-3' : gridDensity === 'comfortable' ? 'p-2 md:p-2' : 'p-1.5'
 
   return (
     <button
@@ -52,7 +80,7 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
       disabled={isLocked}
       className={`
         symbol-cell relative flex h-full min-h-0 w-full flex-col items-stretch rounded-[1.35rem] border
-        ${sizeClass} p-1.5 select-none
+        ${sizeClass} ${cellPadding} select-none
         ${isPopping ? 'animate-pop' : ''}
         ${isPredicted && !isLocked
           ? 'ring-1'
@@ -75,7 +103,7 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
     >
       {isFolder && (
         <span className="ui-chip absolute right-1.5 top-1.5 z-[1] rounded-lg p-1" style={{ color: textColor }}>
-          <Folder size={10} />
+          <Folder size={folderBadgeSize} />
         </span>
       )}
       {/* Imagen o emoji arriba; etiqueta siempre debajo (layout fijo en columna) */}
@@ -88,8 +116,8 @@ export default function SymbolCell({ symbol, isPredicted, sizeClass, isFolder = 
             <Image
               src={symbol.imageUrl}
               alt={symbol.label}
-              width={64}
-              height={64}
+              width={imageBoxPx}
+              height={imageBoxPx}
               className="max-h-full max-w-full object-contain"
               unoptimized
             />
