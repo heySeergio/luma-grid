@@ -35,13 +35,15 @@ export async function findManySymbolsByProfileId(profileId: string) {
         ...SYMBOL_SELECT_CORE,
         opensKeyboard: true,
         wordVariants: true,
+        fixedCell: true,
       },
     })
   } catch (e1) {
     const w1 =
-      isUnknownPrismaFieldError(e1, ['opensKeyboard', 'wordVariants']) ||
+      isUnknownPrismaFieldError(e1, ['opensKeyboard', 'wordVariants', 'fixedCell']) ||
       isMissingDatabaseColumnError(e1, 'word_variants') ||
-      isMissingDatabaseColumnError(e1, 'opens_keyboard')
+      isMissingDatabaseColumnError(e1, 'opens_keyboard') ||
+      isMissingDatabaseColumnError(e1, 'fixed_cell')
 
     if (!w1) throw e1
 
@@ -51,9 +53,10 @@ export async function findManySymbolsByProfileId(profileId: string) {
         select: {
           ...SYMBOL_SELECT_CORE,
           opensKeyboard: true,
+          wordVariants: true,
         },
       })
-      return rows.map((r) => ({ ...r, wordVariants: null }))
+      return rows.map((r) => ({ ...r, fixedCell: false }))
     } catch (e2) {
       const w2 =
         isUnknownPrismaFieldError(e2, ['opensKeyboard']) ||
@@ -69,6 +72,7 @@ export async function findManySymbolsByProfileId(profileId: string) {
         ...r,
         opensKeyboard: false,
         wordVariants: null,
+        fixedCell: false,
       }))
     }
   }

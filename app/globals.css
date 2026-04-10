@@ -47,8 +47,9 @@
   --panel-blue: #334155;
   --panel-blue-soft: #475569;
   --panel-glass: rgba(255, 255, 255, 0.72);
-  --phrase-surface: rgba(48, 63, 102, 0.9);
-  --phrase-inner: rgba(28, 37, 66, 0.88);
+  /* Barra de frase (tablero): en claro el área central es blanca; en .dark sigue oscura */
+  --phrase-surface: rgba(241, 245, 249, 0.92);
+  --phrase-inner: #ffffff;
   --auth-overlay: rgba(255, 255, 255, 0.78);
   --card-shadow: 0 10px 30px -18px rgb(15 23 42 / 0.22), 0 10px 18px -14px rgb(15 23 42 / 0.16);
   --premium-shadow: 0 24px 40px -24px rgb(15 23 42 / 0.28), 0 18px 28px -20px rgb(15 23 42 / 0.2);

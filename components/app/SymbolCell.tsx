@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useRef, useState } from 'react'
 import Image from 'next/image'
 import { Folder, Layers } from 'lucide-react'
 import type { Symbol } from '@/lib/supabase/types'
@@ -9,7 +8,6 @@ import type { GridCellSize } from '@/lib/supabase/types'
 import { getSymbolTextColor, resolveSymbolColor } from '@/lib/ui/symbolColors'
 import {
   defaultPhraseLabel,
-  listVariantMenuEntries,
   symbolHasVariantMenu,
 } from '@/lib/symbolWordVariants'
 
@@ -26,6 +24,8 @@ interface Props {
   gridDensity?: SymbolGridDensity
   isFolder?: boolean
   onSelect: (symbol: Symbol, choice?: SymbolSelectChoice) => void
+  /** Abrir selector de formas alrededor de la celda (mantener pulsado o icono de capas). */
+  onVariantRadialOpen?: (symbol: Symbol) => void
 }
 
 const LONG_PRESS_MS = 480
@@ -37,20 +37,17 @@ export default function SymbolCell({
   gridDensity = 'dense',
   isFolder = false,
   onSelect,
+  onVariantRadialOpen,
 }: Props) {
   const [isPopping, setIsPopping] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
 
   const isLocked = symbol.state === 'locked'
   const menuCfg = symbol.wordVariants
   const hasVariantMenu = symbolHasVariantMenu(menuCfg)
-  const backgroundColor = useMemo(() => resolveSymbolColor(symbol.color) || 'var(--app-surface-elevated)', [symbol.color])
-  const textColor = useMemo(() => getSymbolTextColor(symbol.color), [symbol.color])
+  const backgroundColor = resolveSymbolColor(symbol.color) || 'var(--app-surface-elevated)'
+  const textColor = getSymbolTextColor(symbol.color)
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current) {
@@ -58,46 +55,6 @@ export default function SymbolCell({
       longPressTimerRef.current = null
     }
   }, [])
-
-  const updateMenuPosition = useCallback(() => {
-    const el = rootRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const pad = 8
-    const left = Math.min(Math.max(r.left + r.width / 2, pad), window.innerWidth - pad)
-    const top = r.bottom + 6
-    setMenuPos({ top, left, width: Math.min(280, Math.max(200, r.width)) })
-  }, [])
-
-  useLayoutEffect(() => {
-    if (!menuOpen) return
-    updateMenuPosition()
-    const onWin = () => updateMenuPosition()
-    window.addEventListener('resize', onWin)
-    window.addEventListener('scroll', onWin, true)
-    return () => {
-      window.removeEventListener('resize', onWin)
-      window.removeEventListener('scroll', onWin, true)
-    }
-  }, [menuOpen, updateMenuPosition])
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const close = (e: MouseEvent | PointerEvent) => {
-      const t = e.target as Node
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return
-      setMenuOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('pointerdown', close, true)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', close, true)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [menuOpen])
 
   const emitDefault = useCallback(() => {
     if (isLocked) return
@@ -113,21 +70,10 @@ export default function SymbolCell({
     }
   }, [hasVariantMenu, isLocked, menuCfg, onSelect, symbol])
 
-  const openMenu = useCallback(() => {
-    if (isLocked || !hasVariantMenu || !menuCfg) return
-    updateMenuPosition()
-    setMenuOpen(true)
-  }, [hasVariantMenu, isLocked, menuCfg, updateMenuPosition])
-
-  const pickVariant = useCallback(
-    (phraseLabel: string, variantIndex: number) => {
-      setMenuOpen(false)
-      setIsPopping(true)
-      setTimeout(() => setIsPopping(false), 200)
-      onSelect(symbol, { phraseLabel, variantIndex })
-    },
-    [onSelect, symbol],
-  )
+  const openRadial = useCallback(() => {
+    if (isLocked || !hasVariantMenu || !onVariantRadialOpen) return
+    onVariantRadialOpen(symbol)
+  }, [hasVariantMenu, isLocked, onVariantRadialOpen, symbol])
 
   const onMainPointerDown = (e: React.PointerEvent) => {
     if (isLocked || !hasVariantMenu) return
@@ -137,7 +83,7 @@ export default function SymbolCell({
     longPressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true
       longPressTimerRef.current = null
-      openMenu()
+      openRadial()
     }, LONG_PRESS_MS)
   }
 
@@ -151,7 +97,6 @@ export default function SymbolCell({
       longPressFiredRef.current = false
       return
     }
-    if (menuOpen) return
     emitDefault()
   }
 
@@ -186,53 +131,12 @@ export default function SymbolCell({
   const cellPadding =
     gridDensity === 'sparse' ? 'p-2 sm:p-2.5 md:p-3' : gridDensity === 'comfortable' ? 'p-2 md:p-2' : 'p-1.5'
 
-  const menuEntries = menuCfg ? listVariantMenuEntries(menuCfg) : []
-
-  const menuPortal =
-    menuOpen &&
-    menuPos &&
-    typeof document !== 'undefined' &&
-    createPortal(
-      <div
-        ref={menuRef}
-        role="menu"
-        aria-label={`Formas de «${symbol.label}»`}
-        className="fixed z-[200] max-h-[min(50dvh,320px)] overflow-y-auto rounded-2xl border bg-[var(--app-surface-elevated)] py-1 shadow-xl dark:border-slate-600"
-        style={{
-          top: menuPos.top,
-          left: menuPos.left,
-          width: menuPos.width,
-          transform: 'translateX(-50%)',
-          borderColor: 'var(--app-border)',
-          boxShadow: '0 18px 48px -24px rgb(0 0 0 / 0.35)',
-        }}
-      >
-        <p className="border-b border-[var(--app-border)] px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Elegir forma
-        </p>
-        {menuEntries.map(({ index, label }) => (
-          <button
-            key={`${index}-${label}`}
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center justify-center px-3 py-3 text-center text-sm font-semibold text-slate-800 transition hover:bg-indigo-500/10 dark:text-slate-100 dark:hover:bg-indigo-500/20"
-            onClick={() => pickVariant(label, index)}
-          >
-            {label}
-            {menuCfg && index === menuCfg.defaultIndex ? (
-              <span className="ml-2 shrink-0 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-200">
-                predeterm.
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>,
-      document.body,
-    )
+  const hasGlyph =
+    Boolean(typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) ||
+    Boolean(typeof symbol.emoji === 'string' && symbol.emoji.trim())
 
   return (
     <div
-      ref={rootRef}
       className="relative h-full min-h-0 w-full"
       data-symbol-id={symbol.id}
       data-scanner-y={symbol.positionY}
@@ -247,10 +151,11 @@ export default function SymbolCell({
         onPointerLeave={onMainPointerEnd}
         disabled={isLocked}
         aria-label={symbol.label}
-        aria-haspopup={hasVariantMenu ? 'menu' : undefined}
-        aria-expanded={hasVariantMenu ? menuOpen : undefined}
+        aria-haspopup={hasVariantMenu ? 'dialog' : undefined}
+        aria-expanded={undefined}
         className={`
         symbol-cell relative flex h-full min-h-0 w-full flex-col items-stretch rounded-[1.35rem] border
+        ${hasGlyph ? '' : 'justify-center'}
         ${sizeClass} ${cellPadding} select-none
         ${isPopping ? 'animate-pop' : ''}
         ${isPredicted && !isLocked
@@ -280,55 +185,61 @@ export default function SymbolCell({
             <Folder size={folderBadgeSize} strokeWidth={2} />
           </span>
         )}
-        <div
-          className="flex min-h-0 flex-1 flex-col items-center justify-center px-0.5 pt-0.5"
-          style={{ color: textColor }}
-        >
-          {symbol.imageUrl ? (
-            <div className="flex h-full max-h-full w-full flex-1 items-center justify-center">
-              <Image
-                src={symbol.imageUrl}
-                alt={symbol.label}
-                width={imageBoxPx}
-                height={imageBoxPx}
-                className="max-h-full max-w-full object-contain"
-                unoptimized
-              />
+        {!hasGlyph ? (
+          <span
+            className={`flex min-h-0 w-full flex-1 items-center justify-center px-1 text-center font-semibold leading-tight ${labelSizeFull[gridDensity]} line-clamp-4`}
+            style={{ color: textColor }}
+          >
+            {symbol.label}
+          </span>
+        ) : (
+          <>
+            <div
+              className="flex min-h-0 flex-1 flex-col items-center justify-center px-0.5 pt-0.5"
+              style={{ color: textColor }}
+            >
+              {symbol.imageUrl ? (
+                <div className="flex h-full max-h-full w-full flex-1 items-center justify-center">
+                  <Image
+                    src={symbol.imageUrl}
+                    alt={symbol.label}
+                    width={imageBoxPx}
+                    height={imageBoxPx}
+                    className="max-h-full max-w-full object-contain"
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <span className={`${emojiSize[sizeClass] || 'text-3xl'} leading-none`}>{symbol.emoji}</span>
+              )}
             </div>
-          ) : (
-            <span className={`${emojiSize[sizeClass] || 'text-3xl'} leading-none`}>
-              {symbol.emoji || '❓'}
+            <span
+              className={`${labelSize[sizeClass] || 'text-xs'} shrink-0 px-0.5 pb-0.5 text-center font-semibold leading-tight line-clamp-2`}
+              style={{ color: textColor }}
+            >
+              {symbol.label}
             </span>
-          )}
-        </div>
-        <span
-          className={`${labelSize[sizeClass] || 'text-xs'} shrink-0 px-0.5 pb-0.5 text-center font-semibold leading-tight line-clamp-2`}
-          style={{ color: textColor }}
-        >
-          {symbol.label}
-        </span>
+          </>
+        )}
       </button>
 
       {hasVariantMenu && !isLocked && (
         <button
           type="button"
-          className="ui-chip absolute bottom-1.5 right-1.5 z-[2] inline-flex items-center justify-center rounded-lg p-1"
+          className="ui-chip absolute left-1.5 top-1.5 z-[2] inline-flex items-center justify-center rounded-lg p-1"
           style={{ color: textColor }}
-          aria-label="Elegir otra forma de la palabra"
-          title="Variantes (sin mantener pulsado)"
+          aria-label="Elegir otra forma (formas alrededor)"
+          title="Formas alrededor — o mantén pulsada la celda"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            if (menuOpen) setMenuOpen(false)
-            else openMenu()
+            openRadial()
           }}
         >
           <Layers size={folderBadgeSize} strokeWidth={2} />
         </button>
       )}
-
-      {menuPortal}
     </div>
   )
 }

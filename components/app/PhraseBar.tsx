@@ -8,6 +8,7 @@ import { db } from '@/lib/dexie/db'
 import { stopAllTtsPlayback } from '@/lib/voice/speakClient'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Phrase, Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
+import { useClientReady } from '@/lib/ui/useClientReady'
 
 type LocalProfile = Profile & {
   communication_gender?: 'male' | 'female'
@@ -35,7 +36,7 @@ interface Props {
   onRemoveSymbol?: (phraseEntryId: string) => void
   /** Tras reproducir con éxito: persistir en servidor (frases frecuentes). */
   onAfterSpeak?: (payload: { text: string; symbolsUsed: { id: string; label: string }[] }) => void
-  /** Si existe, sustituye Web Speech (p. ej. ElevenLabs vía /api/tts). */
+  /** Si existe, sustituye Web Speech (p. ej. audio generado vía /api/tts). */
   speakPhrase?: (phrase: string) => Promise<void>
   /** Al cambiar (p. ej. frase rápida inyectada), limpia la línea de conjugación previa. */
   externalCompositionReset?: number
@@ -61,6 +62,9 @@ export default function PhraseBar({
   const [, setHomeClickCount] = useState(0)
   const [showAdminAccessPrompt, setShowAdminAccessPrompt] = useState(false)
   const homeClickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Alinea `disabled` de la barra con SSR/hidratación (evita mismatch si `symbols` difiere en el primer frame). */
+  const phraseChromeReady = useClientReady()
+  const phraseActionsDisabled = !phraseChromeReady || symbols.length === 0
 
   useEffect(() => {
     if (externalCompositionReset > 0) {
@@ -205,13 +209,13 @@ export default function PhraseBar({
           <House className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9" />
         </button>
 
-        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-white/10 bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] dark:border-slate-700/80">
+        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-slate-200/90 bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-700/80 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
           {symbols.length > 0 ? (
             <div className="flex items-center gap-2 overflow-hidden flex-wrap">
               {symbols.map((symbol, i) => (
                 <div
                   key={`preview-${symbol.id}-${i}`}
-                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl px-3 py-2"
+                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-slate-200/80 bg-slate-100/95 px-3 py-2 shadow-sm dark:border-transparent dark:bg-[var(--app-toolbar-inner)] dark:shadow-none"
                 >
                   {onRemoveSymbol ? (
                     <button
@@ -235,21 +239,21 @@ export default function PhraseBar({
                       />
                     </span>
                   ) : (
-                    <span className="text-2xl sm:text-3xl leading-none">{symbol.emoji || '📝'}</span>
+                    <span className="text-2xl leading-none text-slate-900 dark:text-white sm:text-3xl">{symbol.emoji || '📝'}</span>
                   )}
-                  <span className="mt-1 text-[11px] sm:text-xs font-semibold text-white text-center leading-tight">
+                  <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-slate-900 dark:text-white sm:text-xs">
                     {symbol.label}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm font-semibold text-slate-200/90 dark:text-slate-300 sm:text-base">
-              Toca los simbolos para construir una frase...
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-300 sm:text-base">
+              Toca los símbolos para construir una frase...
             </p>
           )}
           {conjugated && (
-            <p className="mt-2 truncate text-[11px] sm:text-xs text-indigo-100/90">
+            <p className="mt-2 truncate text-[11px] text-indigo-800 dark:text-indigo-100/90 sm:text-xs">
               Frase: {previewText}
             </p>
           )}
@@ -257,7 +261,7 @@ export default function PhraseBar({
 
         <button
           onClick={handleSpeak}
-          disabled={symbols.length === 0 || isSpeaking}
+          disabled={phraseActionsDisabled || isSpeaking}
           type="button"
           className={`ui-primary-button h-14 w-14 shrink-0 rounded-[1.6rem] grid place-items-center transition-all disabled:opacity-40 sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] lg:h-20 lg:w-20 ${isSpeaking ? 'cursor-wait saturate-75' : ''}`}
           aria-label="Reproducir frase"
@@ -267,7 +271,7 @@ export default function PhraseBar({
 
         <button
           onClick={handleDeleteLastClick}
-          disabled={symbols.length === 0}
+          disabled={phraseActionsDisabled}
           type="button"
           className="ui-icon-button grid h-14 w-14 shrink-0 place-items-center rounded-2xl transition-all disabled:opacity-40 sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] lg:h-20 lg:w-20"
           aria-label="Eliminar ultima palabra"
@@ -277,7 +281,7 @@ export default function PhraseBar({
 
         <button
           onClick={handleClearAllClick}
-          disabled={symbols.length === 0}
+          disabled={phraseActionsDisabled}
           type="button"
           className="ui-icon-button grid h-14 w-14 shrink-0 place-items-center rounded-2xl transition-all disabled:opacity-40 sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] lg:h-20 lg:w-20"
           aria-label="Borrar todo"

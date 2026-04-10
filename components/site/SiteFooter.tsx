@@ -7,17 +7,21 @@ import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { updateThemePreference } from '@/app/actions/account'
 import BrandLockup from '@/components/site/BrandLockup'
+import { reloadPageWithTheme } from '@/lib/ui/themeReload'
 
 const FOOTER_LINKS = [
-  { href: '/instalar', label: 'Instalar app' },
-  { href: '/branding', label: 'Branding' },
   { href: '/terminos', label: 'Términos y Condiciones' },
   { href: '/privacidad', label: 'Privacidad' },
   { href: '/cookies', label: 'Cookies' },
 ]
 
-export default function SiteFooter() {
-  const { resolvedTheme, setTheme } = useTheme()
+type SiteFooterProps = {
+  /** Reservado (p. ej. landing «próximamente»); sin enlaces extra por ahora. */
+  comingSoon?: boolean
+}
+
+export default function SiteFooter({ comingSoon: _comingSoon = false }: SiteFooterProps) {
+  const { resolvedTheme } = useTheme()
   const { data: session, update: updateSession } = useSession()
   const [mounted, setMounted] = useState(false)
   const [isUpdatingTheme, setIsUpdatingTheme] = useState(false)
@@ -29,11 +33,10 @@ export default function SiteFooter() {
   const isDark = mounted && resolvedTheme === 'dark'
 
   const handleThemeToggle = async () => {
-    const nextTheme = isDark ? 'light' : 'dark'
-
-    setTheme(nextTheme)
+    const nextTheme = (isDark ? 'light' : 'dark') as 'light' | 'dark'
 
     if (!session?.user?.id) {
+      reloadPageWithTheme(nextTheme)
       return
     }
 
@@ -47,10 +50,11 @@ export default function SiteFooter() {
         },
       })
     } catch {
-      setTheme(session.user.preferredTheme ?? 'system')
+      return
     } finally {
       setIsUpdatingTheme(false)
     }
+    reloadPageWithTheme(nextTheme)
   }
 
   return (

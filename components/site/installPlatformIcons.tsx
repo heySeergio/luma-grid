@@ -1,5 +1,5 @@
 /**
- * Iconos de plataforma para instalación PWA (landing /instalar).
+ * Iconos de plataforma para instalación PWA (landing / CTA hacia tablero).
  * Apple: path de apple-logo-svgrepo-com.svg (SVG Repo).
  */
 export function InstallIconAndroid({ className }: { className?: string }) {

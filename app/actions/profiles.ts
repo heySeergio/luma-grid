@@ -15,6 +15,16 @@ import {
   type KeyboardThemeColors,
 } from '@/lib/keyboard/theme'
 import { effectiveSubscriptionPlan, getMaxProfiles } from '@/lib/subscription/plans'
+import {
+  clampFixedZoneKeysToGrid,
+  parseProfileFixedZoneJson,
+  serializeFixedZoneJson,
+} from '@/lib/grid/fixedZoneStorage'
+import {
+  readFixedZoneCellsMapForUser,
+  readFixedZoneCellsForProfile,
+  setFixedZoneCellsForProfile,
+} from '@/lib/prisma/profileFixedZoneSql'
 
 const DEFAULT_PROFILE_COLOR = '#6366f1'
 
@@ -22,7 +32,7 @@ export async function getProfiles() {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
 
-    const [user, rows] = await Promise.all([
+    const [user, rows, fixedZoneMap] = await Promise.all([
         prisma.user.findUnique({
             where: { id: session.user.id },
             select: { defaultProfileId: true },
@@ -43,6 +53,7 @@ export async function getProfiles() {
                 keyboardTheme: true,
             },
         }),
+        readFixedZoneCellsMapForUser(session.user.id),
     ])
 
     const openingId = user?.defaultProfileId ?? null
@@ -55,22 +66,27 @@ export async function getProfiles() {
         userId: string
         gender: string
         keyboardTheme: KeyboardThemeColors | null
-    } => ({
-        id: p.id,
-        name: p.name,
-        color: DEFAULT_PROFILE_COLOR,
-        archived: false,
-        communicationGender: p.gender === 'male' || p.gender === 'female' ? p.gender : undefined,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-        isDemo: p.isDemo,
-        isOpeningProfile: openingId !== null && p.id === openingId,
-        gridRows: p.gridRows,
-        gridCols: p.gridCols,
-        userId: p.userId,
-        gender: p.gender,
-        keyboardTheme: parseKeyboardTheme(p.keyboardTheme),
-    }))
+        fixedZoneCellKeys: string[] | null
+    } => {
+        const fz = parseProfileFixedZoneJson(fixedZoneMap.get(p.id) ?? null)
+        return {
+            id: p.id,
+            name: p.name,
+            color: DEFAULT_PROFILE_COLOR,
+            archived: false,
+            communicationGender: p.gender === 'male' || p.gender === 'female' ? p.gender : undefined,
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+            isDemo: p.isDemo,
+            isOpeningProfile: openingId !== null && p.id === openingId,
+            gridRows: p.gridRows,
+            gridCols: p.gridCols,
+            userId: p.userId,
+            gender: p.gender,
+            keyboardTheme: parseKeyboardTheme(p.keyboardTheme),
+            fixedZoneCellKeys: fz === null ? null : [...fz],
+        }
+    })
 }
 
 function clampGridDimension(value: number | undefined, fallback: number) {
@@ -114,7 +130,19 @@ export async function createProfile(data: {
             isDemo: false,
             gridRows,
             gridCols,
-        }
+        },
+        select: {
+            id: true,
+            name: true,
+            gender: true,
+            isDemo: true,
+            gridRows: true,
+            gridCols: true,
+            userId: true,
+            createdAt: true,
+            updatedAt: true,
+            keyboardTheme: true,
+        },
     })
 
     revalidatePath('/admin')
@@ -128,7 +156,8 @@ export async function updateProfile(data: { profileId: string, name: string }) {
     if (!session?.user?.id) throw new Error('No autorizado')
 
     const targetProfile = await prisma.profile.findUnique({
-        where: { id: data.profileId, userId: session.user.id }
+        where: { id: data.profileId, userId: session.user.id },
+        select: { id: true },
     })
 
     if (!targetProfile) throw new Error('Tablero no encontrado')
@@ -139,6 +168,18 @@ export async function updateProfile(data: { profileId: string, name: string }) {
     const updatedProfile = await prisma.profile.update({
         where: { id: data.profileId },
         data: { name: trimmedName },
+        select: {
+            id: true,
+            name: true,
+            gender: true,
+            isDemo: true,
+            gridRows: true,
+            gridCols: true,
+            userId: true,
+            createdAt: true,
+            updatedAt: true,
+            keyboardTheme: true,
+        },
     })
 
     revalidatePath('/admin')
@@ -182,6 +223,7 @@ export async function reassignOpeningProfileAwayFrom(profileId: string) {
         where: { userId: session.user.id, id: { not: profileId } },
         orderBy: [{ isDemo: 'desc' }, { createdAt: 'asc' }],
         take: 1,
+        select: { id: true, isDemo: true },
     })
     const next = others[0]?.id ?? profileId
 
@@ -204,7 +246,19 @@ export async function updateProfileGender(profileId: string, gender: string) {
 
     const updatedProfile = await prisma.profile.update({
         where: { id: profileId, userId: session.user.id },
-        data: { gender }
+        data: { gender },
+        select: {
+            id: true,
+            name: true,
+            gender: true,
+            isDemo: true,
+            gridRows: true,
+            gridCols: true,
+            userId: true,
+            createdAt: true,
+            updatedAt: true,
+            keyboardTheme: true,
+        },
     })
 
     revalidatePath('/admin')
@@ -218,7 +272,8 @@ export async function deleteProfile(profileId: string) {
     if (!session?.user?.id) throw new Error('No autorizado')
 
     const targetProfile = await prisma.profile.findUnique({
-        where: { id: profileId, userId: session.user.id }
+        where: { id: profileId, userId: session.user.id },
+        select: { id: true, isDemo: true },
     })
 
     if (!targetProfile) throw new Error('Tablero no encontrado')
@@ -234,6 +289,7 @@ export async function deleteProfile(profileId: string) {
             const fallback = await tx.profile.findFirst({
                 where: { userId: session.user.id },
                 orderBy: { createdAt: 'asc' },
+                select: { id: true },
             })
             await tx.user.update({
                 where: { id: session.user.id },
@@ -253,10 +309,24 @@ export async function updateProfileGridSize(profileId: string, rows: number, col
     const gridRows = Math.max(1, rows)
     const gridCols = Math.max(1, cols)
 
+    const currentZone = await readFixedZoneCellsForProfile(profileId, session.user.id)
+    const parsed = parseProfileFixedZoneJson(currentZone)
+
     await prisma.profile.update({
         where: { id: profileId, userId: session.user.id },
         data: { gridRows, gridCols },
+        select: { id: true },
     })
+
+    if (parsed !== null) {
+        await setFixedZoneCellsForProfile(
+            profileId,
+            session.user.id,
+            serializeFixedZoneJson(
+                clampFixedZoneKeysToGrid(parsed, gridCols, gridRows),
+            ) as Prisma.InputJsonValue,
+        )
+    }
 
     await prisma.symbol.deleteMany({
         where: {
@@ -280,9 +350,19 @@ export async function duplicateProfile(sourceProfileId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
-    const source = await prisma.profile.findFirst({
-        where: { id: sourceProfileId, userId: session.user.id },
-    })
+    const [source, sourceFixedZone] = await Promise.all([
+        prisma.profile.findFirst({
+            where: { id: sourceProfileId, userId: session.user.id },
+            select: {
+                name: true,
+                gender: true,
+                gridRows: true,
+                gridCols: true,
+                keyboardTheme: true,
+            },
+        }),
+        readFixedZoneCellsForProfile(sourceProfileId, session.user.id),
+    ])
     if (!source) throw new Error('Tablero no encontrado')
 
     const owner = await prisma.user.findUnique({
@@ -320,6 +400,7 @@ export async function duplicateProfile(sourceProfileId: string) {
                         ? undefined
                         : (source.keyboardTheme as Prisma.InputJsonValue),
             },
+            select: { id: true },
         })
 
         if (rows.length > 0) {
@@ -359,6 +440,14 @@ export async function duplicateProfile(sourceProfileId: string) {
         return profile
     })
 
+    if (sourceFixedZone !== null && sourceFixedZone !== undefined) {
+        await setFixedZoneCellsForProfile(
+            newProfile.id,
+            session.user.id,
+            sourceFixedZone as Prisma.InputJsonValue,
+        )
+    }
+
     revalidatePath('/admin')
     revalidatePath('/tablero')
 
@@ -381,6 +470,7 @@ export async function updateProfileKeyboardTheme(
         await prisma.profile.update({
             where: { id: profileId, userId: session.user.id },
             data: { keyboardTheme: asJson },
+            select: { id: true },
         })
     } catch {
         return { ok: false, error: 'No se pudo guardar el tema del teclado.' }
@@ -390,4 +480,38 @@ export async function updateProfileKeyboardTheme(
     revalidatePath('/tablero')
 
     return { ok: true, theme: isKeyboardThemeEmpty(theme) ? null : theme }
+}
+
+export async function updateProfileFixedZone(profileId: string, keys: string[]) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    const profile = await prisma.profile.findFirst({
+        where: { id: profileId, userId: session.user.id },
+        select: { gridRows: true, gridCols: true },
+    })
+    if (!profile) throw new Error('Tablero no encontrado')
+
+    const gridCols = Math.max(1, profile.gridCols)
+    const gridRows = Math.max(1, profile.gridRows)
+    const clamped = clampFixedZoneKeysToGrid(new Set(keys), gridCols, gridRows)
+
+    await setFixedZoneCellsForProfile(
+        profileId,
+        session.user.id,
+        serializeFixedZoneJson(clamped) as Prisma.InputJsonValue,
+    )
+
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+}
+
+export async function resetProfileFixedZoneToDefault(profileId: string) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    await setFixedZoneCellsForProfile(profileId, session.user.id, null)
+
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
 }

@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [acceptedLegal, setAcceptedLegal] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -38,6 +39,10 @@ export default function RegisterPage() {
       setError('La contraseña debe tener al menos 8 caracteres.')
       return
     }
+    if (!acceptedLegal) {
+      setError('Debes aceptar los términos legales para crear la cuenta.')
+      return
+    }
     setBusy(true)
     try {
       const res = await fetch('/api/auth/register', {
@@ -47,6 +52,7 @@ export default function RegisterPage() {
           email: email.trim(),
           password,
           name: name.trim() || undefined,
+          acceptTerms: true,
         }),
       })
       const data = (await res.json()) as { error?: string }
@@ -64,11 +70,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="theme-auth-shell flex min-h-screen items-center justify-center bg-[url('/bg-pattern.svg')] bg-cover bg-center py-12">
-      <div className="w-full max-w-md p-6">
-        <div className="glass-panel overflow-hidden rounded-3xl p-8 shadow-xl">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-10 flex w-full justify-center">
+    <div className="theme-auth-shell flex min-h-screen items-center justify-center bg-[url('/bg-pattern.svg')] bg-cover bg-center px-4 py-10 sm:px-6 sm:py-12">
+      <div className="w-full max-w-2xl lg:max-w-[44rem]">
+        <div className="glass-panel overflow-hidden rounded-3xl p-6 shadow-xl sm:p-8 md:p-10">
+          <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
+            <div className="mb-8 flex w-full justify-center sm:mb-10">
               <BrandLockup
                 href="/"
                 iconSize={40}
@@ -83,82 +89,112 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          <div className="flex gap-3 rounded-xl border border-indigo-100/50 bg-indigo-50/50 p-4 text-xs text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200">
-            <Info className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Al registrarte se crea tu tablero &quot;DEMO&quot; con el vocabulario base. Podrás ajustar género de comunicación y voz en el panel de
+          <div className="flex gap-3 rounded-xl border border-indigo-100/50 bg-indigo-50/50 p-4 text-left text-xs leading-relaxed text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200 sm:p-5 sm:text-sm">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 sm:h-[1.125rem] sm:w-[1.125rem]" />
+            <p className="min-w-0 flex-1">
+              Al registrarte se crea el tablero BASE con el vocabulario inicial. Podrás ajustar género de comunicación y voz en el panel de
               administración.
             </p>
           </div>
 
-          <form onSubmit={(e) => void handleSubmit(e)} className="mt-5 space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="mt-5 space-y-5">
             {error ? (
               <p className="rounded-xl bg-rose-50 px-3 py-2 text-center text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
                 {error}
               </p>
             ) : null}
-            <div className="space-y-1.5">
-              <label htmlFor="reg-name" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Nombre (opcional)
-              </label>
-              <input
-                id="reg-name"
-                type="text"
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                placeholder="Tu nombre"
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+              <div className="space-y-1.5 sm:col-span-1">
+                <label htmlFor="reg-name" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Nombre (opcional)
+                </label>
+                <input
+                  id="reg-name"
+                  type="text"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                  placeholder="Tu nombre"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-1">
+                <label htmlFor="reg-email" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Correo electrónico
+                </label>
+                <input
+                  id="reg-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                  placeholder="tu@email.com"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-1">
+                <label htmlFor="reg-password" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Contraseña
+                </label>
+                <input
+                  id="reg-password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                  placeholder="Mínimo 8 caracteres"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-1">
+                <label htmlFor="reg-confirm" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Confirmar contraseña
+                </label>
+                <input
+                  id="reg-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                  placeholder="Repite la contraseña"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label htmlFor="reg-email" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Correo electrónico
+
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-4 dark:border-slate-600/50 dark:bg-slate-800/40">
+              <label className="flex cursor-pointer gap-3 text-left text-sm leading-snug text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={acceptedLegal}
+                  onChange={(e) => setAcceptedLegal(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-500 dark:bg-slate-900"
+                  required
+                />
+                <span>
+                  He leído y acepto los{' '}
+                  <Link href="/terminos" className="font-semibold text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                    Términos y Condiciones
+                  </Link>
+                  , la{' '}
+                  <Link href="/privacidad" className="font-semibold text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                    Política de privacidad
+                  </Link>{' '}
+                  y la{' '}
+                  <Link href="/cookies" className="font-semibold text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                    Política de cookies
+                  </Link>
+                  . Es obligatorio para crear la cuenta.
+                </span>
               </label>
-              <input
-                id="reg-email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                placeholder="tu@email.com"
-              />
             </div>
-            <div className="space-y-1.5">
-              <label htmlFor="reg-password" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Contraseña
-              </label>
-              <input
-                id="reg-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                placeholder="Mínimo 8 caracteres"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="reg-confirm" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Confirmar contraseña
-              </label>
-              <input
-                id="reg-confirm"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                placeholder="Repite la contraseña"
-              />
-            </div>
+
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !acceptedLegal}
               className="ui-primary-button flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -177,7 +213,11 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <OAuthSignInButtons callbackUrl={callbackUrl} googleLabel="Registrarse con Google" />
+          <OAuthSignInButtons
+            callbackUrl={callbackUrl}
+            googleLabel="Registrarse con Google"
+            disabled={!acceptedLegal}
+          />
 
           <p className="mt-8 text-center text-sm text-slate-600 dark:text-slate-300">
             ¿Ya tienes cuenta?{' '}

@@ -51,6 +51,8 @@ export interface Symbol {
   opensKeyboard?: boolean
   /** Formas alternativas al pulsar (menú: mantener / botón / doble clic). */
   wordVariants?: WordVariantsConfig
+  /** Si es true y el símbolo está en el grid principal, la celda se muestra también al abrir una carpeta. */
+  fixedCell?: boolean
   arasaacId?: number
   createdAt: string
   updatedAt: string

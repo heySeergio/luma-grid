@@ -1,21 +1,38 @@
 'use client'
 
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useClientReady } from '@/lib/ui/useClientReady'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BookOpen, Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
+import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid, DEFAULT_FOLDER_CONTENTS, shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
+import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
+import {
+  buildDefaultFixedZoneKeySet,
+  clampFixedZoneKeysToGrid,
+  isFixedZonePosition,
+} from '@/lib/grid/fixedZoneStorage'
 import {
   createProfile,
   deleteProfile,
   duplicateProfile,
   getProfiles,
+  resetProfileFixedZoneToDefault,
+  updateProfileFixedZone,
   setDefaultOpeningProfile,
   updateProfile,
   updateProfileGender,
@@ -24,8 +41,10 @@ import {
 } from '@/app/actions/profiles'
 import { resetDemoProfilePositionsToTemplate } from '@/app/actions/demoRepair'
 import { exportProfileBoardJson } from '@/app/actions/profileExport'
+import { importProfileBoardFromLuma } from '@/app/actions/profileImport'
 import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
 import { setProfileGender } from '@/lib/profileGender'
+import { reloadPageWithTheme } from '@/lib/ui/themeReload'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { snapTopLeftToCursor } from '@/lib/dnd/snapTopLeftToCursor'
 import Link from 'next/link'
@@ -42,6 +61,7 @@ import {
 import { SymbolColorPicker } from '@/components/admin/SymbolColorPicker'
 import BrandLockup from '@/components/site/BrandLockup'
 import KeyboardThemeModal from '@/components/app/KeyboardThemeModal'
+import WordVariantsSchematic from '@/components/app/WordVariantsSchematic'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
 import type { Symbol as BoardSymbol } from '@/lib/supabase/types'
 import {
@@ -100,10 +120,10 @@ const ADMIN_GRID_DIM_MAX = 20
 const ADMIN_PREVIEW_CELL_COL_WIDTH = '7.25rem'
 
 const COVERAGE_REVIEW_REASON_LABEL = {
-  sin_lexema: 'Sin lexema',
-  baja_confianza: 'Baja confianza',
-  tipo_generico: 'Tipo genérico',
-  normalizacion_pendiente: 'Normalización pendiente',
+  sin_lexema: 'Sin lexema vinculado',
+  baja_confianza: 'Confianza baja en la detección',
+  tipo_generico: 'Categoría «otra» (revisar)',
+  normalizacion_pendiente: 'Etiqueta sin normalizar',
 } as const
 
 /** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
@@ -134,6 +154,8 @@ type AdminProfile = {
   gridRows?: number
   gridCols?: number
   keyboardTheme?: KeyboardThemeColors | null
+  /** Null = plantilla por defecto; [] = zona fija vacía explícita. */
+  fixedZoneCellKeys?: string[] | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -169,6 +191,8 @@ type AdminSymbol = {
   wordVariants?: WordVariantsEdit
   /** Solo modal admin: pestaña «Opciones avanzadas»; no se persiste en BD. */
   advancedUnlockedForEdit?: boolean
+  /** Celda del grid principal visible también dentro de carpetas (persistido en BD). */
+  fixedCell?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
   created_at?: string
@@ -231,6 +255,7 @@ const EMPTY_SYMBOL: Omit<AdminSymbol, 'id' | 'createdAt' | 'updatedAt' | 'gridId
   color: DEFAULT_SYMBOL_COLOR,
   state: 'visible',
   opensKeyboard: false,
+  fixedCell: false,
   wordVariants: { ...EMPTY_WORD_VARIANTS_EDIT },
 }
 
@@ -321,6 +346,7 @@ function stableGridSnapshot(symbols: AdminSymbol[]): string {
         gridId: s.gridId ?? s.grid_id ?? 'main',
         hidden: Boolean(s.hidden),
         opensKeyboard: Boolean(s.opensKeyboard),
+        fixedCell: Boolean(s.fixedCell),
         wordVariants: JSON.parse(
           JSON.stringify(s.wordVariants ?? EMPTY_WORD_VARIANTS_EDIT),
         ) as WordVariantsEdit,
@@ -331,13 +357,21 @@ function stableGridSnapshot(symbols: AdminSymbol[]): string {
 }
 
 function adminSymbolFromBoard(s: BoardSymbol): AdminSymbol {
+  const wv = s.wordVariants
   return {
     ...s,
-    wordVariants: s.wordVariants
+    fixedCell: Boolean(s.fixedCell),
+    wordVariants: wv
       ? {
           enabled: true,
-          defaultIndex: s.wordVariants.defaultIndex,
-          variants: [...s.wordVariants.variants] as [string, string, string, string],
+          defaultIndex: wv.defaultIndex,
+          variants: [...wv.variants] as [string, string, string, string],
+          variantImageUrls: [
+            wv.variantImageUrls?.[0] ?? '',
+            wv.variantImageUrls?.[1] ?? '',
+            wv.variantImageUrls?.[2] ?? '',
+            wv.variantImageUrls?.[3] ?? '',
+          ] as [string, string, string, string],
         }
       : { ...EMPTY_WORD_VARIANTS_EDIT },
   }
@@ -405,10 +439,8 @@ function DraggableGridItem({
   )
 }
 
-const DEBUG_CREATE_PROFILE_STEP_EMAIL = 'sergio.tdc.tdc@gmail.com'
-
 export default function AdminPage() {
-  const { data: session, update: updateSession } = useSession()
+  const { update: updateSession } = useSession()
   const { setTheme } = useTheme()
   /** Solo desactiva animaciones elaboradas cuando el SO pide reducir movimiento. */
   const prefersReducedMotion = useReducedMotion() === true
@@ -418,6 +450,11 @@ export default function AdminPage() {
     email: string
     preferredTheme: ThemePreference
     preferredDyslexiaFont: boolean
+    showFrequentPhrasesSection?: boolean
+    showPhraseCompletionSection?: boolean
+    showGridCellPredictions?: boolean
+    defaultTableroTab?: DefaultTableroTab
+    shareUsageForPredictions?: boolean
     hasLocalPassword?: boolean
   } | null>(null)
   const [accountName, setAccountName] = useState('')
@@ -440,7 +477,7 @@ export default function AdminPage() {
   const [savingSymbols, setSavingSymbols] = useState(false)
   const [gridSaveFeedback, setGridSaveFeedback] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [status, setStatus] = useState('')
-  const [loadingData, setLoadingData] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
   const [symbolsLoadPending, setSymbolsLoadPending] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
   /** Filas/columnas pendientes hasta pulsar «Guardar cambios» (no tablero demo). */
@@ -455,8 +492,18 @@ export default function AdminPage() {
   // Nested Folder state
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
   const [showCreateProfileModal, setShowCreateProfileModal] = useState(false)
-  const [showAccountSettingsModal, setShowAccountSettingsModal] = useState(false)
-  const [showLumaGridSettingsModal, setShowLumaGridSettingsModal] = useState(false)
+  /** null = vista previa (grid/lista); en panel principal sustituyen a la vista previa */
+  const [adminSettingsView, setAdminSettingsView] = useState<null | 'account' | 'luma' | 'lexicon'>(null)
+  /** Preferencia /tablero: fila «Frecuentes» (persistida en cuenta). */
+  const [accountShowFrequentPhrasesSection, setAccountShowFrequentPhrasesSection] = useState(true)
+  /** Preferencia /tablero: franja «Siguiente» bajo la barra de frase (persistida en cuenta). */
+  const [accountShowPhraseCompletionSection, setAccountShowPhraseCompletionSection] = useState(true)
+  /** Predicciones visuales en celdas del grid en /tablero. */
+  const [accountShowGridCellPredictions, setAccountShowGridCellPredictions] = useState(true)
+  /** Vista inicial al abrir /tablero: grid o teclado. */
+  const [accountDefaultTableroTab, setAccountDefaultTableroTab] = useState<DefaultTableroTab>('grid')
+  /** Permitir guardar uso para predicciones (privacidad). */
+  const [accountShareUsageForPredictions, setAccountShareUsageForPredictions] = useState(true)
   const [keyboardThemeModalOpen, setKeyboardThemeModalOpen] = useState(false)
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileGender, setNewProfileGender] = useState<'male' | 'female'>('male')
@@ -464,24 +511,30 @@ export default function AdminPage() {
   const [newProfileGridCols, setNewProfileGridCols] = useState(14)
   const [newProfileGridRows, setNewProfileGridRows] = useState(8)
   const [creatingProfile, setCreatingProfile] = useState(false)
+  const [importingProfile, setImportingProfile] = useState(false)
+  const importLumaInputRef = useRef<HTMLInputElement>(null)
   const [profileBeingEdited, setProfileBeingEdited] = useState<AdminProfile | null>(null)
   const [editProfileName, setEditProfileName] = useState('')
   const [profileDuplicateBusy, setProfileDuplicateBusy] = useState(false)
+  const [profileExportBusy, setProfileExportBusy] = useState(false)
   const [savingProfileChanges, setSavingProfileChanges] = useState(false)
   const [deletingProfileId, setDeletingProfileId] = useState('')
   const [settingDefaultProfileId, setSettingDefaultProfileId] = useState('')
   const [repairingDemoLayout, setRepairingDemoLayout] = useState(false)
   /** Celda vacía en la que el usuario abrió el menú crear botón / crear carpeta */
   const [splitEmptyCell, setSplitEmptyCell] = useState<{ x: number; y: number } | null>(null)
+  /** Edición de base fija sobre la vista previa (sin modal). */
+  const [fixedZoneEditMode, setFixedZoneEditMode] = useState(false)
+  const [fixedZoneDraftKeys, setFixedZoneDraftKeys] = useState<Set<string>>(() => new Set())
+  const fixedZoneBrushRef = useRef<'add' | 'remove' | null>(null)
   /** Modal nativo: nombre de carpeta nueva (sustituye window.prompt) */
   const [createFolderModal, setCreateFolderModal] = useState<{ x: number; y: number } | null>(null)
   const [createFolderName, setCreateFolderName] = useState('')
   const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
   const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
-  /** Evita mismatch de hidratación en botones que dependen de estado cargado tras mount (SSR vs cliente). */
-  const [adminHydrated, setAdminHydrated] = useState(false)
-
+  /** false hasta tras hidratar (1 hook interno vía useSyncExternalStore; no cambiar a useState+useEffect aquí). */
+  const adminChromeMounted = useClientReady()
   const [voiceTtsMode, setVoiceTtsMode] = useState<TtsMode>('browser')
   const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
   const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
@@ -563,6 +616,27 @@ export default function AdminPage() {
       setAccountEmail(normalizedAccountSettings?.email ?? '')
       setAccountPreferredTheme(normalizedAccountSettings?.preferredTheme ?? 'system')
       setAccountPreferredDyslexiaFont(Boolean(normalizedAccountSettings?.preferredDyslexiaFont))
+      setAccountShowFrequentPhrasesSection(
+        typeof normalizedAccountSettings?.showFrequentPhrasesSection === 'boolean'
+          ? normalizedAccountSettings.showFrequentPhrasesSection
+          : true,
+      )
+      setAccountShowPhraseCompletionSection(
+        typeof normalizedAccountSettings?.showPhraseCompletionSection === 'boolean'
+          ? normalizedAccountSettings.showPhraseCompletionSection
+          : true,
+      )
+      setAccountShowGridCellPredictions(
+        typeof normalizedAccountSettings?.showGridCellPredictions === 'boolean'
+          ? normalizedAccountSettings.showGridCellPredictions
+          : true,
+      )
+      setAccountDefaultTableroTab(parseDefaultTableroTab(normalizedAccountSettings?.defaultTableroTab))
+      setAccountShareUsageForPredictions(
+        typeof normalizedAccountSettings?.shareUsageForPredictions === 'boolean'
+          ? normalizedAccountSettings.shareUsageForPredictions
+          : true,
+      )
 
       const currentPid = selectedProfileIdRef.current
       let effectiveProfileId = currentPid
@@ -707,16 +781,11 @@ export default function AdminPage() {
     setPreviewPlayingVoiceId(null)
   }, [abortCloneRecording])
 
-  const closeAccountSettingsModal = useCallback(() => {
+  const exitAdminSettingsView = useCallback(() => {
     stopVoicePreviewAndCloneCleanup()
     resetPasswordFields()
-    setShowAccountSettingsModal(false)
+    setAdminSettingsView(null)
   }, [stopVoicePreviewAndCloneCleanup, resetPasswordFields])
-
-  const closeLumaGridSettingsModal = useCallback(() => {
-    stopVoicePreviewAndCloneCleanup()
-    setShowLumaGridSettingsModal(false)
-  }, [stopVoicePreviewAndCloneCleanup])
 
   useEffect(() => {
     if (voiceTtsMode !== 'preset') return
@@ -727,7 +796,7 @@ export default function AdminPage() {
     })
   }, [accountGender, voiceTtsMode])
 
-  const voiceSettingsModalOpen = showAccountSettingsModal || showLumaGridSettingsModal
+  const voiceSettingsModalOpen = adminSettingsView === 'account' || adminSettingsView === 'luma'
 
   useEffect(() => {
     if (!voiceSettingsModalOpen || voiceTtsMode !== 'preset') return
@@ -929,10 +998,6 @@ export default function AdminPage() {
   }, [loadData])
 
   useEffect(() => {
-    setAdminHydrated(true)
-  }, [])
-
-  useEffect(() => {
     if (!status) return
     if (ADMIN_STATUS_SKIP_AUTO_DISMISS.has(status)) return
     const id = window.setTimeout(() => setStatus(''), 7000)
@@ -1026,6 +1091,9 @@ export default function AdminPage() {
         if (createFolderModal) {
           setCreateFolderModal(null)
           setCreateFolderName('')
+        } else if (fixedZoneEditMode) {
+          setFixedZoneEditMode(false)
+          fixedZoneBrushRef.current = null
         } else {
           setSplitEmptyCell(null)
         }
@@ -1033,9 +1101,14 @@ export default function AdminPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [createFolderModal])
+  }, [createFolderModal, fixedZoneEditMode])
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId)
+
+  const previewGridCols =
+    pendingGridDimensions?.cols ?? selectedProfile?.gridCols ?? 14
+  const previewGridRows =
+    pendingGridDimensions?.rows ?? selectedProfile?.gridRows ?? 8
 
   /** Solo el tablero marcado en BD como demo (`isDemo === true`), no otro tablero aunque se llame igual. */
   const isSelectedDemoProfile = useMemo(
@@ -1147,11 +1220,19 @@ export default function AdminPage() {
     setSavingAccountSettings(true)
     setStatus('')
     try {
+      const themeBeforeSave = accountSettings
+        ? normalizeThemePreference(accountSettings.preferredTheme)
+        : null
       const updatedAccount = await updateAccountSettings({
         name: accountName,
         email: accountEmail,
         preferredTheme: accountPreferredTheme,
         preferredDyslexiaFont: accountPreferredDyslexiaFont,
+        showFrequentPhrasesSection: accountShowFrequentPhrasesSection,
+        showPhraseCompletionSection: accountShowPhraseCompletionSection,
+        showGridCellPredictions: accountShowGridCellPredictions,
+        defaultTableroTab: accountDefaultTableroTab,
+        shareUsageForPredictions: accountShareUsageForPredictions,
         currentPassword: accountCurrentPassword,
         newPassword: accountNewPassword,
       })
@@ -1181,22 +1262,32 @@ export default function AdminPage() {
       setAccountEmail(updatedAccount.email)
       setAccountPreferredTheme(normalizedPreferredTheme)
       setAccountPreferredDyslexiaFont(Boolean(updatedAccount.preferredDyslexiaFont))
+      setAccountShowFrequentPhrasesSection(Boolean(updatedAccount.showFrequentPhrasesSection ?? true))
+      setAccountShowPhraseCompletionSection(Boolean(updatedAccount.showPhraseCompletionSection ?? true))
+      setAccountShowGridCellPredictions(Boolean(updatedAccount.showGridCellPredictions ?? true))
+      setAccountDefaultTableroTab(parseDefaultTableroTab(updatedAccount.defaultTableroTab))
+      setAccountShareUsageForPredictions(Boolean(updatedAccount.shareUsageForPredictions ?? true))
       resetPasswordFields()
-      setTheme(normalizedPreferredTheme)
       await updateSession({
         user: {
           name: updatedAccount.name ?? '',
           email: updatedAccount.email,
           preferredTheme: normalizedPreferredTheme,
           preferredDyslexiaFont: Boolean(updatedAccount.preferredDyslexiaFont),
+          defaultTableroTab: parseDefaultTableroTab(updatedAccount.defaultTableroTab),
         },
       })
+      if (themeBeforeSave !== null && normalizedPreferredTheme !== themeBeforeSave) {
+        reloadPageWithTheme(normalizedPreferredTheme)
+        return
+      }
+      setTheme(normalizedPreferredTheme)
       await loadData()
       if (settingsModalTarget === 'luma') {
-        closeLumaGridSettingsModal()
+        exitAdminSettingsView()
         setStatus('✅ Voz y género de comunicación actualizados.')
       } else {
-        closeAccountSettingsModal()
+        exitAdminSettingsView()
         setStatus('✅ Configuración de la cuenta actualizada correctamente.')
       }
     } catch (error) {
@@ -1224,7 +1315,7 @@ export default function AdminPage() {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      setStatus('✅ Tablero exportado (JSON).')
+      setStatus('✅ Tablero exportado (.luma).')
     } catch (err) {
       console.error(err)
       setStatus('❌ Error al exportar el tablero.')
@@ -1389,6 +1480,25 @@ export default function AdminPage() {
     reader.readAsDataURL(file)
   }
 
+  const handleVariantImageSlot = (slot: 0 | 1 | 2 | 3, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return
+      const data = reader.result
+      setEditingSymbol((prev) => {
+        if (!prev?.wordVariants) return prev
+        const wv = prev.wordVariants
+        const nextUrls = [...wv.variantImageUrls] as [string, string, string, string]
+        nextUrls[slot] = data
+        return { ...prev, wordVariants: { ...wv, variantImageUrls: nextUrls } }
+      })
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
   const resetCreateProfileModal = useCallback(() => {
     setNewProfileName('')
     setNewProfileGender('male')
@@ -1476,6 +1586,70 @@ export default function AdminPage() {
     }
   }
 
+  const handleImportLumaFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ''
+      if (!file) return
+
+      const nameOk = file.name.toLowerCase().endsWith('.luma')
+      if (!nameOk) {
+        setStatus('❌ Elige un archivo con extensión .luma')
+        return
+      }
+
+      setImportingProfile(true)
+      setStatus('')
+      try {
+        const text = await file.text()
+        const res = await importProfileBoardFromLuma(text)
+        if (!res.ok) {
+          setStatus(`❌ ${res.error}`)
+          return
+        }
+        await loadData()
+        setSelectedProfileId(res.profileId)
+        setShowCreateProfileModal(false)
+        resetCreateProfileModal()
+        setStatus('✅ Tablero importado correctamente.')
+      } catch (err) {
+        console.error(err)
+        setStatus('❌ No se pudo importar el archivo.')
+      } finally {
+        setImportingProfile(false)
+      }
+    },
+    [loadData, resetCreateProfileModal],
+  )
+
+  const handleExportProfileFromEditModal = useCallback(async () => {
+    if (!profileBeingEdited) return
+    setProfileExportBusy(true)
+    setStatus('')
+    try {
+      const res = await exportProfileBoardJson(profileBeingEdited.id)
+      if (!res.ok) {
+        setStatus(`❌ ${res.error}`)
+        return
+      }
+      const blob = new Blob([res.data], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setStatus('✅ Tablero exportado (.luma).')
+    } catch (err) {
+      console.error(err)
+      setStatus('❌ Error al exportar el tablero.')
+    } finally {
+      setProfileExportBusy(false)
+    }
+  }, [profileBeingEdited])
+
   const handleDeleteProfile = async (profile: AdminProfile) => {
     if (profile.isDemo) return
 
@@ -1553,11 +1727,44 @@ export default function AdminPage() {
     return folderSym?.label ?? activeFolder
   }, [activeFolder, shouldUseDefaultGridTemplate, symbols])
 
-  const mainGridSymbols = shouldUseDefaultGridTemplate
-    ? computeMainGrid(symbols as unknown as BoardSymbol[], activeFolder) as AdminSymbol[]
-    : activeFolder
-      ? symbols.filter((s) => s.gridId === activeFolder)
-      : symbols.filter((s) => (s.gridId ?? 'main') === 'main')
+  const adminFixedZoneSet = useMemo(() => {
+    if (!selectedProfile) return null
+    const k = selectedProfile.fixedZoneCellKeys
+    if (k === null || k === undefined) return null
+    return new Set(k)
+  }, [selectedProfile])
+
+  const isFixedCellAtPreview = useCallback(
+    (cx: number, cy: number) =>
+      isFixedZonePosition(
+        cx,
+        cy,
+        previewGridCols,
+        previewGridRows,
+        fixedZoneEditMode ? fixedZoneDraftKeys : adminFixedZoneSet,
+      ),
+    [previewGridCols, previewGridRows, adminFixedZoneSet, fixedZoneEditMode, fixedZoneDraftKeys],
+  )
+
+  const mainGridSymbols = useMemo(() => {
+    if (shouldUseDefaultGridTemplate) {
+      return computeMainGrid(symbols as unknown as BoardSymbol[], activeFolder) as AdminSymbol[]
+    }
+    return mergeMainGridWithFolderView(
+      symbols,
+      activeFolder,
+      previewGridCols,
+      previewGridRows,
+      adminFixedZoneSet,
+    ) as AdminSymbol[]
+  }, [
+    shouldUseDefaultGridTemplate,
+    symbols,
+    activeFolder,
+    previewGridCols,
+    previewGridRows,
+    adminFixedZoneSet,
+  ])
   const draggableSymbolsById = useMemo(() => {
     return new Map(mainGridSymbols.filter((symbol) => isMovableSymbol(symbol)).map((symbol) => [symbol.id, symbol]))
   }, [mainGridSymbols])
@@ -1637,14 +1844,93 @@ export default function AdminPage() {
     [symbols],
   )
 
+  const enterFixedZoneEdit = useCallback(() => {
+    if (!selectedProfileId || !selectedProfile) return
+    const cols = previewGridCols
+    const rows = previewGridRows
+    const raw = selectedProfile.fixedZoneCellKeys
+    const initial =
+      raw === null || raw === undefined
+        ? buildDefaultFixedZoneKeySet(cols, rows)
+        : clampFixedZoneKeysToGrid(new Set(raw), cols, rows)
+    setSplitEmptyCell(null)
+    setFixedZoneDraftKeys(new Set(initial))
+    setFixedZoneEditMode(true)
+  }, [selectedProfileId, selectedProfile, previewGridCols, previewGridRows])
+
+  const exitFixedZoneEdit = useCallback(() => {
+    fixedZoneBrushRef.current = null
+    setFixedZoneEditMode(false)
+  }, [])
+
+  const applyDefaultFixedZoneDraft = useCallback(() => {
+    setFixedZoneDraftKeys(new Set(buildDefaultFixedZoneKeySet(previewGridCols, previewGridRows)))
+  }, [previewGridCols, previewGridRows])
+
+  const onFixedZoneBrushPointerDown = useCallback((x: number, y: number) => {
+    const key = `${x}:${y}`
+    setFixedZoneDraftKeys((prev) => {
+      const next = new Set(prev)
+      const adding = !next.has(key)
+      fixedZoneBrushRef.current = adding ? 'add' : 'remove'
+      if (adding) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+
+  const onFixedZoneBrushPointerEnter = useCallback((x: number, y: number) => {
+    const mode = fixedZoneBrushRef.current
+    if (!mode) return
+    const key = `${x}:${y}`
+    setFixedZoneDraftKeys((prev) => {
+      const next = new Set(prev)
+      if (mode === 'add') next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+
+  const handleSaveFixedZoneDraft = useCallback(async () => {
+    if (!selectedProfileId || !selectedProfile) return
+    const cols = previewGridCols
+    const rows = previewGridRows
+    const def = buildDefaultFixedZoneKeySet(cols, rows)
+    const incoming = fixedZoneDraftKeys
+    let sameAsDefault = incoming.size === def.size
+    if (sameAsDefault) {
+      for (const k of def) {
+        if (!incoming.has(k)) {
+          sameAsDefault = false
+          break
+        }
+      }
+    }
+    const keys = [...fixedZoneDraftKeys].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    setStatus('')
+    try {
+      if (sameAsDefault) {
+        await resetProfileFixedZoneToDefault(selectedProfileId)
+      } else {
+        await updateProfileFixedZone(selectedProfileId, keys)
+      }
+      await loadData()
+      setFixedZoneEditMode(false)
+      setStatus('✅ Base fija guardada.')
+    } catch (err) {
+      console.error(err)
+      setStatus('❌ No se pudo guardar la base fija.')
+    }
+  }, [selectedProfileId, selectedProfile, previewGridCols, previewGridRows, fixedZoneDraftKeys, loadData])
+
   const handleDragStart = (event: DragStartEvent) => {
-    if (activeFolder) return
+    if (activeFolder || fixedZoneEditMode) return
     setActiveDraggedSymbolId(String(event.active.id))
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDraggedSymbolId(null)
-    if (activeFolder) return
+    if (activeFolder || fixedZoneEditMode) return
 
     const overRaw = event.over?.id
     if (overRaw === undefined || overRaw === null) return
@@ -1787,15 +2073,25 @@ export default function AdminPage() {
     setGridSaveFeedback('idle')
   }, [selectedProfileId])
 
+  useEffect(() => {
+    setFixedZoneEditMode(false)
+  }, [selectedProfileId])
+
+  useEffect(() => {
+    if (!fixedZoneEditMode) return
+    const end = () => {
+      fixedZoneBrushRef.current = null
+    }
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    return () => {
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+  }, [fixedZoneEditMode])
+
   const gridSavePhase: 'idle' | 'saving' | 'saved' = savingSymbols ? 'saving' : gridSaveFeedback
 
-  const showCreateProfileStepDebug =
-    session?.user?.email?.toLowerCase() === DEBUG_CREATE_PROFILE_STEP_EMAIL
-
-  const previewGridCols =
-    pendingGridDimensions?.cols ?? selectedProfile?.gridCols ?? 14
-  const previewGridRows =
-    pendingGridDimensions?.rows ?? selectedProfile?.gridRows ?? 8
   const canAddPreviewColumn = (previewGridCols < ADMIN_GRID_DIM_MAX)
   const canAddPreviewRow = (previewGridRows < ADMIN_GRID_DIM_MAX)
   const canDecDimRows =
@@ -1807,23 +2103,26 @@ export default function AdminPage() {
   const canIncDimCols =
     previewGridCols < ADMIN_GRID_DIM_MAX && !savingSymbols && !symbolsLoadPending
   const dimStepperBtnClass =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white transition hover:bg-white/10 disabled:pointer-events-none disabled:opacity-35'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-700 transition hover:bg-slate-200/90 disabled:pointer-events-none disabled:opacity-35 dark:text-white dark:hover:bg-white/10'
 
   const blockProfileHeaderActions =
-    !adminHydrated || !selectedProfileId || loadingData || symbolsLoadPending
+    !adminChromeMounted || !selectedProfileId || loadingData || symbolsLoadPending
+  /** Misma base que el header (chrome + datos) para evitar desajustes de hidratación en botones de zona fija. */
+  const fixedZoneToolbarActionsDisabled = Boolean(blockProfileHeaderActions || savingSymbols)
   const blockGridResizeChrome =
-    !adminHydrated ||
+    !adminChromeMounted ||
     !selectedProfile ||
     isSelectedDemoProfile ||
     savingSymbols ||
     symbolsLoadPending ||
-    Boolean(activeFolder)
+    Boolean(activeFolder) ||
+    fixedZoneEditMode
 
   return (
-    <div className="theme-page-shell min-h-screen min-w-0 overflow-x-hidden p-3 text-slate-900 dark:text-slate-100 sm:p-4 md:p-8">
-      <div className="mx-auto min-w-0 max-w-7xl">
-        <div className="mb-6 min-w-0 sm:mb-8">
-          <header className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
+    <div className="theme-page-shell flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+      <header className="z-40 w-full shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)]/95 backdrop-blur-md dark:border-slate-700/80">
+        <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
+          <div className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-start lg:gap-x-6 lg:gap-y-3">
               <div className="flex min-w-0 flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center lg:col-span-1">
                 <BrandLockup
@@ -1852,19 +2151,20 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => void handleExportBoard()}
-                disabled={blockProfileHeaderActions}
-                title={!selectedProfileId ? 'Selecciona un tablero' : 'Descargar copia del tablero en JSON'}
+                suppressHydrationWarning
+                disabled={Boolean(blockProfileHeaderActions)}
+                title={!selectedProfileId ? 'Selecciona un tablero' : 'Descargar copia del tablero (.luma)'}
                 className="ui-secondary-button inline-flex w-full items-center justify-center self-center rounded-full px-4 py-2 text-sm font-medium text-[var(--app-foreground)] transition disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end"
               >
                 <Download className="mr-2 h-4 w-4 shrink-0" aria-hidden />
-                Exportar JSON
+                Exportar .luma
               </button>
               <button
                 type="button"
                 onClick={() => void handleSaveAll()}
-                disabled={
-                  blockProfileHeaderActions || !hasUnsavedGridChanges || savingSymbols
-                }
+                disabled={Boolean(
+                  blockProfileHeaderActions || !hasUnsavedGridChanges || savingSymbols,
+                )}
                 title={
                   !selectedProfileId
                     ? 'Selecciona un tablero'
@@ -1906,55 +2206,21 @@ export default function AdminPage() {
                 </span>
               </button>
             </div>
-          </header>
+          </div>
         </div>
+      </header>
 
-        <AnimatePresence initial={false}>
-          {status ? (
-            <motion.div
-              key="admin-status-banner"
-              layout
-              initial={{ opacity: 0, y: -28, scale: 0.94, filter: 'blur(6px)' }}
-              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-              exit={{
-                opacity: 0,
-                y: -14,
-                scale: 0.97,
-                filter: 'blur(4px)',
-                transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] },
-              }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.72 }}
-              className="mb-6 flex origin-top items-start gap-3 overflow-hidden rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 pl-4 text-sm font-medium text-emerald-800 shadow-[0_12px_40px_-18px_rgba(16,185,129,0.35)] dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:shadow-[0_14px_44px_-16px_rgba(16,185,129,0.25)] sm:items-center sm:p-4"
-            >
-              <motion.p
-                className="min-w-0 flex-1 leading-relaxed"
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.06, duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {status}
-              </motion.p>
-              <motion.button
-                type="button"
-                onClick={() => setStatus('')}
-                className="ui-icon-button -mr-1 -mt-0.5 shrink-0 rounded-lg p-1.5 text-emerald-700/80 hover:bg-emerald-700/10 hover:text-emerald-900 dark:text-emerald-200/90 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-100"
-                aria-label="Cerrar aviso"
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.94 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 28 }}
-              >
-                <X className="h-4 w-4" />
-              </motion.button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex min-h-min flex-col lg:flex-row lg:items-start">
             {/* Sidebar */}
-            <div className="min-w-0 space-y-6 lg:col-span-1">
-              <div className="app-panel rounded-2xl p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <aside
+              className="w-full min-w-0 shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)] lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
+              aria-label="Panel lateral de administración"
+            >
+            <div className="flex w-full min-w-0 flex-col gap-4 p-4">
+              <div className="app-panel w-full min-w-0 rounded-2xl p-5">
+                <div className="mb-4 flex w-full min-w-0 items-center justify-between gap-3">
+                  <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <User size={16} /> Tableros
                     {loadingData ? (
                       <span
@@ -1976,7 +2242,7 @@ export default function AdminPage() {
                   {profiles.map(p => (
                     <div
                       key={p.id}
-                      className="flex items-center gap-2 rounded-2xl p-2 transition"
+                      className="flex w-full min-w-0 items-center gap-2 rounded-2xl p-2 transition"
                       style={{
                         background: selectedProfileId === p.id ? 'var(--app-predicted)' : 'var(--app-surface-muted)',
                         boxShadow: selectedProfileId === p.id ? '0 0 0 1px var(--app-predicted-border)' : 'none',
@@ -2038,35 +2304,31 @@ export default function AdminPage() {
                 </div>
 
                 <div className="mt-2 border-t border-slate-200/80 pt-2 dark:border-slate-700/80">
-                  <div
-                    className="flex items-center gap-2 rounded-2xl p-2 transition"
+                  <button
+                    type="button"
+                    onClick={() => setKeyboardThemeModalOpen(true)}
+                    suppressHydrationWarning
+                    disabled={Boolean(blockProfileHeaderActions)}
+                    className="flex w-full min-w-0 items-center gap-2 rounded-2xl p-2 text-left transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500/60 dark:focus-visible:outline-indigo-400/50"
                     style={{ background: 'var(--app-surface-muted)' }}
+                    aria-label="Editar colores del teclado"
+                    title={
+                      selectedProfileId
+                        ? 'Colores del teclado en el tablero'
+                        : 'Selecciona un tablero'
+                    }
                   >
                     <Keyboard className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
-                    <span className="min-w-0 flex-1 text-left text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
                       Teclado
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setKeyboardThemeModalOpen(true)}
-                      disabled={!selectedProfileId}
-                      className="ui-icon-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:cursor-not-allowed disabled:opacity-45 dark:text-slate-300"
-                      aria-label="Editar colores del teclado"
-                      title={
-                        selectedProfileId
-                          ? 'Colores del teclado en el tablero'
-                          : 'Selecciona un tablero'
-                      }
-                    >
-                      <Pencil size={14} aria-hidden />
-                    </button>
-                  </div>
+                  </button>
                 </div>
 
                 {isSelectedDemoProfile ? (
                   <div className="mt-4 border-t border-slate-200/80 pt-4 dark:border-slate-700/80">
                     <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Tablero de demostración fijo: si las celdas se descolocan, restablece la plantilla.
+                      Tablero base: si las celdas se descolocan, restablece la plantilla.
                     </p>
                     <button
                       type="button"
@@ -2079,59 +2341,26 @@ export default function AdminPage() {
                       ) : (
                         <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
                       )}
-                      Restaurar plantilla demo
+                      Restaurar plantilla base
                     </button>
                   </div>
                 ) : null}
               </div>
 
-              <div className="app-panel rounded-2xl p-5">
-                <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--app-muted-foreground)]">
-                  <Settings size={16} /> Configuración
-                </h2>
-
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAccountSettingsModal(true)}
-                    className="ui-secondary-button flex w-full rounded-2xl px-4 py-3 text-left transition"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--app-foreground)]">Configuración de la cuenta</p>
-                      <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
-                        Nombre, correo, contraseña, suscripción, tema y tipografía.
-                      </p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowLumaGridSettingsModal(true)}
-                    className="ui-secondary-button flex w-full rounded-2xl px-4 py-3 text-left transition"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--app-foreground)]">Configuración de Luma Grid</p>
-                      <p className="mt-1 text-xs text-[var(--app-muted-foreground)]">
-                        Personaliza la voz y el género de tus tableros.
-                      </p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
               {selectedProfile && !isSelectedDemoProfile && (
-                <div className="app-panel rounded-2xl p-5">
+                <div className="app-panel w-full min-w-0 rounded-2xl p-5">
                   <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Dimensiones</h2>
                   <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
                     Ajusta filas y columnas y pulsa <span className="font-semibold text-slate-600 dark:text-slate-300">Guardar cambios</span> arriba para aplicarlas en el servidor.
                   </p>
-                  <div className="overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 text-white shadow-inner dark:border-slate-700/90">
-                    <div className="border-b border-white/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-slate-900 shadow-inner dark:border-slate-700/90 dark:bg-zinc-950 dark:text-white">
+                    <div className="border-b border-slate-200/90 bg-slate-100/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                       Tamaño del grid
                     </div>
-                    <div className="divide-y divide-white/10">
-                      <div className="flex items-stretch gap-2 px-1 py-1 sm:px-2">
-                        <span className="flex w-20 shrink-0 items-center pl-2 text-xs font-medium text-slate-400">Filas</span>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pr-1">
+                    <div className="divide-y divide-slate-200/90 dark:divide-white/10">
+                      <div className="flex items-stretch gap-2 px-2 py-1 sm:px-3">
+                        <span className="flex w-20 shrink-0 items-center pl-1 text-xs font-medium text-slate-600 dark:text-slate-400">Filas</span>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pl-1 pr-3 sm:pr-4">
                           <button
                             type="button"
                             aria-label="Restar una fila"
@@ -2155,9 +2384,9 @@ export default function AdminPage() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex items-stretch gap-2 px-1 py-1 sm:px-2">
-                        <span className="flex w-20 shrink-0 items-center pl-2 text-xs font-medium text-slate-400">Columnas</span>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pr-1">
+                      <div className="flex items-stretch gap-2 px-2 py-1 sm:px-3">
+                        <span className="flex w-20 shrink-0 items-center pl-1 text-xs font-medium text-slate-600 dark:text-slate-400">Columnas</span>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pl-1 pr-3 sm:pr-4">
                           <button
                             type="button"
                             aria-label="Restar una columna"
@@ -2186,683 +2415,209 @@ export default function AdminPage() {
                 </div>
               )}
 
-              <div className="app-panel rounded-2xl p-5">
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Léxico
-                </h2>
-                {!selectedProfileId ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Selecciona un tablero para ver el estado del léxico.</p>
-                ) : lexiconObservabilityLoading ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Cargando…</p>
-                ) : !lexiconObservability?.coverage ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Sin datos de cobertura.</p>
-                ) : (
-                  <div className="space-y-3 text-xs">
-                    <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl bg-[var(--app-surface-muted)] px-3 py-2.5">
-                      <div>
-                        <span className="text-[var(--app-muted-foreground)]">Cobertura resuelta</span>
-                        <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {Math.round(lexiconObservability.coverage.coverageRatio * 100)}%
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[var(--app-muted-foreground)]">Pendientes de revisión</span>
-                        <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {lexiconObservability.coverage.reviewNeededCount}
-                        </span>
-                      </div>
-                    </div>
-                    {lexiconObservability.coverage.reviewItems.length > 0 ? (
-                      <div className="border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
-                        <p className="mb-2 text-[11px] font-medium text-[var(--app-muted-foreground)]">
-                          Primeros símbolos a revisar
-                          {lexiconObservability.coverage.reviewNeededCount > lexiconObservability.coverage.reviewItems.length ? (
-                            <span className="font-normal text-[var(--app-muted-foreground)]">
-                              {' '}
-                              (muestra de {lexiconObservability.coverage.reviewItems.length} de {lexiconObservability.coverage.reviewNeededCount})
-                            </span>
-                          ) : null}
-                        </p>
-                        <ul className="max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200/60 bg-white/40 p-2 dark:border-slate-600/60 dark:bg-slate-900/35">
-                          {lexiconObservability.coverage.reviewItems.map((item) => (
-                            <li
-                              key={item.id}
-                              className="flex flex-col gap-2 border-b border-slate-100/90 pb-2 text-[11px] leading-snug last:border-b-0 last:pb-0 dark:border-slate-700/50 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-2 sm:gap-y-0.5 sm:pb-1.5"
-                            >
-                              <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                <span className="font-semibold text-slate-800 dark:text-slate-100">&ldquo;{item.label}&rdquo;</span>
-                                <span className="rounded bg-amber-100/90 px-1 py-0 text-[10px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-                                  {COVERAGE_REVIEW_REASON_LABEL[item.reason]}
-                                </span>
-                                {item.suggestedLemma ? (
-                                  <span className="text-[var(--app-muted-foreground)]">
-                                    Sugerido: <span className="font-medium text-slate-700 dark:text-slate-300">{item.suggestedLemma}</span>
-                                    {' '}
-                                    ({getSpanishPosLabel(item.suggestedPosType)})
-                                  </span>
-                                ) : null}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => openSymbolReviewFromCoverageItem(item.id)}
-                                className="ui-secondary-button shrink-0 self-start rounded-lg px-2.5 py-1 text-[10px] font-semibold sm:self-baseline"
-                              >
-                                Revisar
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              <div className="app-panel rounded-2xl p-5">
-                <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vista</h2>
-                <div className="ui-floating-panel flex overflow-hidden rounded-2xl p-1">
+              <div className="app-panel w-full min-w-0 rounded-2xl p-5">
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Configuración
+                </p>
+                <div className="flex flex-col gap-2">
                   <button
                     type="button"
-                    onClick={() => setViewMode('grid')}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
-                      }`}
+                    onClick={() => setAdminSettingsView('account')}
+                    className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      adminSettingsView === 'account'
+                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        : 'ui-secondary-button text-[var(--app-foreground)]'
+                    }`}
                   >
-                    <LayoutGrid size={16} /> Grid
+                    <Settings size={18} className="shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+                    Cuenta y preferencias
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewMode('table')}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                    onClick={() => setAdminSettingsView('luma')}
+                    className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      adminSettingsView === 'luma'
+                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        : 'ui-secondary-button text-[var(--app-foreground)]'
+                    }`}
+                  >
+                    <Mic size={18} className="shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+                    Voz y Luma Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSettingsView('lexicon')}
+                    className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      adminSettingsView === 'lexicon'
+                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        : 'ui-secondary-button text-[var(--app-foreground)]'
+                    }`}
+                  >
+                    <BookOpen size={18} className="shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+                    Léxico del tablero
+                  </button>
+                </div>
+              </div>
+
+              <div className="app-panel w-full min-w-0 rounded-2xl p-5">
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vista</h2>
+                <div className="ui-floating-panel grid w-full min-w-0 grid-cols-2 gap-0 overflow-hidden rounded-2xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('grid')
+                      setAdminSettingsView(null)
+                    }}
+                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' && adminSettingsView === null ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                       }`}
                   >
-                    <List size={16} /> Lista
+                    <LayoutGrid size={16} className="shrink-0" aria-hidden /> Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('table')
+                      setAdminSettingsView(null)
+                    }}
+                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' && adminSettingsView === null ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                      }`}
+                  >
+                    <List size={16} className="shrink-0" aria-hidden /> Lista
                   </button>
                 </div>
               </div>
             </div>
+            </aside>
 
-            {/* Main Area */}
-            <div className="min-w-0 lg:col-span-3">
-              {viewMode === 'grid' ? (
-                <div className="app-panel min-w-0 overflow-hidden rounded-2xl p-4 sm:p-6">
-                  <div className="mb-4 flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                      <div>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                          {activeFolderTitle ? `Editando carpeta: ${activeFolderTitle}` : 'Vista Previa del Grid'}
-                        </h2>
-                        {activeFolder ? (
-                          <button
-                            type="button"
-                            onClick={() => setActiveFolder(null)}
-                            className="mt-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
-                          >
-                            &larr; Volver al grid principal
-                          </button>
-                        ) : null}
-                      </div>
-                      {!symbolsLoadPending && isSelectedDemoProfile && !activeFolder ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleRepairDemoLayout()}
-                          disabled={repairingDemoLayout || savingSymbols}
-                          className="ui-secondary-button inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold sm:w-auto disabled:pointer-events-none disabled:opacity-50"
-                          title="Corrige el tablero si las celdas quedaron descolocadas tras editar o arrastrar"
-                        >
-                          {repairingDemoLayout ? (
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                          ) : (
-                            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
-                          )}
-                          Restaurar plantilla demo
-                        </button>
-                      ) : null}
+            {/* Main Area — avisos en esta columna; scroll unificado con el sidebar */}
+            <main className="flex min-w-0 flex-1 flex-col px-4 pb-8 pt-3 sm:px-6 sm:pb-10 lg:px-8 lg:pb-12 lg:pt-4">
+              <div className="shrink-0">
+                <AnimatePresence initial={false}>
+                  {status ? (
+                    <motion.div
+                      key="admin-status-banner"
+                      layout
+                      initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{
+                        opacity: 0,
+                        y: -6,
+                        scale: 0.99,
+                        transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
+                      }}
+                      transition={{ type: 'spring', stiffness: 480, damping: 34, mass: 0.65 }}
+                      className="mb-3 flex h-12 max-h-12 min-h-12 origin-top items-center gap-2 overflow-hidden rounded-xl border border-emerald-200/70 bg-emerald-50/90 px-3 py-0 pl-3.5 text-sm font-medium text-emerald-800 shadow-[0_8px_28px_-14px_rgba(16,185,129,0.35)] dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:shadow-[0_10px_32px_-14px_rgba(16,185,129,0.25)] sm:px-4"
+                    >
+                      <motion.p
+                        className="min-w-0 flex-1 leading-snug line-clamp-2"
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.04, duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        {status}
+                      </motion.p>
+                      <motion.button
+                        type="button"
+                        onClick={() => setStatus('')}
+                        className="ui-icon-button shrink-0 rounded-lg p-1.5 text-emerald-700/80 hover:bg-emerald-700/10 hover:text-emerald-900 dark:text-emerald-200/90 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-100"
+                        aria-label="Cerrar aviso"
+                        whileHover={{ scale: 1.06 }}
+                        whileTap={{ scale: 0.94 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 28 }}
+                      >
+                        <X className="h-4 w-4" />
+                      </motion.button>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+
+              <div className="flex flex-col">
+              {adminSettingsView === 'account' ? (
+                <div className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
+                  <div className="mb-6 flex flex-col gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Ajustes de cuenta y preferencias</h2>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        Gestiona tus datos, el plan y las preferencias de la app.
+                      </p>
                     </div>
-
-                    {!symbolsLoadPending && isSelectedDemoProfile && !activeFolder ? (
-                      <div className="flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-3 dark:border-slate-600/60 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:gap-3">
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Editar contenido
-                        </span>
-                        <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                          <label htmlFor="admin-demo-folder-picker" className="sr-only">
-                            Elegir carpeta del tablero demo para editar su contenido
-                          </label>
-                          <select
-                            id="admin-demo-folder-picker"
-                            key={`${selectedProfileId}-demo-folder`}
-                            defaultValue=""
-                            className="app-input min-h-[44px] min-w-0 max-w-full flex-1 rounded-xl py-2 pl-3 pr-10 text-sm"
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (v) setActiveFolder(v)
-                            }}
-                          >
-                            <option value="">Carpeta del tablero demo…</option>
-                            {demoFolderNames.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    ) : null}
+                    <button
+                      type="button"
+                      onClick={exitAdminSettingsView}
+                      className="ui-secondary-button shrink-0 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+                      disabled={savingAccountSettings}
+                    >
+                      Volver a la vista previa
+                    </button>
                   </div>
-
-                  <DndContext
-                    sensors={sensors}
-                    modifiers={[snapTopLeftToCursor]}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
+                  <form
+                    data-settings-modal="account"
+                    onSubmit={handleSaveAccountSettings}
+                    className="flex flex-col"
                   >
-                    <div className="grid w-full max-w-full grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_auto]">
-                      <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
-                      <div
-                        className={`aac-grid-surface grid w-max max-w-none content-start gap-4 p-4 sm:p-6 ${symbolsLoadPending ? 'pointer-events-none' : ''}`}
-                        style={{
-                          gridTemplateColumns: `repeat(${previewGridCols}, ${ADMIN_PREVIEW_CELL_COL_WIDTH})`,
-                          gridAutoRows: 'auto',
-                        }}
-                      >
-                      {Array.from({ length: previewGridCols * previewGridRows }).map((_, index) => {
-                        const gridCols = previewGridCols
-                        const x = index % gridCols
-                        const y = Math.floor(index / gridCols)
-
-                        if (symbolsLoadPending) {
-                          return (
-                            <div
-                              key={`sk-${x}-${y}`}
-                              className="aspect-video w-full rounded-xl border-2 border-dashed border-slate-300/50 bg-gradient-to-br from-slate-200/50 via-slate-200/30 to-slate-300/40 animate-pulse dark:border-slate-600/55 dark:from-slate-700/50 dark:via-slate-800/35 dark:to-slate-700/45"
-                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
-                              aria-hidden
-                            />
-                          )
-                        }
-
-                        const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
-
-                        if (symbol) {
-                          const gridCellImageSrc = symbolImageDisplayUrl(symbol)
-                          return (
-                            <DroppableGridCell
-                              key={`cell-${x}-${y}`}
-                              cellId={`cell-${x}-${y}`}
-                              className="flex min-h-0 min-w-0 w-full"
-                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
-                            >
-                              <motion.div
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                className="group relative flex aspect-video w-full min-h-0 min-w-0 flex-col overflow-visible"
-                              >
-                                <DraggableGridItem symbol={symbol}>
-                                  <button
-                                    onClick={() => setEditingSymbol({
-                                      ...symbol,
-                                      color: normalizeSymbolColor(symbol.color),
-                                      positionX: x,
-                                      positionY: y,
-                                      state: symbol.state || 'visible'
-                                    })}
-                                    type="button"
-                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''}`}
-                                    style={{
-                                      backgroundColor: resolveSymbolColor(symbol.color),
-                                      borderColor: 'var(--app-border)',
-                                      color: getSymbolTextColor(symbol.color),
-                                    }}
-                                  >
-                                    {shouldShowFolderBadge(symbol as BoardSymbol) ? (
-                                      <span
-                                        className="ui-chip pointer-events-none absolute right-1.5 top-1.5 z-[1] rounded-lg p-1"
-                                        style={{ color: getSymbolTextColor(symbol.color) }}
-                                        aria-hidden
-                                      >
-                                        <Folder size={12} strokeWidth={2} />
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
+                          <p className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            Plan actual:{' '}
+                            <span className="text-indigo-600 dark:text-indigo-400">
+                              Plan {subscriptionPlanLabel(voicePlan)}
+                            </span>
+                            {voiceSubscriptionActive ? (
+                              <span className="ml-2 inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                Activo
+                              </span>
+                            ) : voicePlan !== 'free' ? (
+                              <span className="ml-2 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                                Sin pago activo
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {complimentaryUnlimited
+                              ? 'Tienes acceso completo a Identidad por cortesía. No necesitas gestionar facturación aquí.'
+                              : voicePlan === 'free'
+                                ? (
+                                  <>
+                                    {accountEmail ? (
+                                      <span className="block font-medium text-slate-700 dark:text-slate-300">
+                                        Correo en plan Libre:{' '}
+                                        <span className="font-mono text-slate-900 dark:text-slate-100">{accountEmail}</span>
                                       </span>
-                                    ) : null}
-                                    <div className="text-xl mb-1">
-                                      {gridCellImageSrc ? (
-                                        <img src={gridCellImageSrc} alt={symbol.label} className="h-8 w-8 object-contain" />
-                                      ) : (
-                                        symbol.emoji || '❓'
-                                      )}
-                                    </div>
-                                    <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
-                                      {symbol.label}
-                                    </span>
-                                    {symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) && (
-                                      <span
-                                        className="ui-chip pointer-events-none absolute bottom-1.5 right-1.5 z-[1] rounded-lg p-1"
-                                        style={{ color: getSymbolTextColor(symbol.color) }}
-                                        title="Tiene variantes de palabra"
-                                        aria-hidden
-                                      >
-                                        <Layers size={12} strokeWidth={2} />
-                                      </span>
+                                    ) : (
+                                      <span className="block font-medium text-slate-700 dark:text-slate-300">Tu cuenta está en el plan Libre.</span>
                                     )}
-                                  </button>
-                                </DraggableGridItem>
-                                {isMovableSymbol(symbol) && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      deleteSymbol(symbol.id)
-                                    }}
-                                    type="button"
-                                    className="absolute right-1 top-1 z-10 hidden h-5 w-5 place-items-center rounded-full bg-rose-500 text-white shadow-sm group-hover:grid"
-                                  >
-                                    <Trash2 size={10} />
-                                  </button>
-                                )}
-                              </motion.div>
-                            </DroppableGridCell>
-                          )
-                        }
-
-                        const isSplitHere = splitEmptyCell?.x === x && splitEmptyCell?.y === y
-
-                        return (
-                          <DroppableGridCell
-                            key={`cell-${x}-${y}`}
-                            cellId={`cell-${x}-${y}`}
-                            className="flex min-h-0 min-w-0 w-full"
-                            style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
-                          >
-                            {isSplitHere ? (
-                              <div
-                                className="flex aspect-video w-full min-w-0 overflow-hidden rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 dark:border-slate-500/60 dark:bg-slate-950/45"
-                                role="group"
-                                aria-label="Crear contenido en celda vacía"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingSymbol({
-                                      id: `draft-${Date.now()}`,
-                                      ...EMPTY_SYMBOL,
-                                      gridId:
-                                        !shouldUseDefaultGridTemplate && activeFolder ? activeFolder : 'main',
-                                      positionX: x,
-                                      positionY: y,
-                                    })
-                                    setSplitEmptyCell(null)
-                                  }}
-                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 border-r border-slate-500/40 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 dark:border-slate-500/50 dark:text-slate-100"
-                                >
-                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
-                                    <Plus size={14} strokeWidth={2.5} className="text-white dark:text-white" aria-hidden />
-                                  </span>
-                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
-                                    CREAR BOTÓN
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openCreateFolderModal(x, y)}
-                                  disabled={isSelectedDemoProfile}
-                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-100"
-                                  title={isSelectedDemoProfile ? 'No disponible en el tablero demo' : undefined}
-                                >
-                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
-                                    <FolderOpen size={15} strokeWidth={2.25} className="text-white dark:text-white" aria-hidden />
-                                  </span>
-                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
-                                    CREAR CARPETA
-                                  </span>
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setSplitEmptyCell({ x, y })}
-                                type="button"
-                                className="group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15"
-                                aria-label="Añadir en celda vacía"
-                              >
-                                <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
-                              </button>
-                            )}
-                          </DroppableGridCell>
-                        )
-                      })}
-                      </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
-                        disabled={blockGridResizeChrome || !canAddPreviewColumn}
-                        title={
-                          symbolsLoadPending
-                            ? 'Cargando tablero…'
-                            : !canAddPreviewColumn
-                              ? 'Máximo 20 columnas'
-                              : activeFolder
-                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
-                                : 'Añadir una columna a la derecha'
-                        }
-                        className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
-                      >
-                        <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
-                        <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
-                          Añadir columna
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
-                        disabled={blockGridResizeChrome || !canAddPreviewRow}
-                        title={
-                          symbolsLoadPending
-                            ? 'Cargando tablero…'
-                            : !canAddPreviewRow
-                              ? 'Máximo 20 filas'
-                              : activeFolder
-                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
-                                : 'Añadir una fila abajo'
-                        }
-                        className="col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-span-2 md:col-start-1 md:row-start-2 md:py-5"
-                      >
-                        <Rows className="h-7 w-7 shrink-0" aria-hidden />
-                        <span>Añadir fila</span>
-                      </button>
-                    </div>
-
-                    <DragOverlay>
-                      {activeDraggedSymbol
-                        ? (() => {
-                            const sym = activeDraggedSymbol
-                            const dragImgSrc = symbolImageDisplayUrl(sym)
-                            return (
-                              <div
-                                className="ui-floating-panel flex h-20 w-20 flex-col items-center justify-center rounded-[1.35rem] p-1"
-                                style={{
-                                  backgroundColor: resolveSymbolColor(sym.color),
-                                  color: getSymbolTextColor(sym.color),
-                                }}
-                              >
-                                <div className="text-xl mb-1">
-                                  {dragImgSrc ? (
-                                    <img src={dragImgSrc} alt={sym.label} className="h-8 w-8 object-contain" />
-                                  ) : (
-                                    sym.emoji || '❓'
-                                  )}
-                                </div>
-                                <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
-                                  {sym.label}
-                                </span>
-                              </div>
-                            )
-                          })()
-                        : null}
-                    </DragOverlay>
-                  </DndContext>
-                </div>
-              ) : (
-                <div className="app-panel min-w-0 overflow-hidden rounded-2xl">
-                  <div className="border-b border-[var(--app-border)] px-6 py-5">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Vista de Lista</h2>
-                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                          Edita y revisa los símbolos del tablero en formato tabla.
-                        </p>
-                        {activeFolder && (
+                                    <span className="mt-1 block">
+                                      Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.
+                                    </span>
+                                  </>
+                                )
+                                : stripeCustomerId
+                                  ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
+                                  : 'Completa el pago o elige un plan desde el selector para activar las prestaciones.'}
+                          </p>
+                        </div>
+                        {complimentaryUnlimited ? (
+                          <p className="shrink-0 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-center text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                            ¡Disfruta sin límites!
+                          </p>
+                        ) : (
                           <button
-                            onClick={() => setActiveFolder(null)}
-                            className="mt-2 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
                             type="button"
+                            disabled={subscriptionPortalBusy}
+                            onClick={() => handleSubscriptionClick()}
+                            className="shrink-0 rounded-2xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
                           >
-                            &larr; Volver al grid principal
+                            {subscriptionPortalBusy
+                              ? 'Abriendo…'
+                              : voicePlan === 'voice' || voicePlan === 'identity'
+                                ? 'Gestionar suscripción'
+                                : 'Actualizar plan'}
                           </button>
                         )}
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="ui-chip rounded-full px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                          {symbolsLoadPending ? '…' : `${listSymbols.length} símbolo${listSymbols.length === 1 ? '' : 's'}`}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleCreateSymbolFromList}
-                          disabled={symbolsLoadPending}
-                          className="ui-primary-button inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition disabled:pointer-events-none disabled:opacity-45"
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Añadir símbolo
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 border-b border-[var(--app-border)] px-6 py-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                    <input
-                      type="text"
-                      value={listSearch}
-                      onChange={(e) => setListSearch(e.target.value)}
-                      placeholder="Buscar por etiqueta, categoría, tipo o emoji..."
-                      className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                    />
-
-                    <select
-                      value={listStateFilter}
-                      onChange={(e) => setListStateFilter(e.target.value as 'all' | 'visible' | 'locked' | 'hidden')}
-                      className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                    >
-                      <option value="all">Todos los estados</option>
-                      <option value="visible">Visible</option>
-                      <option value="locked">Bloqueado</option>
-                      <option value="hidden">Oculto</option>
-                    </select>
-                  </div>
-
-                  {symbolsLoadPending ? (
-                    <div className="flex flex-col items-center justify-center px-6 py-16">
-                      <div
-                        className="h-9 w-9 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
-                        aria-hidden
-                      />
-                      <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Cargando símbolos del tablero…</p>
-                    </div>
-                  ) : listSymbols.length === 0 ? (
-                    <div className="px-6 py-12 text-center">
-                      <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
-                        No hay símbolos que coincidan con los filtros actuales.
-                      </p>
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        Ajusta la búsqueda, cambia el filtro de estado o crea un símbolo nuevo.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                        <thead className="bg-[var(--app-surface-muted)]">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Símbolo</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Categoría</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Estado</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Posición</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {listSymbols.map((symbol) => {
-                            const position = getSymbolPosition(symbol)
-                            return (
-                              <tr key={`row-${symbol.id}`} className="bg-[color-mix(in_srgb,var(--app-surface-elevated)_55%,transparent)]">
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className="ui-floating-panel grid h-11 w-11 place-items-center rounded-2xl text-lg"
-                                      style={{ backgroundColor: resolveSymbolColor(symbol.color) }}
-                                    >
-                                      {symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
-                                    </div>
-                                    <div>
-                                      <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">{getSpanishPosLabel(symbol.posType)}</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{symbol.category || 'General'}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                    symbol.state === 'hidden'
-                                      ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                      : symbol.state === 'locked'
-                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'
-                                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
-                                  }`}>
-                                    {symbol.state || 'visible'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{position.x + 1}, {position.y + 1}</td>
-                                <td className="px-4 py-3">
-                                  <div className="flex justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingSymbol({
-                                        ...symbol,
-                                        color: normalizeSymbolColor(symbol.color),
-                                        positionX: position.x,
-                                        positionY: position.y,
-                                        state: symbol.state || 'visible',
-                                      })}
-                                      className="ui-secondary-button inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm font-semibold text-slate-700 transition dark:text-slate-200"
-                                    >
-                                      Editar
-                                    </button>
-                                    {isMovableSymbol(symbol) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => deleteSymbol(symbol.id)}
-                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
-                                      >
-                                        Eliminar
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-      </div>
-
-      <AnimatePresence>
-        {showAccountSettingsModal && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
-              onClick={() => {
-                if (!savingAccountSettings) {
-                  closeAccountSettingsModal()
-                }
-              }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,920px)] sm:rounded-[2rem]"
-            >
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Configuración de la cuenta</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Gestiona tus datos, la suscripción y la preferencia visual.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeAccountSettingsModal}
-                  className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-                  disabled={savingAccountSettings}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <form
-                data-settings-modal="account"
-                onSubmit={handleSaveAccountSettings}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6"
-              >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
-                      <p className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
-                        Plan actual:{' '}
-                        <span className="text-indigo-600 dark:text-indigo-400">
-                          Plan {subscriptionPlanLabel(voicePlan)}
-                        </span>
-                        {voiceSubscriptionActive ? (
-                          <span className="ml-2 inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                            Activo
-                          </span>
-                        ) : voicePlan !== 'free' ? (
-                          <span className="ml-2 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-                            Sin pago activo
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {complimentaryUnlimited
-                          ? 'Tienes acceso completo a Identidad por cortesía. No necesitas gestionar facturación aquí.'
-                          : voicePlan === 'free'
-                            ? (
-                              <>
-                                {accountEmail ? (
-                                  <span className="block font-medium text-slate-700 dark:text-slate-300">
-                                    Correo en plan Libre:{' '}
-                                    <span className="font-mono text-slate-900 dark:text-slate-100">{accountEmail}</span>
-                                  </span>
-                                ) : (
-                                  <span className="block font-medium text-slate-700 dark:text-slate-300">Tu cuenta está en el plan Libre.</span>
-                                )}
-                                <span className="mt-1 block">
-                                  Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.
-                                </span>
-                              </>
-                            )
-                            : stripeCustomerId
-                              ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
-                              : 'Completa el pago o elige un plan desde el selector para activar las prestaciones.'}
-                      </p>
-                    </div>
-                    {complimentaryUnlimited ? (
-                      <p className="shrink-0 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-center text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-                        ¡Disfruta sin límites!
-                      </p>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={subscriptionPortalBusy}
-                        onClick={() => handleSubscriptionClick()}
-                        className="shrink-0 rounded-2xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
-                      >
-                        {subscriptionPortalBusy
-                          ? 'Abriendo…'
-                          : voicePlan === 'voice' || voicePlan === 'identity'
-                            ? 'Gestionar suscripción'
-                            : 'Actualizar plan'}
-                      </button>
-                    )}
-                  </div>
 
                   <div className="space-y-4">
                     <div className="space-y-1.5">
@@ -3029,377 +2784,1185 @@ export default function AdminPage() {
                         Por defecto está desactivada. Si la activas, la app completa utilizará OpenDyslexic.
                       </p>
                     </div>
-
-                  </div>
-                </div>
-
-                <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={closeAccountSettingsModal}
-                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                    disabled={savingAccountSettings}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingAccountSettings || !accountSettings}
-                    className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                  >
-                    {savingAccountSettings ? 'Guardando...' : 'Guardar configuración'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showLumaGridSettingsModal && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
-              onClick={() => {
-                if (!savingAccountSettings) {
-                  closeLumaGridSettingsModal()
-                }
-              }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,920px)] sm:rounded-[2rem]"
-            >
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Configuración de Luma Grid</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Personaliza la voz y el género de tus tableros.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeLumaGridSettingsModal}
-                  className="ui-icon-button rounded-full p-2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-                  disabled={savingAccountSettings}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <form
-                data-settings-modal="luma"
-                onSubmit={handleSaveAccountSettings}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-6"
-              >
-                <div className="space-y-6">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Género de comunicación</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAccountGender('male')}
-                        className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                        style={{ borderColor: accountGender === 'male' ? 'var(--app-predicted-border)' : undefined }}
-                      >
-                        Masculino
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAccountGender('female')}
-                        className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                        style={{ borderColor: accountGender === 'female' ? 'var(--app-predicted-border)' : undefined }}
-                      >
-                        Femenino
-                      </button>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Se aplica al tablero seleccionado{selectedProfile ? `: ${selectedProfile.name}` : ''}.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                      <Volume2 size={16} className="shrink-0" />
-                      Voz (texto a voz)
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {!voiceSubscriptionActive ? (
-                        <span className="font-medium text-amber-800 dark:text-amber-200">
-                          Sin suscripción activa: solo se usa la voz del navegador hasta que tengas un plan de pago vigente.
-                        </span>
-                      ) : (
-                        <>
-                          Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
-                          <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
-                            {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
-                          </span>
-                          {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
-                        </>
-                      )}
-                    </p>
-
-                    {voiceSubscriptionActive && voiceTtsQuotaExceeded ? (
-                      <div
-                        role="status"
-                        className="rounded-xl border border-amber-300/90 bg-amber-50/95 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/40 dark:text-amber-100"
-                      >
-                        <p className="font-medium">Has superado la referencia mensual de caracteres de voz de tu plan.</p>
-                        <p className="mt-1.5 text-amber-900/90 dark:text-amber-200/95">
-                          Considera ampliar el plan en{' '}
-                          <Link href="/plan" className="font-semibold underline underline-offset-2">
-                            Planes y precios
-                          </Link>
-                          . Si el uso de ElevenLabs queda limitado, se puede pasar a voz del navegador; el contador sigue registrando el consumo.
-                        </p>
-                      </div>
-                    ) : null}
-
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <button
-                        type="button"
-                        onClick={() => setVoiceTtsMode('browser')}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'browser' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                        style={{ borderColor: voiceTtsMode === 'browser' ? 'var(--app-predicted-border)' : undefined }}
-                      >
-                        Voz del sistema
-                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">Gratis, sin límite en el navegador</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!canUsePresetVoices) {
-                            setShowVoicePlanRequiredModal(true)
-                            return
-                          }
-                          setVoiceTtsMode('preset')
-                        }}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                        style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
-                      >
-                        Voces naturales
-                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">ElevenLabs (presets)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!canUseCustomVoice) {
-                            setShowVoicePlanRequiredModal(true)
-                            return
-                          }
-                          openCustomVoiceMode()
-                        }}
-                        className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
-                        style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
-                      >
-                        Crear mi voz
-                        <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">
-                          {voicePlan === 'identity' ? 'Plan Identidad · clonación' : 'Requiere plan Identidad'}
-                        </span>
-                      </button>
                     </div>
 
-                    {voiceTtsMode === 'preset' ? (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Voces naturales
-                          </label>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Se muestran las 5 voces según el género de comunicación del tablero (
-                            {accountGender === 'male' ? 'masculino' : 'femenino'}). Pulsa play para escuchar la
-                            muestra generada una sola vez y guardada en el servidor.
+                    <div className="mt-8 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:p-5">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Preferencias
+                      </h3>
+                      <ul className="mt-4 space-y-0 divide-y divide-[var(--app-border)]">
+                        <li className="flex items-center gap-4 py-4 first:pt-0">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Tener el apartado de frases frecuentes visible en el tablero (la fila «Frecuentes»).
                           </p>
-                        </div>
-                        {voicePreviewBusy ? (
-                          <p className="text-xs text-slate-600 dark:text-slate-300">Preparando muestras de audio…</p>
-                        ) : null}
-                        {voicePreviewError ? (
-                          <p className="text-xs text-red-600 dark:text-red-400">{voicePreviewError}</p>
-                        ) : null}
-                        <div className="flex flex-col gap-2">
-                          {(accountGender === 'male' ? maleVoices : femaleVoices).map((v) => {
-                            const selected = voicePresetElevenId === v.voiceId
-                            const playing = previewPlayingVoiceId === v.voiceId
-                            return (
-                              <div
-                                key={v.voiceId}
-                                className="flex items-center gap-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-2 pl-3"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    setVoicePresetElevenId(v.voiceId)
-                                  }}
-                                  className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                                    selected
-                                      ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100'
-                                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80'
-                                  }`}
-                                >
-                                  {v.name}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    void playPresetPreview(v.voiceId)
-                                  }}
-                                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
-                                    playing
-                                      ? 'border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/20 dark:text-indigo-100'
-                                      : 'border-[var(--app-border)] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                                  } disabled:opacity-50`}
-                                  aria-label={`Escuchar muestra de ${v.name}`}
-                                >
-                                  <Play className="h-5 w-5" fill={playing ? 'currentColor' : 'none'} />
-                                </button>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {voiceTtsMode === 'custom' && voicePlan !== 'identity' ? (
-                      <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-                        <p className="font-semibold">Plan Identidad necesario</p>
-                        <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
-                          La clonación de voz con ElevenLabs está incluida en el plan Identidad. Mientras tanto puedes usar «Voces naturales» (plan
-                          Voz o superior) o «Voz del sistema». Si ya tienes Identidad y ves este mensaje, comprueba tu suscripción o contacta con
-                          soporte.
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {voiceTtsMode === 'custom' && voicePlan === 'identity' ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre de la voz clonada</label>
-                          <input
-                            type="text"
-                            value={cloneVoiceName}
-                            onChange={(e) => setCloneVoiceName(e.target.value)}
-                            className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                            placeholder="Mi voz AAC"
-                          />
-                        </div>
-
-                        {cloneRecording && cloneLiveStream ? (
-                          <VoiceCloneLiveWaveform stream={cloneLiveStream} active={cloneRecording} />
-                        ) : null}
-                        {!cloneRecording && clonePreviewFile ? (
-                          <VoiceCloneSamplePreview
-                            file={clonePreviewFile}
-                            onRemove={clearClonePreview}
-                            disabled={voiceCloneBusy}
-                          />
-                        ) : null}
-                        {!cloneRecording && clonePreviewFile ? (
                           <button
                             type="button"
-                            disabled={voiceCloneBusy}
-                            onClick={() => void submitVoiceClone(clonePreviewFile)}
-                            className="ui-primary-button w-full rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                            role="switch"
+                            aria-checked={accountShowFrequentPhrasesSection}
+                            aria-label="Mostrar frases frecuentes en el tablero"
+                            onClick={() => setAccountShowFrequentPhrasesSection((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                              accountShowFrequentPhrasesSection ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
                           >
-                            {voiceCloneBusy ? 'Creando voz…' : 'Crear voz con esta muestra'}
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountShowFrequentPhrasesSection ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
                           </button>
-                        ) : null}
+                        </li>
+                        <li className="flex items-center gap-4 py-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Mostrar el apartado «Siguiente» bajo la barra de frase (sugerencias de palabra).
+                          </p>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountShowPhraseCompletionSection}
+                            aria-label="Mostrar apartado Siguiente bajo la barra de frase"
+                            onClick={() => setAccountShowPhraseCompletionSection((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                              accountShowPhraseCompletionSection ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountShowPhraseCompletionSection ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </li>
+                        <li className="flex items-center gap-4 py-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Mostrar predicciones en las celdas del grid (resaltado e iluminación de la siguiente palabra probable).
+                          </p>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountShowGridCellPredictions}
+                            aria-label="Mostrar predicciones en celdas del grid"
+                            onClick={() => setAccountShowGridCellPredictions((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                              accountShowGridCellPredictions ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountShowGridCellPredictions ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </li>
+                        <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Al abrir el tablero, mostrar primero la vista de celdas (GRID) o el teclado (TECLADO).
+                          </p>
+                          <div className="grid w-full max-w-xs shrink-0 grid-cols-2 gap-2 sm:w-auto">
+                            <button
+                              type="button"
+                              aria-pressed={accountDefaultTableroTab === 'grid'}
+                              onClick={() => setAccountDefaultTableroTab('grid')}
+                              className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
+                                accountDefaultTableroTab === 'grid'
+                                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
+                                  : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                              }`}
+                              style={{
+                                borderColor:
+                                  accountDefaultTableroTab === 'grid' ? 'var(--app-predicted-border)' : undefined,
+                              }}
+                            >
+                              GRID
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={accountDefaultTableroTab === 'keyboard'}
+                              onClick={() => setAccountDefaultTableroTab('keyboard')}
+                              className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
+                                accountDefaultTableroTab === 'keyboard'
+                                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
+                                  : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                              }`}
+                              style={{
+                                borderColor:
+                                  accountDefaultTableroTab === 'keyboard'
+                                    ? 'var(--app-predicted-border)'
+                                    : undefined,
+                              }}
+                            >
+                              TECLADO
+                            </button>
+                          </div>
+                        </li>
+                        <li className="flex flex-col gap-2 py-4 last:pb-0">
+                          <div className="flex items-center gap-4">
+                            <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                              Permitir guardar patrones de pulsación y transiciones entre símbolos para mejorar las
+                              predicciones del tablero. Si lo desactivas, no se registrarán nuevos datos de uso; las
+                              predicciones seguirán usando el léxico y reglas generales.
+                            </p>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={accountShareUsageForPredictions}
+                              aria-label="Permitir uso de datos para predicciones"
+                              onClick={() => setAccountShareUsageForPredictions((v) => !v)}
+                              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                                accountShareUsageForPredictions ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                              }`}
+                            >
+                              <span
+                                className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                  accountShareUsageForPredictions ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Más información en la{' '}
+                            <Link href="/privacidad" className="font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                              política de privacidad
+                            </Link>
+                            .
+                          </p>
+                        </li>
+                      </ul>
+                    </div>
 
-                        <input
-                          ref={cloneFileRef}
-                          type="file"
-                          accept="audio/*"
-                          className="hidden"
-                          onChange={handleVoiceCloneUpload}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          {!cloneRecording ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={voiceCloneBusy}
-                                onClick={() => void startCloneRecording()}
-                                className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
-                              >
-                                <Mic className="h-4 w-4" />
-                                {voiceCloneBusy ? 'Creando voz…' : 'Grabar con el micrófono'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={voiceCloneBusy}
-                                onClick={() => cloneFileRef.current?.click()}
-                                className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
-                              >
-                                <FolderOpen className="h-4 w-4" />
-                                Subir archivo
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <div className="flex min-w-[8rem] items-center gap-2 rounded-2xl border border-red-400/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-700 dark:text-red-200">
-                                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
-                                Grabando {recordElapsedSec}s
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void stopCloneRecordingAndUpload()}
-                                className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                              >
-                                <Square className="h-4 w-4 fill-current" />
-                                Detener grabación
-                              </button>
-                              <button
-                                type="button"
-                                onClick={abortCloneRecording}
-                                className="ui-secondary-button rounded-2xl px-4 py-2.5 text-sm font-semibold"
-                              >
-                                Cancelar
-                              </button>
-                            </>
-                          )}
+                    <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={exitAdminSettingsView}
+                        className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                        disabled={savingAccountSettings}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingAccountSettings || !accountSettings}
+                        className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
+                      >
+                        {savingAccountSettings ? 'Guardando...' : 'Guardar configuración'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : adminSettingsView === 'luma' ? (
+                <div className="app-panel min-w-0 overflow-x-auto rounded-2xl p-4 sm:p-6">
+                  <div className="mb-6 flex flex-col gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Voz y Luma Grid</h2>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        Personaliza la voz y el género de tus tableros.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={exitAdminSettingsView}
+                      className="ui-secondary-button shrink-0 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+                      disabled={savingAccountSettings}
+                    >
+                      Volver a la vista previa
+                    </button>
+                  </div>
+                  <form
+                    data-settings-modal="luma"
+                    onSubmit={handleSaveAccountSettings}
+                    className="flex flex-col"
+                  >
+                    <div className="space-y-6">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Género de comunicación</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAccountGender('male')}
+                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            style={{ borderColor: accountGender === 'male' ? 'var(--app-predicted-border)' : undefined }}
+                          >
+                            Masculino
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAccountGender('female')}
+                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            style={{ borderColor: accountGender === 'female' ? 'var(--app-predicted-border)' : undefined }}
+                          >
+                            Femenino
+                          </button>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Grabación: mínimo 5 segundos, máximo 5 minutos. Habla en un sitio silencioso. Tras grabar o subir audio, revisa la forma
-                          de onda, escucha la muestra y pulsa &quot;Crear voz con esta muestra&quot;. También puedes subir MP3/WAV. Cuando la voz
-                          esté creada, pulsa &quot;Guardar cambios&quot; si cambias el modo.
+                          Se aplica al tablero seleccionado{selectedProfile ? `: ${selectedProfile.name}` : ''}.
                         </p>
+                      </div>
+
+                      <div className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                          <Volume2 size={16} className="shrink-0" />
+                          Voz (texto a voz)
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {!voiceSubscriptionActive ? (
+                            <span className="font-medium text-amber-800 dark:text-amber-200">
+                              Sin suscripción activa: solo se usa la voz del navegador hasta que tengas un plan de pago vigente.
+                            </span>
+                          ) : (
+                            <>
+                              Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
+                              <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
+                                {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
+                              </span>
+                              {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
+                            </>
+                          )}
+                        </p>
+
+                        {voiceSubscriptionActive && voiceTtsQuotaExceeded ? (
+                          <div
+                            role="status"
+                            className="rounded-xl border border-amber-300/90 bg-amber-50/95 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/40 dark:text-amber-100"
+                          >
+                            <p className="font-medium">Has superado la referencia mensual de caracteres de voz de tu plan.</p>
+                            <p className="mt-1.5 text-amber-900/90 dark:text-amber-200/95">
+                              Considera ampliar el plan en{' '}
+                              <Link href="/plan" className="font-semibold underline underline-offset-2">
+                                Planes y precios
+                              </Link>
+                              . Si el uso de ElevenLabs queda limitado, se puede pasar a voz del navegador; el contador sigue registrando el consumo.
+                            </p>
+                          </div>
+                        ) : null}
+
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <button
+                            type="button"
+                            onClick={() => setVoiceTtsMode('browser')}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'browser' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            style={{ borderColor: voiceTtsMode === 'browser' ? 'var(--app-predicted-border)' : undefined }}
+                          >
+                            Voz del sistema
+                            <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">Gratis, sin límite en el navegador</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!canUsePresetVoices) {
+                                setShowVoicePlanRequiredModal(true)
+                                return
+                              }
+                              setVoiceTtsMode('preset')
+                            }}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
+                          >
+                            Voces naturales
+                            <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">ElevenLabs (presets)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!canUseCustomVoice) {
+                                setShowVoicePlanRequiredModal(true)
+                                return
+                              }
+                              openCustomVoiceMode()
+                            }}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
+                          >
+                            Crear mi voz
+                            <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {voicePlan === 'identity' ? 'Plan Identidad · clonación' : 'Requiere plan Identidad'}
+                            </span>
+                          </button>
+                        </div>
+
+                        {voiceTtsMode === 'preset' ? (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                Voces naturales
+                              </label>
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                Se muestran las 5 voces según el género de comunicación del tablero (
+                                {accountGender === 'male' ? 'masculino' : 'femenino'}). Pulsa play para escuchar la
+                                muestra generada una sola vez y guardada en el servidor.
+                              </p>
+                            </div>
+                            {voicePreviewBusy ? (
+                              <p className="text-xs text-slate-600 dark:text-slate-300">Preparando muestras de audio…</p>
+                            ) : null}
+                            {voicePreviewError ? (
+                              <p className="text-xs text-red-600 dark:text-red-400">{voicePreviewError}</p>
+                            ) : null}
+                            <div className="flex flex-col gap-2">
+                              {(accountGender === 'male' ? maleVoices : femaleVoices).map((v) => {
+                                const selected = voicePresetElevenId === v.voiceId
+                                const playing = previewPlayingVoiceId === v.voiceId
+                                return (
+                                  <div
+                                    key={v.voiceId}
+                                    className="flex items-center gap-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-2 pl-3"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        setVoicePresetElevenId(v.voiceId)
+                                      }}
+                                      className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                                        selected
+                                          ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80'
+                                      }`}
+                                    >
+                                      {v.name}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        void playPresetPreview(v.voiceId)
+                                      }}
+                                      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
+                                        playing
+                                          ? 'border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/20 dark:text-indigo-100'
+                                          : 'border-[var(--app-border)] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                                      } disabled:opacity-50`}
+                                      aria-label={`Escuchar muestra de ${v.name}`}
+                                    >
+                                      <Play className="h-5 w-5" fill={playing ? 'currentColor' : 'none'} />
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {voiceTtsMode === 'custom' && voicePlan !== 'identity' ? (
+                          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                            <p className="font-semibold">Plan Identidad necesario</p>
+                            <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                              La clonación de voz con ElevenLabs está incluida en el plan Identidad. Mientras tanto puedes usar «Voces naturales» (plan
+                              Voz o superior) o «Voz del sistema». Si ya tienes Identidad y ves este mensaje, comprueba tu suscripción o contacta con
+                              soporte.
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {voiceTtsMode === 'custom' && voicePlan === 'identity' ? (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre de la voz clonada</label>
+                              <input
+                                type="text"
+                                value={cloneVoiceName}
+                                onChange={(e) => setCloneVoiceName(e.target.value)}
+                                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                                placeholder="Mi voz AAC"
+                              />
+                            </div>
+
+                            {cloneRecording && cloneLiveStream ? (
+                              <VoiceCloneLiveWaveform stream={cloneLiveStream} active={cloneRecording} />
+                            ) : null}
+                            {!cloneRecording && clonePreviewFile ? (
+                              <VoiceCloneSamplePreview
+                                file={clonePreviewFile}
+                                onRemove={clearClonePreview}
+                                disabled={voiceCloneBusy}
+                              />
+                            ) : null}
+                            {!cloneRecording && clonePreviewFile ? (
+                              <button
+                                type="button"
+                                disabled={voiceCloneBusy}
+                                onClick={() => void submitVoiceClone(clonePreviewFile)}
+                                className="ui-primary-button w-full rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                              >
+                                {voiceCloneBusy ? 'Creando voz…' : 'Crear voz con esta muestra'}
+                              </button>
+                            ) : null}
+
+                            <input
+                              ref={cloneFileRef}
+                              type="file"
+                              accept="audio/*"
+                              className="hidden"
+                              onChange={handleVoiceCloneUpload}
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              {!cloneRecording ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={voiceCloneBusy}
+                                    onClick={() => void startCloneRecording()}
+                                    className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                                  >
+                                    <Mic className="h-4 w-4" />
+                                    {voiceCloneBusy ? 'Creando voz…' : 'Grabar con el micrófono'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={voiceCloneBusy}
+                                    onClick={() => cloneFileRef.current?.click()}
+                                    className="ui-secondary-button inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                                  >
+                                    <FolderOpen className="h-4 w-4" />
+                                    Subir archivo
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex min-w-[8rem] items-center gap-2 rounded-2xl border border-red-400/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-700 dark:text-red-200">
+                                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
+                                    Grabando {recordElapsedSec}s
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void stopCloneRecordingAndUpload()}
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                                  >
+                                    <Square className="h-4 w-4 fill-current" />
+                                    Detener grabación
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={abortCloneRecording}
+                                    className="ui-secondary-button rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Grabación: mínimo 5 segundos, máximo 5 minutos. Habla en un sitio silencioso. Tras grabar o subir audio, revisa la forma
+                              de onda, escucha la muestra y pulsa &quot;Crear voz con esta muestra&quot;. También puedes subir MP3/WAV. Cuando la voz
+                              esté creada, pulsa &quot;Guardar cambios&quot; si cambias el modo.
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={exitAdminSettingsView}
+                        className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
+                        disabled={savingAccountSettings}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingAccountSettings || !accountSettings}
+                        className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
+                      >
+                        {savingAccountSettings ? 'Guardando...' : 'Guardar cambios'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : adminSettingsView === 'lexicon' ? (
+                <div className="app-panel min-w-0 overflow-x-auto rounded-2xl p-4 sm:p-6">
+                  <div className="mb-6 flex flex-col gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 id="admin-lexicon-panel-title" className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                        Léxico del tablero
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        Cobertura y revisión según el tablero seleccionado.
+                      </p>
+                      {isSelectedDemoProfile ? (
+                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                          En el tablero base no se muestra cola de revisión léxica. Si añades los mismos términos en otro tablero, allí podrás revisarlos con normalidad.
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={exitAdminSettingsView}
+                      className="ui-secondary-button shrink-0 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+                    >
+                      Volver a la vista previa
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    {!selectedProfileId ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Selecciona un tablero para ver el estado del léxico.</p>
+                    ) : lexiconObservabilityLoading ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Cargando…</p>
+                    ) : !lexiconObservability?.coverage ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Sin datos de cobertura.</p>
+                    ) : (
+                      <div className="space-y-3 text-xs">
+                        <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl bg-[var(--app-surface-muted)] px-3 py-2.5">
+                          <div>
+                            <span className="text-[var(--app-muted-foreground)]">Cobertura resuelta</span>
+                            <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                              {Math.round(lexiconObservability.coverage.coverageRatio * 100)}%
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[var(--app-muted-foreground)]">Pendientes de revisión</span>
+                            <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                              {lexiconObservability.coverage.reviewNeededCount}
+                            </span>
+                          </div>
+                        </div>
+                        {lexiconObservability.coverage.reviewItems.length > 0 ? (
+                          <div className="border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
+                            <p className="mb-2 text-[11px] font-medium text-[var(--app-muted-foreground)]">
+                              Primeros símbolos a revisar
+                              {lexiconObservability.coverage.reviewNeededCount > lexiconObservability.coverage.reviewItems.length ? (
+                                <span className="font-normal text-[var(--app-muted-foreground)]">
+                                  {' '}
+                                  (muestra de {lexiconObservability.coverage.reviewItems.length} de {lexiconObservability.coverage.reviewNeededCount})
+                                </span>
+                              ) : null}
+                            </p>
+                            <ul className="max-h-[min(52vh,22rem)] space-y-1.5 overflow-y-auto rounded-lg border border-slate-200/60 bg-white/40 p-2 dark:border-slate-600/60 dark:bg-slate-900/35">
+                              {lexiconObservability.coverage.reviewItems.map((item) => (
+                                <li
+                                  key={item.id}
+                                  className="flex flex-col gap-2 border-b border-slate-100/90 pb-2 text-[11px] leading-snug last:border-b-0 last:pb-0 dark:border-slate-700/50 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-2 sm:gap-y-0.5 sm:pb-1.5"
+                                >
+                                  <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                    <span className="font-semibold text-slate-800 dark:text-slate-100">&ldquo;{item.label}&rdquo;</span>
+                                    <span className="rounded bg-amber-100/90 px-1 py-0 text-[10px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                                      {COVERAGE_REVIEW_REASON_LABEL[item.reason]}
+                                    </span>
+                                    {item.suggestedLemma ? (
+                                      <span className="text-[var(--app-muted-foreground)]">
+                                        Sugerido: <span className="font-medium text-slate-700 dark:text-slate-300">{item.suggestedLemma}</span>
+                                        {' '}
+                                        ({getSpanishPosLabel(item.suggestedPosType)})
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      exitAdminSettingsView()
+                                      openSymbolReviewFromCoverageItem(item.id)
+                                    }}
+                                    className="ui-secondary-button shrink-0 self-start rounded-lg px-2.5 py-1 text-[10px] font-semibold sm:self-baseline"
+                                  >
+                                    Revisar
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : viewMode === 'grid' ? (
+                <div className="app-panel min-w-0 overflow-x-auto rounded-2xl p-4 sm:p-6">
+                  <div className="mb-4 flex shrink-0 flex-col gap-3">
+                    {activeFolderTitle ? (
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          Editando carpeta: {activeFolderTitle}
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFolder(null)}
+                          className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 transition hover:text-indigo-500 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
+                        >
+                          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                          Volver al tablero principal
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          Vista Previa del Tablero
+                        </h2>
+                        {!isSelectedDemoProfile ? (
+                          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                            La{' '}
+                            <span className="font-medium text-violet-700 dark:text-violet-300">base fija</span>{' '}
+                            se mantiene al cambiar de carpeta; el resto muestra el contenido de cada carpeta.
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            Tablero de demostración con plantilla integrada. La base fija se edita desde el recuadro de abajo.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {!symbolsLoadPending && !fixedZoneEditMode ? (
+                      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-3 dark:border-slate-600/60 dark:bg-slate-900/40 sm:flex-row sm:items-stretch sm:gap-3">
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 sm:pt-2.5">
+                          Editar contenido
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          {isSelectedDemoProfile ? (
+                            <>
+                              <label htmlFor="admin-demo-folder-picker" className="sr-only">
+                                Elegir carpeta del tablero demo para editar su contenido
+                              </label>
+                              <select
+                                id="admin-demo-folder-picker"
+                                key={`${selectedProfileId}-demo-folder`}
+                                value={activeFolder ?? ''}
+                                className="app-input min-h-[44px] min-w-0 max-w-full flex-1 rounded-xl py-2 pl-3 pr-10 text-sm"
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setActiveFolder(v ? v : null)
+                                }}
+                              >
+                                <option value="">Tablero principal (sin carpeta)</option>
+                                {demoFolderNames.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={activeFolderTitle ? () => setActiveFolder(null) : enterFixedZoneEdit}
+                            suppressHydrationWarning
+                            disabled={fixedZoneToolbarActionsDisabled}
+                            className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-300/90 bg-gradient-to-b from-violet-50 to-violet-100/90 px-4 py-2.5 text-sm font-semibold text-violet-950 shadow-sm transition hover:border-violet-400 hover:from-violet-100 hover:to-violet-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto dark:border-violet-500/45 dark:from-violet-950/90 dark:to-violet-900/55 dark:text-violet-50 dark:hover:border-violet-400/70 dark:hover:from-violet-900/80 dark:hover:to-violet-950/70"
+                          >
+                            {activeFolderTitle ? (
+                              <Eye className="h-4 w-4 shrink-0" aria-hidden />
+                            ) : (
+                              <Pin className="h-4 w-4 shrink-0" aria-hidden />
+                            )}
+                            {activeFolderTitle ? 'Ver base fija' : 'Editar base fija'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {!symbolsLoadPending && fixedZoneEditMode && !activeFolderTitle ? (
+                      <div className="flex flex-col gap-3 rounded-2xl border border-violet-300/60 bg-gradient-to-br from-violet-50/95 to-white/80 px-4 py-3 shadow-sm dark:border-violet-500/35 dark:from-violet-950/50 dark:to-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                        <p className="min-w-0 text-sm leading-snug text-violet-950 dark:text-violet-100">
+                          <span className="font-semibold">Editando base fija.</span> Clic o arrastra: las celdas fijas se
+                          resaltan en violeta; el resto aparece atenuado.{' '}
+                          <kbd className="rounded border border-violet-300/70 bg-white/80 px-1.5 py-0.5 font-mono text-[11px] text-violet-900 dark:border-violet-600/50 dark:bg-violet-950/60 dark:text-violet-200">
+                            Esc
+                          </kbd>{' '}
+                          para cancelar.
+                        </p>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={applyDefaultFixedZoneDraft}
+                            className="ui-secondary-button rounded-xl px-3 py-2 text-left text-sm font-semibold leading-snug"
+                          >
+                            Plantilla por defecto
+                            <span className="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">
+                              7 columnas + 1.ª fila
+                            </span>
+                          </button>
+                          <button type="button" onClick={exitFixedZoneEdit} className="ui-secondary-button rounded-xl px-4 py-2 text-sm font-semibold">
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveFixedZoneDraft()}
+                            suppressHydrationWarning
+                            disabled={fixedZoneToolbarActionsDisabled}
+                            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-violet-500 dark:hover:bg-violet-400"
+                          >
+                            Guardar
+                          </button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
-                </div>
 
-                <div className="mt-6 flex shrink-0 flex-col-reverse gap-2 border-t border-[var(--app-border)] pt-6 sm:flex-row sm:justify-end sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={closeLumaGridSettingsModal}
-                    className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                    disabled={savingAccountSettings}
+                  <div className="rounded-b-[1.25rem]">
+                  <DndContext
+                    sensors={sensors}
+                    modifiers={[snapTopLeftToCursor]}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
                   >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingAccountSettings || !accountSettings}
-                    className="ui-primary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                  >
-                    {savingAccountSettings ? 'Guardando...' : 'Guardar cambios'}
-                  </button>
+                    <div className="grid w-full max-w-full grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_auto]">
+                      <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
+                      <div
+                        className={`aac-grid-surface grid w-max max-w-none content-start gap-4 rounded-[1.25rem] p-4 transition-shadow duration-300 sm:p-6 ${symbolsLoadPending ? 'pointer-events-none' : ''} ${
+                          fixedZoneEditMode && !symbolsLoadPending
+                            ? 'ring-2 ring-violet-500/40 shadow-[0_0_20px_rgba(139,92,246,0.18)] dark:ring-violet-400/35'
+                            : ''
+                        }`}
+                        style={{
+                          gridTemplateColumns: `repeat(${previewGridCols}, ${ADMIN_PREVIEW_CELL_COL_WIDTH})`,
+                          gridAutoRows: 'auto',
+                        }}
+                      >
+                      {Array.from({ length: previewGridCols * previewGridRows }).map((_, index) => {
+                        const gridCols = previewGridCols
+                        const x = index % gridCols
+                        const y = Math.floor(index / gridCols)
+                        const fadeVariablePreview = fixedZoneEditMode && !isFixedCellAtPreview(x, y)
+                        const fadeVariableCellClass = fadeVariablePreview
+                          ? 'opacity-[0.22] saturate-50'
+                          : ''
+
+                        if (symbolsLoadPending) {
+                          return (
+                            <div
+                              key={`sk-${x}-${y}`}
+                              className="aspect-video w-full rounded-xl border-2 border-dashed border-slate-300/50 bg-gradient-to-br from-slate-200/50 via-slate-200/30 to-slate-300/40 animate-pulse dark:border-slate-600/55 dark:from-slate-700/50 dark:via-slate-800/35 dark:to-slate-700/45"
+                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                              aria-hidden
+                            />
+                          )
+                        }
+
+                        const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
+
+                        if (symbol) {
+                          const gridCellImageSrc = symbolImageDisplayUrl(symbol)
+                          const pos = getSymbolPosition(symbol)
+                          const showFixedHighlight =
+                            !fixedZoneEditMode &&
+                            (symbol.gridId ?? 'main') === 'main' &&
+                            isFixedZonePosition(
+                              pos.x,
+                              pos.y,
+                              previewGridCols,
+                              previewGridRows,
+                              adminFixedZoneSet,
+                            )
+                          const showFixedZoneEditHighlight =
+                            fixedZoneEditMode && isFixedCellAtPreview(x, y)
+                          const baseCellBg = resolveSymbolColor(symbol.color)
+                          return (
+                            <DroppableGridCell
+                              key={`cell-${x}-${y}`}
+                              cellId={`cell-${x}-${y}`}
+                              className="flex min-h-0 min-w-0 w-full"
+                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                            >
+                              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                              <motion.div
+                                whileHover={fixedZoneEditMode ? undefined : { scale: 1.05 }}
+                                whileTap={fixedZoneEditMode ? undefined : { scale: 0.95 }}
+                                className={`group relative flex aspect-video w-full min-h-0 min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button.symbol-cell]:pointer-events-none' : ''}`}
+                              >
+                                <DraggableGridItem symbol={symbol}>
+                                  <button
+                                    onClick={() =>
+                                      setEditingSymbol({
+                                        ...symbol,
+                                        color: normalizeSymbolColor(symbol.color),
+                                        positionX: x,
+                                        positionY: y,
+                                        state: symbol.state || 'visible',
+                                      })
+                                    }
+                                    type="button"
+                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''}`}
+                                    style={{
+                                      backgroundColor: showFixedZoneEditHighlight
+                                        ? `color-mix(in srgb, ${baseCellBg} 58%, rgb(167 139 250) 42%)`
+                                        : showFixedHighlight
+                                          ? `color-mix(in srgb, ${baseCellBg} 78%, rgb(167 139 250) 22%)`
+                                          : baseCellBg,
+                                      borderColor: showFixedZoneEditHighlight ? 'rgba(139, 92, 246, 0.45)' : 'var(--app-border)',
+                                      color: getSymbolTextColor(symbol.color),
+                                    }}
+                                  >
+                                    {shouldShowFolderBadge(symbol as BoardSymbol) ? (
+                                      <span
+                                        className="ui-chip pointer-events-none absolute right-1.5 top-1.5 z-[1] rounded-lg p-1"
+                                        style={{ color: getSymbolTextColor(symbol.color) }}
+                                        aria-hidden
+                                      >
+                                        <Folder size={12} strokeWidth={2} />
+                                      </span>
+                                    ) : null}
+                                    <div className="text-xl mb-1">
+                                      {gridCellImageSrc ? (
+                                        <img src={gridCellImageSrc} alt={symbol.label} className="h-8 w-8 object-contain" />
+                                      ) : (
+                                        symbol.emoji || '❓'
+                                      )}
+                                    </div>
+                                    <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
+                                      {symbol.label}
+                                    </span>
+                                    {symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) && (
+                                      <span
+                                        className="ui-chip pointer-events-none absolute left-1.5 top-1.5 z-[1] rounded-lg p-1"
+                                        style={{ color: getSymbolTextColor(symbol.color) }}
+                                        title="Tiene variantes de palabra"
+                                        aria-hidden
+                                      >
+                                        <Layers size={12} strokeWidth={2} />
+                                      </span>
+                                    )}
+                                  </button>
+                                </DraggableGridItem>
+                                {isMovableSymbol(symbol) && !fixedZoneEditMode && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      deleteSymbol(symbol.id)
+                                    }}
+                                    type="button"
+                                    className="absolute right-1 top-1 z-10 hidden h-5 w-5 place-items-center rounded-full bg-rose-500 text-white shadow-sm group-hover:grid"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                )}
+                              </motion.div>
+                              {fixedZoneEditMode ? (
+                                <button
+                                  type="button"
+                                  tabIndex={-1}
+                                  className="absolute inset-0 z-20 cursor-crosshair touch-none rounded-xl border-0 bg-transparent"
+                                  aria-label={`Marcar celda ${x + 1},${y + 1} como base fija`}
+                                  onPointerDown={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    onFixedZoneBrushPointerDown(x, y)
+                                  }}
+                                  onPointerEnter={() => onFixedZoneBrushPointerEnter(x, y)}
+                                />
+                              ) : null}
+                              </div>
+                            </DroppableGridCell>
+                          )
+                        }
+
+                        const isSplitHere = splitEmptyCell?.x === x && splitEmptyCell?.y === y
+
+                        return (
+                          <DroppableGridCell
+                            key={`cell-${x}-${y}`}
+                            cellId={`cell-${x}-${y}`}
+                            className="flex min-h-0 min-w-0 w-full"
+                            style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                          >
+                            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                            {isSplitHere ? (
+                              <div
+                                className={`flex aspect-video w-full min-w-0 overflow-hidden rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter] duration-300 ease-out dark:border-slate-500/60 dark:bg-slate-950/45 ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button]:pointer-events-none' : ''}`}
+                                role="group"
+                                aria-label="Crear contenido en celda vacía"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSymbol({
+                                      id: `draft-${Date.now()}`,
+                                      ...EMPTY_SYMBOL,
+                                      gridId:
+                                        !shouldUseDefaultGridTemplate && activeFolder ? activeFolder : 'main',
+                                      positionX: x,
+                                      positionY: y,
+                                    })
+                                    setSplitEmptyCell(null)
+                                  }}
+                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 border-r border-slate-500/40 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 dark:border-slate-500/50 dark:text-slate-100"
+                                >
+                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
+                                    <Plus size={14} strokeWidth={2.5} className="text-white dark:text-white" aria-hidden />
+                                  </span>
+                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
+                                    CREAR BOTÓN
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateFolderModal(x, y)}
+                                  disabled={isSelectedDemoProfile}
+                                  className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-100"
+                                  title={isSelectedDemoProfile ? 'No disponible en el tablero demo' : undefined}
+                                >
+                                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 border-slate-200/90 bg-transparent dark:border-white/40">
+                                    <FolderOpen size={15} strokeWidth={2.25} className="text-white dark:text-white" aria-hidden />
+                                  </span>
+                                  <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
+                                    CREAR CARPETA
+                                  </span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setSplitEmptyCell({ x, y })}
+                                type="button"
+                                className={`group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter,border-color,background-color] duration-300 ease-out hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15 ${fadeVariableCellClass} ${fixedZoneEditMode ? 'pointer-events-none' : ''}`}
+                                aria-label="Añadir en celda vacía"
+                              >
+                                <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
+                              </button>
+                            )}
+                            {fixedZoneEditMode ? (
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                className="absolute inset-0 z-20 cursor-crosshair touch-none rounded-xl border-0 bg-transparent"
+                                aria-label={`Marcar celda ${x + 1},${y + 1} como base fija`}
+                                onPointerDown={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  onFixedZoneBrushPointerDown(x, y)
+                                }}
+                                onPointerEnter={() => onFixedZoneBrushPointerEnter(x, y)}
+                              />
+                            ) : null}
+                            </div>
+                          </DroppableGridCell>
+                        )
+                      })}
+                      </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
+                        disabled={Boolean(blockGridResizeChrome || !canAddPreviewColumn)}
+                        title={
+                          symbolsLoadPending
+                            ? 'Cargando tablero…'
+                            : !canAddPreviewColumn
+                              ? 'Máximo 20 columnas'
+                              : activeFolder
+                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
+                                : 'Añadir una columna a la derecha'
+                        }
+                        className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
+                      >
+                        <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
+                        <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
+                          Añadir columna
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
+                        disabled={Boolean(blockGridResizeChrome || !canAddPreviewRow)}
+                        title={
+                          symbolsLoadPending
+                            ? 'Cargando tablero…'
+                            : !canAddPreviewRow
+                              ? 'Máximo 20 filas'
+                              : activeFolder
+                                ? 'Sal de la carpeta para cambiar el tamaño del tablero'
+                                : 'Añadir una fila abajo'
+                        }
+                        className="col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-span-2 md:col-start-1 md:row-start-2 md:py-5"
+                      >
+                        <Rows className="h-7 w-7 shrink-0" aria-hidden />
+                        <span>Añadir fila</span>
+                      </button>
+                    </div>
+
+                    <DragOverlay>
+                      {activeDraggedSymbol
+                        ? (() => {
+                            const sym = activeDraggedSymbol
+                            const dragImgSrc = symbolImageDisplayUrl(sym)
+                            return (
+                              <div
+                                className="ui-floating-panel flex h-20 w-20 flex-col items-center justify-center rounded-[1.35rem] p-1"
+                                style={{
+                                  backgroundColor: resolveSymbolColor(sym.color),
+                                  color: getSymbolTextColor(sym.color),
+                                }}
+                              >
+                                <div className="text-xl mb-1">
+                                  {dragImgSrc ? (
+                                    <img src={dragImgSrc} alt={sym.label} className="h-8 w-8 object-contain" />
+                                  ) : (
+                                    sym.emoji || '❓'
+                                  )}
+                                </div>
+                                <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
+                                  {sym.label}
+                                </span>
+                              </div>
+                            )
+                          })()
+                        : null}
+                    </DragOverlay>
+                  </DndContext>
+                  </div>
                 </div>
-              </form>
-            </motion.div>
+              ) : (
+                <div className="app-panel min-w-0 overflow-x-auto rounded-2xl">
+                  <div className="shrink-0 border-b border-[var(--app-border)] px-6 py-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Vista de Lista</h2>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          Edita y revisa los símbolos del tablero en formato tabla.
+                        </p>
+                        {activeFolder && (
+                          <button
+                            onClick={() => setActiveFolder(null)}
+                            className="mt-2 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                            type="button"
+                          >
+                            &larr; Volver al grid principal
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="ui-chip rounded-full px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          {symbolsLoadPending ? '…' : `${listSymbols.length} símbolo${listSymbols.length === 1 ? '' : 's'}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCreateSymbolFromList}
+                          disabled={symbolsLoadPending}
+                          className="ui-primary-button inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition disabled:pointer-events-none disabled:opacity-45"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Añadir símbolo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid shrink-0 gap-3 border-b border-[var(--app-border)] px-6 py-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                    <input
+                      type="text"
+                      value={listSearch}
+                      onChange={(e) => setListSearch(e.target.value)}
+                      placeholder="Buscar por etiqueta, categoría, tipo o emoji..."
+                      className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                    />
+
+                    <select
+                      value={listStateFilter}
+                      onChange={(e) => setListStateFilter(e.target.value as 'all' | 'visible' | 'locked' | 'hidden')}
+                      className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                    >
+                      <option value="all">Todos los estados</option>
+                      <option value="visible">Visible</option>
+                      <option value="locked">Bloqueado</option>
+                      <option value="hidden">Oculto</option>
+                    </select>
+                  </div>
+
+                  <div>
+                  {symbolsLoadPending ? (
+                    <div className="flex flex-col items-center justify-center px-6 py-16">
+                      <div
+                        className="h-9 w-9 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
+                        aria-hidden
+                      />
+                      <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Cargando símbolos del tablero…</p>
+                    </div>
+                  ) : listSymbols.length === 0 ? (
+                    <div className="px-6 py-12 text-center">
+                      <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
+                        No hay símbolos que coincidan con los filtros actuales.
+                      </p>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        Ajusta la búsqueda, cambia el filtro de estado o crea un símbolo nuevo.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                        <thead className="bg-[var(--app-surface-muted)]">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Símbolo</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Categoría</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Estado</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Posición</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {listSymbols.map((symbol) => {
+                            const position = getSymbolPosition(symbol)
+                            return (
+                              <tr key={`row-${symbol.id}`} className="bg-[color-mix(in_srgb,var(--app-surface-elevated)_55%,transparent)]">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="ui-floating-panel grid h-11 w-11 place-items-center rounded-2xl text-lg"
+                                      style={{ backgroundColor: resolveSymbolColor(symbol.color) }}
+                                    >
+                                      {symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">{getSpanishPosLabel(symbol.posType)}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{symbol.category || 'General'}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                    symbol.state === 'hidden'
+                                      ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                      : symbol.state === 'locked'
+                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'
+                                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
+                                  }`}>
+                                    {symbol.state || 'visible'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{position.x + 1}, {position.y + 1}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingSymbol({
+                                        ...symbol,
+                                        color: normalizeSymbolColor(symbol.color),
+                                        positionX: position.x,
+                                        positionY: position.y,
+                                        state: symbol.state || 'visible',
+                                      })}
+                                      className="ui-secondary-button inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm font-semibold text-slate-700 transition dark:text-slate-200"
+                                    >
+                                      Editar
+                                    </button>
+                                    {isMovableSymbol(symbol) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteSymbol(symbol.id)}
+                                        className="inline-flex h-9 items-center justify-center rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  </div>
+                </div>
+              )}
+              </div>
+            </main>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
 
       {/* Modern Editing Modal */}
       <AnimatePresence>
@@ -3883,10 +4446,10 @@ export default function AdminPage() {
                   className="flex max-h-[min(420px,45vh)] w-full shrink-0 flex-col overflow-hidden border-t border-slate-200/90 bg-[var(--app-surface)] will-change-transform lg:max-h-none lg:min-h-0 lg:w-80 lg:shrink-0 lg:border-l lg:border-t-0 xl:w-96 dark:border-slate-700"
                   aria-label="Opciones avanzadas del símbolo"
                 >
-                <div className="shrink-0 border-b border-slate-100/80 bg-[var(--app-surface-muted)] px-4 py-3 sm:px-5 dark:border-slate-800">
-                  <p className="text-center text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">
+                <div className="shrink-0 border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
+                  <h2 className="min-w-0 text-lg font-bold text-slate-800 sm:text-xl dark:text-slate-100">
                     Opciones avanzadas
-                  </p>
+                  </h2>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
                   <div className="space-y-6">
@@ -3914,9 +4477,9 @@ export default function AdminPage() {
                             Variantes de palabra
                           </span>
                           <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
-                            Hasta cuatro formas (plural, género, etc.). En el tablero, un toque corto usa la variante
-                            marcada con el círculo; mantén pulsado la celda o pulsa el botón con icono de capas para
-                            abrir el menú. Útil también con escáner si no puedes mantener pulsado.
+                            Hasta cuatro formas (plural, género, etc.). La celda se ve como el resto, con icono de capas.
+                            Al mantener pulsada la celda (o el icono), las opciones aparecen alrededor sobre el tablero.
+                            Opcional: imagen por variante. El toque corto usa la variante marcada con el botón de opción.
                           </span>
                         </span>
                       </label>
@@ -3937,8 +4500,9 @@ export default function AdminPage() {
                               {([0, 1, 2, 3] as const).map((slot) => {
                                 const wv = editingSymbol.wordVariants!
                                 const variants = [...wv.variants] as [string, string, string, string]
+                                const vImg = wv.variantImageUrls[slot]?.trim() ?? ''
                                 return (
-                                  <div key={slot} className="flex items-center gap-2">
+                                  <div key={slot} className="flex flex-wrap items-center gap-2">
                                     <input
                                       type="radio"
                                       name={`variant-default-aside-${editingSymbol.id ?? 'new'}`}
@@ -3966,9 +4530,55 @@ export default function AdminPage() {
                                       className="app-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
                                       placeholder={`Variante ${slot + 1}`}
                                     />
+                                    {vImg ? (
+                                      <img src={vImg} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 object-contain dark:border-slate-600" />
+                                    ) : null}
+                                    <label className="shrink-0 cursor-pointer rounded-lg border border-dashed border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+                                      Subir Picto
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="sr-only"
+                                        onChange={(e) => handleVariantImageSlot(slot, e)}
+                                      />
+                                    </label>
+                                    {vImg ? (
+                                      <button
+                                        type="button"
+                                        className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-500/10"
+                                        onClick={() => {
+                                          const nextUrls = [...wv.variantImageUrls] as [string, string, string, string]
+                                          nextUrls[slot] = ''
+                                          setEditingSymbol({
+                                            ...editingSymbol,
+                                            wordVariants: { ...wv, variantImageUrls: nextUrls },
+                                          })
+                                        }}
+                                      >
+                                        Quitar imagen
+                                      </button>
+                                    ) : null}
                                   </div>
                                 )
                               })}
+                              {(() => {
+                                const cfg = adminEditToMenuConfig(editingSymbol.wordVariants)
+                                if (!cfg || !symbolHasVariantMenu(cfg)) return null
+                                return (
+                                  <div className="mt-4 rounded-xl border border-slate-200/90 bg-white/60 px-3 py-3 dark:border-slate-600 dark:bg-slate-900/40">
+                                    <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                      Vista previa (tablero)
+                                    </p>
+                                    <div className="flex justify-center">
+                                      <WordVariantsSchematic cfg={cfg} size="preview" />
+                                    </div>
+                                    <p className="mt-2 text-center text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+                                      En el tablero, al mantener pulsado: 1 izquierda, 2 derecha, 3 arriba, 4 abajo. El
+                                      borde resaltado en la vista previa = predeterminada al toque corto.
+                                    </p>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </motion.div>
                         )}
@@ -4080,7 +4690,7 @@ export default function AdminPage() {
               className="absolute inset-0 backdrop-blur-xl"
               style={{ background: 'var(--app-modal-backdrop)' }}
               onClick={() => {
-                if (!creatingProfile) {
+                if (!creatingProfile && !importingProfile) {
                   setShowCreateProfileModal(false)
                   resetCreateProfileModal()
                 }
@@ -4092,19 +4702,37 @@ export default function AdminPage() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="ui-modal-panel relative flex max-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] sm:max-h-[min(92dvh,720px)] sm:rounded-[2rem]"
             >
+              <input
+                ref={importLumaInputRef}
+                type="file"
+                accept=".luma,application/json"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+                onChange={handleImportLumaFileChange}
+              />
               <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-6 dark:border-slate-800">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear tablero</h3>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Crear tablero</h3>
+                    <button
+                      type="button"
+                      disabled={creatingProfile || importingProfile}
+                      onClick={() => importLumaInputRef.current?.click()}
+                      className="inline border-0 bg-transparent p-0 text-left text-[11px] font-medium leading-tight transition enabled:cursor-pointer enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:text-xs"
+                      title="Importar desde un archivo .luma"
+                    >
+                      <span className="text-slate-400 dark:text-slate-500">o </span>
+                      <span className="text-violet-600 dark:text-violet-400">
+                        {importingProfile ? 'Importando…' : 'importar tablero'}
+                      </span>
+                    </button>
+                  </div>
                   <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">Paso {createProfileStep} de 3</p>
-                  {showCreateProfileStepDebug ? (
-                    <p className="mt-1.5 rounded-lg bg-amber-100/90 px-2 py-1 font-mono text-[11px] font-semibold text-amber-950 dark:bg-amber-500/20 dark:text-amber-100">
-                      createProfileStep = {createProfileStep}
-                    </p>
-                  ) : null}
                 </div>
                 <button
                   onClick={() => {
-                    if (!creatingProfile) {
+                    if (!creatingProfile && !importingProfile) {
                       setShowCreateProfileModal(false)
                       resetCreateProfileModal()
                     }
@@ -4219,14 +4847,14 @@ export default function AdminPage() {
                           resetCreateProfileModal()
                         }}
                         className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                        disabled={creatingProfile}
+                        disabled={creatingProfile || importingProfile}
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                        disabled={creatingProfile || !newProfileName.trim()}
+                        disabled={creatingProfile || importingProfile || !newProfileName.trim()}
                         onClick={() => {
                           if (newProfileName.trim()) setCreateProfileStep(2)
                         }}
@@ -4242,14 +4870,14 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => setCreateProfileStep(1)}
                         className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                        disabled={creatingProfile}
+                        disabled={creatingProfile || importingProfile}
                       >
                         Atrás
                       </button>
                       <button
                         type="button"
                         className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition sm:w-auto"
-                        disabled={creatingProfile}
+                        disabled={creatingProfile || importingProfile}
                         onClick={() => setCreateProfileStep(3)}
                       >
                         Siguiente
@@ -4263,14 +4891,14 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => setCreateProfileStep(2)}
                         className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                        disabled={creatingProfile}
+                        disabled={creatingProfile || importingProfile}
                       >
                         Atrás
                       </button>
                       <button
                         type="submit"
                         className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                        disabled={creatingProfile || !newProfileName.trim()}
+                        disabled={creatingProfile || importingProfile || !newProfileName.trim()}
                       >
                         {creatingProfile ? 'Creando...' : 'Crear tablero'}
                       </button>
@@ -4293,7 +4921,7 @@ export default function AdminPage() {
               className="absolute inset-0 backdrop-blur-xl"
               style={{ background: 'var(--app-modal-backdrop)' }}
               onClick={() => {
-                if (!savingProfileChanges && !profileDuplicateBusy) {
+                if (!savingProfileChanges && !profileDuplicateBusy && !profileExportBusy) {
                   setProfileBeingEdited(null)
                   setEditProfileName('')
                 }
@@ -4309,7 +4937,7 @@ export default function AdminPage() {
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Editar tablero</h3>
                 <button
                   onClick={() => {
-                    if (!savingProfileChanges && !profileDuplicateBusy) {
+                    if (!savingProfileChanges && !profileDuplicateBusy && !profileExportBusy) {
                       setProfileBeingEdited(null)
                       setEditProfileName('')
                     }
@@ -4335,11 +4963,24 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="mt-4">
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleExportProfileFromEditModal()}
+                    disabled={savingProfileChanges || profileDuplicateBusy || profileExportBusy}
+                    className="ui-secondary-button flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200"
+                  >
+                    {profileExportBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <Download className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    {profileExportBusy ? 'Exportando…' : 'Exportar tablero'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleDuplicateProfile()}
-                    disabled={savingProfileChanges || profileDuplicateBusy}
+                    disabled={savingProfileChanges || profileDuplicateBusy || profileExportBusy}
                     className="ui-secondary-button w-full rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200"
                   >
                     {profileDuplicateBusy ? 'Duplicando…' : 'Duplicar tablero'}
@@ -4359,14 +5000,14 @@ export default function AdminPage() {
                       setEditProfileName('')
                     }}
                     className="ui-secondary-button w-full rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-600 transition sm:w-auto dark:text-slate-300"
-                    disabled={savingProfileChanges || profileDuplicateBusy}
+                    disabled={savingProfileChanges || profileDuplicateBusy || profileExportBusy}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     className="ui-primary-button w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition disabled:opacity-70 sm:w-auto"
-                    disabled={savingProfileChanges || profileDuplicateBusy || !editProfileName.trim()}
+                    disabled={savingProfileChanges || profileDuplicateBusy || profileExportBusy || !editProfileName.trim()}
                   >
                     {savingProfileChanges ? 'Guardando...' : 'Guardar cambios'}
                   </button>
@@ -4559,6 +5200,7 @@ export default function AdminPage() {
           return { ok: false as const, error: result.error }
         }}
       />
+
     </div>
   )
 }

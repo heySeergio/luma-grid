@@ -32,9 +32,6 @@ export default function LegalPage({ eyebrow, title, intro, sections }: LegalPage
               <Link href="/" className="ui-secondary-button rounded-2xl px-4 py-2 text-sm font-semibold text-[var(--app-foreground)]">
                 Inicio
               </Link>
-              <Link href="/branding" className="ui-primary-button rounded-2xl px-4 py-2 text-sm font-semibold">
-                Branding
-              </Link>
             </div>
           </div>
 

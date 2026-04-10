@@ -1,9 +1,11 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import { Apple, BookOpen, Heart, MapPin, Sparkles, Users } from 'lucide-react'
 import SymbolCell, { type SymbolGridDensity, type SymbolSelectChoice } from './SymbolCell'
+import WordVariantsRadialOverlay from '@/components/app/WordVariantsRadialOverlay'
 import { shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
+import { symbolHasVariantMenu } from '@/lib/symbolWordVariants'
 
 function getGridDensity(gridCols: number, gridRows: number): SymbolGridDensity {
   const n = Math.max(1, gridCols * gridRows)
@@ -40,6 +42,12 @@ export default function SymbolGrid({
   gridRows = 8,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
+  const [radialSymbol, setRadialSymbol] = useState<Symbol | null>(null)
+
+  const closeRadial = useCallback(() => setRadialSymbol(null), [])
+  const handleVariantRadialOpen = useCallback((symbol: Symbol) => {
+    setRadialSymbol(symbol)
+  }, [])
 
   const sizeMap: Record<GridCellSize, string> = {
     small: 'h-full',
@@ -106,6 +114,8 @@ export default function SymbolGrid({
         : 'text-[11px] font-bold md:text-xs'
 
   return (
+    <>
+    <div className="relative h-full min-h-0 w-full min-w-0">
     <div
       ref={gridRef}
       className={`aac-grid-surface grid h-full min-h-0 content-stretch overflow-hidden ${gapPad}`}
@@ -117,15 +127,18 @@ export default function SymbolGrid({
       {folders.map(folder => {
         const FolderIcon = folderIconMap[folder.name] || Users
         const folderColors = folderColorMap[folder.name] || 'from-gray-100 to-gray-50 border-gray-300 text-gray-900'
+        const dimChrome = Boolean(radialSymbol)
         return (
           <button
             key={`folder-${folder.name}`}
             onClick={() => onFolderSelect?.(folder.name)}
+            disabled={dimChrome}
             className={`
               symbol-cell flex flex-col items-center justify-center rounded-[1.35rem] border
               bg-gradient-to-br ${folderColors}
               ${sizeMap[cellSize]} w-full select-none p-1.5 shadow-sm
               transition-all duration-150
+              ${dimChrome ? 'pointer-events-none' : ''}
             `}
             style={{
               borderColor: 'var(--app-border)',
@@ -165,11 +178,32 @@ export default function SymbolGrid({
                 gridDensity={gridDensity}
                 isFolder={shouldShowFolderBadge(symbol)}
                 onSelect={handleSelect}
+                onVariantRadialOpen={handleVariantRadialOpen}
               />
             )}
           </div>
         )
       })}
     </div>
+      {radialSymbol && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[8] bg-black/50"
+          aria-hidden
+        />
+      )}
+    </div>
+    {radialSymbol?.wordVariants && symbolHasVariantMenu(radialSymbol.wordVariants) && (
+      <WordVariantsRadialOverlay
+        symbol={radialSymbol}
+        cfg={radialSymbol.wordVariants}
+        gridDensity={gridDensity}
+        onClose={closeRadial}
+        onPick={(phraseLabel, variantIndex) => {
+          closeRadial()
+          handleSelect(radialSymbol, { phraseLabel, variantIndex })
+        }}
+      />
+    )}
+    </>
   )
 }

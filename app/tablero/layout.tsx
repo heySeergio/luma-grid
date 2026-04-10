@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import { getSubscriptionGateState } from '@/app/actions/plan'
 import PlanGateClient from '@/components/plan/PlanGateClient'
+import TableroForceLight from '@/components/tablero/TableroForceLight'
 import SessionWelcomeLoader from '@/components/ui/SessionWelcomeLoader'
 
 export const metadata: Metadata = {
-  title: 'Luma Grid',
+  title: 'Tablero',
 }
 
 export default async function TableroLayout({
@@ -14,10 +15,12 @@ export default async function TableroLayout({
 }) {
   const initialGate = await getSubscriptionGateState()
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-      <SessionWelcomeLoader sessionKey="luma-session-welcome-tablero-v1">
-        <PlanGateClient initialGate={initialGate}>{children}</PlanGateClient>
-      </SessionWelcomeLoader>
-    </div>
+    <TableroForceLight>
+      <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
+        <SessionWelcomeLoader sessionKey="luma-session-welcome-tablero-v1">
+          <PlanGateClient initialGate={initialGate}>{children}</PlanGateClient>
+        </SessionWelcomeLoader>
+      </div>
+    </TableroForceLight>
   )
 }

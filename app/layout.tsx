@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: '%s · Luma Grid',
   },
   description:
-    'Luma Grid es una app web de Comunicación Aumentativa y Alternativa (AAC) en español: pictogramas, frases con IA, predicción, voz (sistema y ElevenLabs), modo offline y PWA. Plan gratuito.',
+    'Luma Grid es una app web de Comunicación Aumentativa y Alternativa (AAC) en español: pictogramas, frases con IA, predicción, voz del dispositivo y voces naturales y realistas en planes de pago, modo offline y PWA. Plan gratuito.',
   applicationName: 'Luma Grid',
   manifest: '/manifest.json',
   icons: {

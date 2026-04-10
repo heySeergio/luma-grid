@@ -11,13 +11,17 @@ import ScannerOverlay from './ScannerOverlay'
 import ProfileSelector from './ProfileSelector'
 import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
 import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymbols'
+import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
 import { detectQuestionType } from '@/lib/lexicon/questions'
-import { getProfiles, updateProfileKeyboardTheme } from '@/app/actions/profiles'
+import { getAccountSettings } from '@/app/actions/account'
+import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
 import { getPinnedPhrases, getFrequentPhrases, saveQuickPhrase } from '@/app/actions/phrases'
 import { getPhraseCompletionSuggestions, type PhraseCompletionChip } from '@/app/actions/phraseCompletion'
 import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
 import {
+  clearPendingUsageEvents,
   enqueuePendingUsageEvent,
   flushPendingUsageEvents,
   type PendingUsageEventPayload,
@@ -28,9 +32,14 @@ import { speakText } from '@/lib/voice/speakClient'
 import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
 import type { KeyboardThemeColors } from '@/lib/keyboard/theme'
-import KeyboardThemeModal from '@/components/app/KeyboardThemeModal'
+import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 
 type TabMode = 'grid' | 'keyboard'
+
+type AppInterfaceProps = {
+  /** Preferencia de cuenta para la primera pintura (SSR); evita mostrar el grid y luego el teclado. */
+  initialDefaultTableroTab?: DefaultTableroTab
+}
 
 type LocalProfile = Profile & {
   isDemo?: boolean
@@ -39,6 +48,8 @@ type LocalProfile = Profile & {
   gridRows?: number
   communication_gender?: 'male' | 'female'
   keyboardTheme?: KeyboardThemeColors | null
+  /** Null = plantilla por defecto (7 col + fila 0). */
+  fixedZoneCellKeys?: string[] | null
 }
 
 type PredictionInputSymbol = {
@@ -51,18 +62,28 @@ type PredictionInputSymbol = {
 }
 
 
-export default function AppInterface() {
+export default function AppInterface({
+  initialDefaultTableroTab = 'grid',
+}: AppInterfaceProps = {}) {
   const [profile, setProfile] = useState<LocalProfile | null>(null)
   const [profiles, setProfiles] = useState<LocalProfile[]>([])
   const [symbols, setSymbols] = useState<Symbol[]>([])
   const [selectedSymbols, setSelectedSymbols] = useState<Symbol[]>([])
   const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
   const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>([])
+  /** Fila «Frecuentes» en /tablero; preferencia de cuenta (por defecto visible). */
+  const [showFrequentPhrasesSection, setShowFrequentPhrasesSection] = useState(true)
+  /** Franja «Siguiente» (chips bajo la barra); no afecta a predicciones en celdas. */
+  const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(true)
+  /** Iluminación predictiva en celdas del grid (independiente de la franja «Siguiente»). */
+  const [showGridCellPredictions, setShowGridCellPredictions] = useState(true)
+  /** Guardar pulsaciones para aprendizaje de predicciones (preferencia de privacidad en cuenta). */
+  const [shareUsageForPredictions, setShareUsageForPredictions] = useState(true)
   /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
   const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
   const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null)
-  const [activeTab, setActiveTab] = useState<TabMode>('grid')
+  const [activeTab, setActiveTab] = useState<TabMode>(initialDefaultTableroTab)
   const [, setIsOnline] = useState(true)
   const [predictedIds, setPredictedIds] = useState<string[]>([])
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
@@ -71,31 +92,30 @@ export default function AppInterface() {
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
-  const [keyboardThemeModalOpen, setKeyboardThemeModalOpen] = useState(false)
-
   const profileId = profile?.id ?? ''
 
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
+  const fixedZoneKeySet = useMemo(() => {
+    if (profile?.fixedZoneCellKeys === undefined || profile?.fixedZoneCellKeys === null) {
+      return null
+    }
+    return new Set(profile.fixedZoneCellKeys)
+  }, [profile?.fixedZoneCellKeys])
+
   const mainOrderedSymbols = useMemo(() => {
     if (shouldUseDefaultGridTemplate) {
       return computeMainGrid(symbols, activeFolder)
     }
     const cols = Math.max(1, profile?.gridCols ?? 14)
     const rows = Math.max(1, profile?.gridRows ?? 8)
-    const inBounds = (s: (typeof symbols)[number]) => {
-      const x = s.positionX ?? 0
-      const y = s.positionY ?? 0
-      return x >= 0 && y >= 0 && x < cols && y < rows
-    }
-    const onMain = symbols.filter((s) => (s.gridId ?? 'main') === 'main' && inBounds(s))
-    if (!activeFolder) return onMain
-    return symbols.filter((s) => s.gridId === activeFolder && inBounds(s))
+    return mergeMainGridWithFolderView(symbols, activeFolder, cols, rows, fixedZoneKeySet)
   }, [
     shouldUseDefaultGridTemplate,
     symbols,
     activeFolder,
     profile?.gridCols,
     profile?.gridRows,
+    fixedZoneKeySet,
   ])
 
   const speakSelectedWord = useCallback((text: string) => {
@@ -153,6 +173,7 @@ export default function AppInterface() {
   )
 
   const persistSymbolUsage = useCallback((payload: PendingUsageEventPayload) => {
+    if (!shareUsageForPredictions) return
     void (async () => {
       try {
         await recordSymbolUsage(payload)
@@ -164,7 +185,7 @@ export default function AppInterface() {
         }
       }
     })()
-  }, [])
+  }, [shareUsageForPredictions])
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -263,6 +284,31 @@ export default function AppInterface() {
   }, [loadProfiles])
 
   useEffect(() => {
+    void getAccountSettings().then((s) => {
+      if (!s) return
+      if (typeof s.showFrequentPhrasesSection === 'boolean') {
+        setShowFrequentPhrasesSection(s.showFrequentPhrasesSection)
+      }
+      if (typeof s.showPhraseCompletionSection === 'boolean') {
+        setShowPhraseCompletionSection(s.showPhraseCompletionSection)
+      }
+      if (typeof s.showGridCellPredictions === 'boolean') {
+        setShowGridCellPredictions(s.showGridCellPredictions)
+      }
+      setActiveTab(parseDefaultTableroTab(s.defaultTableroTab))
+      const share = s.shareUsageForPredictions !== false
+      setShareUsageForPredictions(share)
+      if (!share) void clearPendingUsageEvents()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!showGridCellPredictions) {
+      setPredictedIds([])
+    }
+  }, [showGridCellPredictions])
+
+  useEffect(() => {
     if (!profileId) return
 
     resetPhraseTracking()
@@ -274,11 +320,24 @@ export default function AppInterface() {
     setFolderHistory([])
     void loadSymbols()
     void loadPinnedPhrases()
-    void loadFrequentPhrases()
+    if (showFrequentPhrasesSection) {
+      void loadFrequentPhrases()
+    } else {
+      setFrequentPhrases([])
+    }
     void loadAccessConfig()
 
     return subscribeToChanges()
-  }, [profileId, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadFrequentPhrases, loadAccessConfig, subscribeToChanges])
+  }, [
+    profileId,
+    showFrequentPhrasesSection,
+    resetPhraseTracking,
+    loadSymbols,
+    loadPinnedPhrases,
+    loadFrequentPhrases,
+    loadAccessConfig,
+    subscribeToChanges,
+  ])
 
   const handleSymbolSelect = useCallback(async (symbol: Symbol, choice?: SymbolSelectChoice) => {
     const normalizedLabel = symbol.label.toLowerCase()
@@ -382,6 +441,11 @@ export default function AppInterface() {
       sequenceIndex,
     })
 
+    if (!showGridCellPredictions) {
+      setPredictedIds([])
+      return
+    }
+
     try {
       const recentSymbols = [...selectedSymbols, {
         id: symbol.id,
@@ -433,11 +497,19 @@ export default function AppInterface() {
     profile,
     selectedSymbols,
     shouldUseDefaultGridTemplate,
+    showGridCellPredictions,
     speakSelectedWord,
     symbols,
   ])
 
   useEffect(() => {
+    if (!showPhraseCompletionSection) {
+      setCompletionChips((prev) => {
+        const safe = prev ?? []
+        return safe.length === 0 ? safe : []
+      })
+      return
+    }
     if (!profile || selectedSymbols.length === 0) {
       // Evitar setState con [] en cada render: nuevo [] dispara re-render y bucle infinito en el efecto.
       setCompletionChips((prev) => {
@@ -464,7 +536,13 @@ export default function AppInterface() {
     return () => {
       cancelled = true
     }
-  }, [profile, selectedSymbols, mainOrderedSymbols, toPredictionFromPhraseSelection])
+  }, [
+    profile,
+    selectedSymbols,
+    mainOrderedSymbols,
+    toPredictionFromPhraseSelection,
+    showPhraseCompletionSection,
+  ])
 
   const handleDeleteLast = () => {
     setSelectedSymbols(prev => prev.slice(0, -1))
@@ -498,12 +576,14 @@ export default function AppInterface() {
       if (!profile) return
       try {
         await saveQuickPhrase(profile.id, payload.text, payload.symbolsUsed)
-        await loadFrequentPhrases()
+        if (showFrequentPhrasesSection) {
+          await loadFrequentPhrases()
+        }
       } catch (err) {
         console.error('Error saving phrase after speak', err)
       }
     },
-    [profile, loadFrequentPhrases],
+    [profile, loadFrequentPhrases, showFrequentPhrasesSection],
   )
 
   const buildSelectionFromPhrase = useCallback(
@@ -552,12 +632,21 @@ export default function AppInterface() {
       try {
         await speakText(t, profile.id, voicePrefs)
         await saveQuickPhrase(profile.id, phrase.text, phrase.symbolsUsed)
-        await loadFrequentPhrases()
+        if (showFrequentPhrasesSection) {
+          await loadFrequentPhrases()
+        }
       } catch (err) {
         console.error('Error en frase rápida/frecuente:', err)
       }
     },
-    [profile, buildSelectionFromPhrase, voicePrefs, loadFrequentPhrases, resetPhraseTracking],
+    [
+      profile,
+      buildSelectionFromPhrase,
+      voicePrefs,
+      loadFrequentPhrases,
+      resetPhraseTracking,
+      showFrequentPhrasesSection,
+    ],
   )
 
   const cellSize = accessConfig?.grid_cell_size || 'medium'
@@ -573,7 +662,7 @@ export default function AppInterface() {
         <QuickPhrases phrases={pinnedPhrases} onSpeak={handleQuickPhraseTap} />
       )}
 
-      {frequentPhrases.length > 0 && (
+      {showFrequentPhrasesSection && frequentPhrases.length > 0 && (
         <QuickPhrases title="Frecuentes" phrases={frequentPhrases} onSpeak={handleQuickPhraseTap} />
       )}
 
@@ -610,7 +699,9 @@ export default function AppInterface() {
           speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
           externalCompositionReset={phraseCompositionReset}
         />
-        <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
+        {showPhraseCompletionSection ? (
+          <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
+        ) : null}
       </div>
 
       {/* Main content */}
@@ -618,7 +709,7 @@ export default function AppInterface() {
         {activeTab === 'grid' ? (
           <SymbolGrid
             symbols={mainOrderedSymbols}
-            predictedIds={predictedIds}
+            predictedIds={showGridCellPredictions ? predictedIds : []}
             cellSize={cellSize}
             onSymbolSelect={handleSymbolSelect}
             folders={[]}
@@ -694,6 +785,11 @@ export default function AppInterface() {
 
               const lastPseudoSymbol = pseudoSymbols[pseudoSymbols.length - 1]
 
+              if (!showGridCellPredictions) {
+                setPredictedIds([])
+                return
+              }
+
               try {
                 const prioritized = await getPredictionCandidates({
                   profileId: profile.id,
@@ -722,41 +818,6 @@ export default function AppInterface() {
           />
         )}
       </div>
-
-      {profile ? (
-        <div className="flex shrink-0 items-center gap-3 border-t border-slate-200/90 bg-[var(--app-surface-muted)] px-3 py-2 dark:border-slate-800">
-          <div
-            className="h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-600"
-            role="separator"
-            aria-orientation="vertical"
-          />
-          <button
-            type="button"
-            onClick={() => setKeyboardThemeModalOpen(true)}
-            className="text-left text-sm font-semibold text-indigo-600 transition hover:text-indigo-700 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
-          >
-            Colores del teclado
-          </button>
-        </div>
-      ) : null}
-
-      <KeyboardThemeModal
-        open={keyboardThemeModalOpen}
-        initialTheme={profile?.keyboardTheme ?? null}
-        profileName={profile?.name ?? ''}
-        onClose={() => setKeyboardThemeModalOpen(false)}
-        onSave={async (theme) => {
-          if (!profile) return { ok: false as const, error: 'Sin perfil' }
-          const result = await updateProfileKeyboardTheme(profile.id, theme)
-          if (result.ok) {
-            setProfile((p) =>
-              p && p.id === profile.id ? { ...p, keyboardTheme: result.theme } : p,
-            )
-            return { ok: true as const }
-          }
-          return { ok: false as const, error: result.error }
-        }}
-      />
 
       {/* Profile selector modal */}
       {showProfileSelector && (

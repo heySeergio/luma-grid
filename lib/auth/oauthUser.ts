@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
+import { normalizeLabelForLexicalMatch } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOLS, DEFAULT_FOLDER_TILES } from '@/lib/data/defaultSymbols'
 import type { User } from '@prisma/client'
 
@@ -53,7 +53,7 @@ export async function createUserWithPasswordAndDemo(opts: {
         profileId,
         gridId: 'demo',
         label: symbol.label,
-        normalizedLabel: normalizeTextForLexicon(symbol.label),
+        normalizedLabel: normalizeLabelForLexicalMatch(symbol.label),
         emoji: symbol.emoji ?? null,
         imageUrl: symbol.imageUrl ?? null,
         category: symbol.category,
@@ -118,7 +118,7 @@ export async function findOrCreateUserFromOAuth(opts: {
         profileId,
         gridId: 'demo',
         label: symbol.label,
-        normalizedLabel: normalizeTextForLexicon(symbol.label),
+        normalizedLabel: normalizeLabelForLexicalMatch(symbol.label),
         emoji: symbol.emoji ?? null,
         imageUrl: symbol.imageUrl ?? null,
         category: symbol.category,

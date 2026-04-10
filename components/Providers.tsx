@@ -13,8 +13,12 @@ type Props = {
 
 export function Providers({ children, session }: Props) {
     return (
-        <SessionProvider session={session}>
-            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange storageKey="luma-theme">
+        <SessionProvider
+          session={session}
+          refetchInterval={0}
+          refetchOnWindowFocus={false}
+        >
+            <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange storageKey="luma-theme">
                 <ThemeSync />
                 {children}
             </ThemeProvider>

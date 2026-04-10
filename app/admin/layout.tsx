@@ -4,7 +4,7 @@ import PlanGateClient from '@/components/plan/PlanGateClient'
 import SessionWelcomeLoader from '@/components/ui/SessionWelcomeLoader'
 
 export const metadata: Metadata = {
-  title: 'Panel admin — Luma Grid',
+  title: 'Panel admin',
 }
 
 export default async function AdminLayout({

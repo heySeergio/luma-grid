@@ -1,9 +1,18 @@
+import { cache } from 'react'
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { findOrCreateUserFromOAuth } from '@/lib/auth/oauthUser'
+import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
+
+const defaultTableroTabForUserId = cache(async (userId: string): Promise<DefaultTableroTab> => {
+  const p = await readAccountPrivacyPrefsFromDb(userId)
+  return p.defaultTableroTab
+})
 
 type OauthProviderId = 'google'
 
@@ -78,6 +87,7 @@ export const authOptions: NextAuthOptions = {
           token.name = dbUser.name ?? undefined
           token.preferredTheme = dbUser.preferredTheme as 'light' | 'dark' | 'system'
           token.preferredDyslexiaFont = Boolean(dbUser.preferredDyslexiaFont)
+          token.defaultTableroTab = await defaultTableroTabForUserId(dbUser.id)
         }
         return token
       }
@@ -92,6 +102,7 @@ export const authOptions: NextAuthOptions = {
         token.name = dbUser.name ?? undefined
         token.preferredTheme = dbUser.preferredTheme as 'light' | 'dark' | 'system'
         token.preferredDyslexiaFont = Boolean(dbUser.preferredDyslexiaFont)
+        token.defaultTableroTab = await defaultTableroTabForUserId(dbUser.id)
       }
 
       if (user?.preferredTheme) {
@@ -118,6 +129,10 @@ export const authOptions: NextAuthOptions = {
         token.email = session.user.email
       }
 
+      if (trigger === 'update' && session?.user?.defaultTableroTab) {
+        token.defaultTableroTab = parseDefaultTableroTab(session.user.defaultTableroTab)
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -131,6 +146,11 @@ export const authOptions: NextAuthOptions = {
         }
         if (typeof token.email === 'string') {
           session.user.email = token.email
+        }
+        if (typeof token.defaultTableroTab === 'string' && token.defaultTableroTab) {
+          session.user.defaultTableroTab = parseDefaultTableroTab(token.defaultTableroTab)
+        } else if (token.sub) {
+          session.user.defaultTableroTab = await defaultTableroTabForUserId(token.sub as string)
         }
       }
       return session

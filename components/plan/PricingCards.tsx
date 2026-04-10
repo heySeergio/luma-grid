@@ -14,23 +14,30 @@ type Props = {
   /** Modal: checkout Stripe */
   onSelectPaid?: (tier: 'voice' | 'identity', interval: 'month' | 'year') => void | Promise<void>
   disabled?: boolean
+  /** Landing: sin enlaces a registro ni CTA inferior (solo referencia de precios). */
+  comingSoon?: boolean
 }
 
 /** Ventajas por plan (compartido con upsell del admin, etc.). */
 export const PLAN_FEATURE_BULLETS = {
   free: ['1 tablero activo', 'Máximo 60 botones en total (incl. carpetas)', 'Voz del sistema (TTS del dispositivo)'],
-  voice: ['Hasta 5 tableros', 'Botones ilimitados por tablero', 'Voces naturales ElevenLabs', '50.000 caracteres de voz / mes'],
+  voice: [
+    'Hasta 5 tableros',
+    'Botones ilimitados por tablero',
+    'Voces naturales y realistas (muy expresivas)',
+    '50.000 caracteres de voz / mes',
+  ],
   identity: [
     'Hasta 20 tableros',
     'Botones ilimitados por tablero',
-    'Voces naturales + clonación de voz',
+    'Voces naturales y realistas + clonación de voz',
     '100.000 caracteres de voz / mes',
   ],
 } as const
 
 const features = PLAN_FEATURE_BULLETS
 
-export default function PricingCards({ variant, onSelectFree, onSelectPaid, disabled }: Props) {
+export default function PricingCards({ variant, onSelectFree, onSelectPaid, disabled, comingSoon }: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   const isModal = variant === 'modal'
 
@@ -97,7 +104,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
             >
               Empezar gratis
             </button>
-          ) : (
+          ) : comingSoon ? null : (
             <Link
               href="/register"
               className="mt-6 block w-full rounded-2xl border border-slate-300 py-3 text-center text-sm font-bold text-slate-800 transition hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
@@ -137,7 +144,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
             >
               Activar Voz
             </button>
-          ) : (
+          ) : comingSoon ? null : (
             <Link
               href="/register"
               className="mt-6 block w-full rounded-2xl bg-indigo-500 py-3 text-center text-sm font-bold text-white transition hover:bg-indigo-400"
@@ -174,7 +181,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
             >
               Activar Identidad
             </button>
-          ) : (
+          ) : comingSoon ? null : (
             <Link
               href="/register"
               className="mt-6 block w-full rounded-2xl border border-slate-800 bg-slate-900 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800 dark:border-white/20 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"

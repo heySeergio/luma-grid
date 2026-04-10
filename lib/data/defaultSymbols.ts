@@ -1,4 +1,5 @@
 import type { PosType, Symbol } from '@/lib/supabase/types'
+import { BASE_FIXED_LEFT_COLUMN_COUNT } from '@/lib/grid/baseFixedZone'
 import {
   DEFAULT_FIXED_CELL_COLOR,
   DEFAULT_FOLDER_COLOR,
@@ -1242,7 +1243,8 @@ export function getDemoTemplatePositionMap(): Map<string, { x: number; y: number
   return m
 }
 
-export const FIXED_COLUMNS = 7
+/** Columnas fijas por la izquierda (tablero base; coincide con zona fija geométrica). */
+export const FIXED_COLUMNS = BASE_FIXED_LEFT_COLUMN_COUNT
 export const TOTAL_COLUMNS = 14
 
 const DEFAULT_POSITION_BY_LABEL = new Map(
@@ -1298,6 +1300,66 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
     })
   const occupiedCells = new Set(customSymbols.map((symbol) => `${symbol.positionX}:${symbol.positionY}`))
 
+  /** Columnas a la derecha de la franja fija; filas desde la 2.ª (la 1.ª fila entera es zona fija). */
+  const VARIABLE_COL_COUNT = TOTAL_COLUMNS - FIXED_COLUMNS
+  const VARIABLE_ROW_START = 1
+
+  const addRightTemplateCell = (x: number, y: number, into: Symbol[]) => {
+    const label = MAIN_GRID_TEMPLATE[y]?.[x]
+    if (!label || x < FIXED_COLUMNS) return
+    const existing = byLabel.get(label.toLowerCase())
+    if (occupiedCells.has(`${x}:${y}`)) return
+    if (existing && !isCustomPosition(existing)) {
+      into.push({
+        ...existing,
+        positionX: x,
+        positionY: y,
+        ...mergeDefaultVisualsForLabel(label, existing),
+      })
+      return
+    }
+
+    if (existing) return
+
+    const fallbackSymbol = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+    if (fallbackSymbol) {
+      into.push({
+        id: `default-${label.toLowerCase().replace(/\s+/g, '-')}`,
+        gridId: 'default',
+        label: fallbackSymbol.label,
+        emoji: fallbackSymbol.emoji,
+        category: fallbackSymbol.category,
+        posType: fallbackSymbol.posType,
+        positionX: x,
+        positionY: y,
+        color: fallbackSymbol.color,
+        hidden: fallbackSymbol.hidden,
+        imageUrl: fallbackSymbol.imageUrl,
+        state: 'visible',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      return
+    }
+
+    into.push({
+      id: `template-${label.toLowerCase().replace(/\s+/g, '-')}`,
+      gridId: 'template',
+      label,
+      emoji: '❔',
+      category: 'Carpetas',
+      posType: 'other',
+      positionX: x,
+      positionY: y,
+      color: DEFAULT_TEMPLATE_COLOR,
+      hidden: false,
+      imageUrl: undefined,
+      state: 'visible',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
   const folderSymbols: Symbol[] = activeFolder
     ? (DEFAULT_FOLDER_CONTENTS[activeFolder] || []).map((label, i) => {
       const match = symbols.find((s) => s.label.toLowerCase() === label.toLowerCase())
@@ -1315,8 +1377,8 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
         emoji: match?.emoji ?? folderDef?.emoji ?? '🧩',
         category: activeFolder,
         posType,
-        positionX: (i % (TOTAL_COLUMNS - FIXED_COLUMNS)) + FIXED_COLUMNS,
-        positionY: Math.floor(i / (TOTAL_COLUMNS - FIXED_COLUMNS)),
+        positionX: (i % VARIABLE_COL_COUNT) + FIXED_COLUMNS,
+        positionY: VARIABLE_ROW_START + Math.floor(i / VARIABLE_COL_COUNT),
         color: DEFAULT_SYMBOL_COLOR,
         hidden: false,
         imageUrl: match?.imageUrl || folderDef?.imageUrl,
@@ -1386,64 +1448,18 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
   })
 
   if (activeFolder) {
-    return [...fixedLeftPanel, ...folderSymbols]
+    const fixedTopRowRest: Symbol[] = []
+    MAIN_GRID_TEMPLATE[0].forEach((_, x) => {
+      addRightTemplateCell(x, 0, fixedTopRowRest)
+    })
+    return [...fixedLeftPanel, ...fixedTopRowRest, ...folderSymbols]
   }
 
   const rightPanelFromTemplate: Symbol[] = []
   MAIN_GRID_TEMPLATE.forEach((row, y) => {
     row.forEach((label, x) => {
-      if (!label || x < FIXED_COLUMNS) return
-      const existing = byLabel.get(label.toLowerCase())
-      if (occupiedCells.has(`${x}:${y}`)) return
-      if (existing && !isCustomPosition(existing)) {
-        rightPanelFromTemplate.push({
-          ...existing,
-          positionX: x,
-          positionY: y,
-          ...mergeDefaultVisualsForLabel(label, existing),
-        })
-        return
-      }
-
-      if (existing) return
-
-      const fallbackSymbol = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
-      if (fallbackSymbol) {
-        rightPanelFromTemplate.push({
-          id: `default-${label.toLowerCase().replace(/\s+/g, '-')}`,
-          gridId: 'default',
-          label: fallbackSymbol.label,
-          emoji: fallbackSymbol.emoji,
-          category: fallbackSymbol.category,
-          posType: fallbackSymbol.posType,
-          positionX: x,
-          positionY: y,
-          color: fallbackSymbol.color,
-          hidden: fallbackSymbol.hidden,
-          imageUrl: fallbackSymbol.imageUrl,
-          state: 'visible',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        return
-      }
-
-      rightPanelFromTemplate.push({
-        id: `template-${label.toLowerCase().replace(/\s+/g, '-')}`,
-        gridId: 'template',
-        label,
-        emoji: '❔',
-        category: 'Carpetas',
-        posType: 'other',
-        positionX: x,
-        positionY: y,
-        color: DEFAULT_TEMPLATE_COLOR,
-        hidden: false,
-        imageUrl: undefined,
-        state: 'visible',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
+      if (!label) return
+      addRightTemplateCell(x, y, rightPanelFromTemplate)
     })
   })
 

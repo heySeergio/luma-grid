@@ -60,7 +60,7 @@ export default function PlanPickerModal({ open, dismissable = false, onClose, on
             <div>
               <h2 className="text-2xl font-black text-white md:text-3xl">Elige tu plan</h2>
               <p className="mt-2 max-w-xl text-sm text-slate-300">
-                Puedes empezar gratis sin tarjeta. Los planes de pago incluyen voces naturales ElevenLabs y más tableros.
+                Puedes empezar gratis sin tarjeta. Los planes de pago incluyen voces naturales y realistas —cercanas a una voz humana— y más tableros.
               </p>
             </div>
             {dismissable && onClose ? (

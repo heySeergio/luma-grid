@@ -49,13 +49,25 @@ export function ProfileGridDimensionPicker({ cols, rows, onChange, className }: 
       const { c, r } = hoverRef.current
       onChangeRef.current(c, r)
     }
+    const onWindowPointerMove = (e: PointerEvent) => {
+      if (!draggingRef.current) return
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      const cell = el?.closest?.('[data-grid-picker-cell]') as HTMLElement | null
+      if (!cell) return
+      const ci = Number(cell.dataset.col)
+      const ri = Number(cell.dataset.row)
+      if (!Number.isFinite(ci) || !Number.isFinite(ri)) return
+      setHover(ci + 1, ri + 1)
+    }
     window.addEventListener('pointerup', endDrag)
     window.addEventListener('pointercancel', endDrag)
+    window.addEventListener('pointermove', onWindowPointerMove)
     return () => {
       window.removeEventListener('pointerup', endDrag)
       window.removeEventListener('pointercancel', endDrag)
+      window.removeEventListener('pointermove', onWindowPointerMove)
     }
-  }, [])
+  }, [setHover])
 
   return (
     <div className={className}>
@@ -68,7 +80,7 @@ export function ProfileGridDimensionPicker({ cols, rows, onChange, className }: 
       <div
         role="grid"
         aria-label="Seleccionar tamaño del tablero"
-        className="inline-grid touch-none select-none gap-0.5 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1.5 dark:border-slate-600 dark:bg-slate-800/80"
+        className="inline-grid cursor-grab touch-none select-none gap-0.5 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1.5 active:cursor-grabbing dark:border-slate-600 dark:bg-slate-800/80"
         style={{
           gridTemplateColumns: `repeat(${PROFILE_GRID_PICKER_MAX_COLS}, minmax(0, 1fr))`,
         }}
@@ -87,14 +99,29 @@ export function ProfileGridDimensionPicker({ cols, rows, onChange, className }: 
               key={`${ci}-${ri}`}
               type="button"
               tabIndex={-1}
+              data-grid-picker-cell
+              data-col={ci}
+              data-row={ri}
               className={`h-4 w-4 rounded-sm border transition sm:h-[18px] sm:w-[18px] ${
-                inSelection
-                  ? 'border-orange-500 bg-orange-500/85 shadow-sm dark:border-orange-400 dark:bg-orange-500/70'
-                  : 'border-slate-300/90 bg-white dark:border-slate-500 dark:bg-slate-700'
+                inSelection ? 'shadow-sm' : 'border-slate-300/90 bg-white dark:border-slate-500 dark:bg-slate-700'
               }`}
+              style={
+                inSelection
+                  ? {
+                      borderColor: 'var(--accent)',
+                      background: 'color-mix(in srgb, var(--accent) 78%, transparent)',
+                      boxShadow: '0 1px 2px rgb(15 23 42 / 0.08)',
+                    }
+                  : undefined
+              }
               aria-hidden
               onPointerDown={(e) => {
                 e.preventDefault()
+                try {
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                } catch {
+                  /* ignore */
+                }
                 draggingRef.current = true
                 setHover(ci + 1, ri + 1)
               }}

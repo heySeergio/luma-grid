@@ -13,7 +13,7 @@ export default function PhraseCompletionChips({ chips, onPick, disabled }: Props
   if (chips.length === 0) return null
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-white/10 bg-[var(--phrase-inner)]/40 px-3 py-2.5 md:px-4">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200/90 bg-slate-50/90 px-3 py-2.5 dark:border-white/10 dark:bg-[var(--phrase-inner)]/40 md:px-4">
       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">
         <Sparkles className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" aria-hidden />
         Siguiente

@@ -17,10 +17,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Datos no válidos' }, { status: 400 })
   }
 
-  const { email: emailIn, password, name: nameIn } = body as {
+  const { email: emailIn, password, name: nameIn, acceptTerms: acceptTermsIn } = body as {
     email?: unknown
     password?: unknown
     name?: unknown
+    acceptTerms?: unknown
+  }
+
+  if (acceptTermsIn !== true) {
+    return NextResponse.json(
+      { error: 'Debes aceptar los términos legales para crear la cuenta.' },
+      { status: 400 },
+    )
   }
 
   const email = typeof emailIn === 'string' ? emailIn.trim() : ''

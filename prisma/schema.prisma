@@ -16,6 +16,16 @@ model User {
   name                   String?
   preferredTheme         String    @default("system") @map("preferred_theme")
   preferredDyslexiaFont  Boolean   @default(false) @map("preferred_dyslexia_font")
+  /// Mostrar la fila «Frecuentes» en /tablero (frases más usadas).
+  showFrequentPhrasesSection Boolean @default(true) @map("show_frequent_phrases_section")
+  /// Mostrar la franja «Siguiente» (chips de completado bajo la barra de frase). Las predicciones en celdas siguen activas.
+  showPhraseCompletionSection Boolean @default(true) @map("show_phrase_completion_section")
+  /// Iluminar celdas del grid con predicciones (siguiente palabra probable).
+  showGridCellPredictions Boolean @default(true) @map("show_grid_cell_predictions")
+  /// Vista inicial en /tablero: "grid" | "keyboard"
+  defaultTableroTab String @default("grid") @map("default_tablero_tab")
+  /// Guardar pulsaciones y transiciones para mejorar predicciones (el usuario puede desactivarlo).
+  shareUsageForPredictions Boolean @default(true) @map("share_usage_for_predictions")
   /// "browser" | "preset" | "custom"
   ttsMode                String    @default("browser") @map("tts_mode")
   /// ElevenLabs voice_id cuando preset/custom
@@ -92,6 +102,8 @@ model Profile {
   gridCols    Int                  @default(14) @map("grid_cols")
   /// Colores del teclado en /tablero (solo tema visual; JSON con claves hex).
   keyboardTheme Json?               @map("keyboard_theme")
+  /// Zona fija personalizada: `{ "v": 1, "keys": ["0:0","1:0",...] }`. Null = plantilla por defecto (7 col + fila 0).
+  fixedZoneCells Json?              @map("fixed_zone_cells")
   symbols     Symbol[]
   transitions PredictionTransition[]
   usageEvents SymbolUsageEvent[]
@@ -125,6 +137,8 @@ model Symbol {
   opensKeyboard         Boolean            @default(false) @map("opens_keyboard")
   /// Hasta 4 formas de palabra (JSON: enabled, defaultIndex, variants). Opcional.
   wordVariants          Json?              @map("word_variants")
+  /// Celda del grid principal que permanece visible aunque el usuario abra una carpeta.
+  fixedCell             Boolean            @default(false) @map("fixed_cell")
   usageEvents           SymbolUsageEvent[]
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")

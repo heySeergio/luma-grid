@@ -4,7 +4,7 @@ const FAQ_ITEMS = [
   {
     question: '¿Qué es Luma Grid?',
     answer:
-      'Luma Grid es una aplicación web de Comunicación Aumentativa y Alternativa (AAC) en español: tablero de pictogramas, barra de frase, conjugación con ayuda inteligente y voz. Puedes instalarla como PWA en móvil u ordenador.',
+      'Luma Grid es una aplicación web de Comunicación Aumentativa y Alternativa (AAC) en español: tablero de pictogramas, barra de frase, conjugación con ayuda inteligente y salida de voz. Puedes usar la voz del propio dispositivo o, en los planes de pago, voces muy naturales y realistas —con entonación creíble, cercanas a una voz humana—. Instalable como PWA en móvil u ordenador.',
   },
   {
     question: '¿Funciona sin conexión a internet?',
@@ -14,7 +14,7 @@ const FAQ_ITEMS = [
   {
     question: '¿Luma Grid es gratis?',
     answer:
-      'Hay un plan gratuito para empezar sin tarjeta. Los planes de pago incluyen voces naturales ElevenLabs, más tableros personalizados y funciones avanzadas según el plan.',
+      'Sí: habrá un plan que será gratis para empezar sin tarjeta. Los planes de pago pondrán el foco en voces naturales y realistas —de alta calidad y muy expresivas—, más tableros personalizados y funciones avanzadas según el plan.',
   },
   {
     question: '¿Cómo configuro tableros y voces?',
@@ -35,7 +35,7 @@ export function LandingJsonLd() {
       url: siteUrl,
       name: 'Luma Grid',
       description:
-        'Comunicación AAC en español: tablero de pictogramas, frases con IA, predicción, voz y PWA. Plan gratuito y opciones de pago.',
+        'Comunicación AAC en español: tablero de pictogramas, frases con IA, predicción, voz del dispositivo y voces naturales y realistas en planes de pago, PWA. Plan gratuito y opciones de pago.',
       inLanguage: 'es-ES',
       isAccessibleForFree: true,
       publisher: { '@id': orgId },
@@ -68,7 +68,7 @@ export function LandingJsonLd() {
         description: 'Plan gratuito disponible; planes de pago opcionales.',
       },
       description:
-        'Aplicación AAC con grid de símbolos, conjugación en español, predicción contextual, ElevenLabs opcional, modo offline y panel para familias y profesionales.',
+        'Aplicación AAC con grid de símbolos, conjugación en español, predicción contextual, voces naturales y realistas en planes de pago, modo offline y panel para familias y profesionales.',
       url: siteUrl,
       browserRequirements: 'Requiere navegador moderno con JavaScript.',
     },

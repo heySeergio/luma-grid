@@ -5,13 +5,32 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+
+export type { DefaultTableroTab }
 
 function normalizeEmail(email: string) {
     return email.trim().toLowerCase()
 }
 
 type AccountThemePreference = 'light' | 'dark' | 'system'
+
+/** Respuesta de cuenta para admin y /tablero (tras prisma generate los tipos de Prisma coinciden). */
+export type PublicAccountSettings = {
+    id: string
+    name: string | null
+    email: string
+    preferredTheme: string
+    preferredDyslexiaFont: boolean
+    showFrequentPhrasesSection: boolean
+    showPhraseCompletionSection: boolean
+    showGridCellPredictions: boolean
+    defaultTableroTab: DefaultTableroTab
+    shareUsageForPredictions: boolean
+    hasLocalPassword: boolean
+}
 
 async function updatePreferredThemeForUser(userId: string, preferredTheme: AccountThemePreference) {
     try {
@@ -45,7 +64,7 @@ async function updatePreferredThemeForUser(userId: string, preferredTheme: Accou
     }
 }
 
-export async function getAccountSettings() {
+export async function getAccountSettings(): Promise<PublicAccountSettings | null> {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return null
 
@@ -58,19 +77,33 @@ export async function getAccountSettings() {
                 email: true,
                 preferredTheme: true,
                 preferredDyslexiaFont: true,
+                showFrequentPhrasesSection: true,
+                showPhraseCompletionSection: true,
+                showGridCellPredictions: true,
                 password: true,
-            }
+            } as any,
         })
 
         if (!user) return null
 
+        const prefs = await readAccountPrivacyPrefsFromDb(session.user.id)
         const { password: _pw, ...rest } = user
         return {
             ...rest,
             hasLocalPassword: Boolean(_pw),
-        }
+            showGridCellPredictions: Boolean((rest as { showGridCellPredictions?: boolean }).showGridCellPredictions ?? true),
+            defaultTableroTab: prefs.defaultTableroTab,
+            shareUsageForPredictions: prefs.shareUsageForPredictions,
+        } as PublicAccountSettings
     } catch (error) {
-        if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
+        if (
+            !isUnknownPrismaFieldError(error, [
+                'preferredDyslexiaFont',
+                'showFrequentPhrasesSection',
+                'showPhraseCompletionSection',
+                'showGridCellPredictions',
+            ])
+        ) {
             throw error
         }
 
@@ -81,18 +114,25 @@ export async function getAccountSettings() {
                 name: true,
                 email: true,
                 preferredTheme: true,
+                preferredDyslexiaFont: true,
                 password: true,
             }
         })
 
         if (!fallbackUser) return null
 
+        const prefs = await readAccountPrivacyPrefsFromDb(session.user.id)
         const { password: _pw, ...rest } = fallbackUser
         return {
             ...rest,
             preferredDyslexiaFont: false,
+            showFrequentPhrasesSection: true,
+            showPhraseCompletionSection: true,
+            showGridCellPredictions: true,
+            defaultTableroTab: prefs.defaultTableroTab,
+            shareUsageForPredictions: prefs.shareUsageForPredictions,
             hasLocalPassword: Boolean(_pw),
-        }
+        } as PublicAccountSettings
     }
 }
 
@@ -101,9 +141,14 @@ export async function updateAccountSettings(data: {
     email: string
     preferredTheme: AccountThemePreference
     preferredDyslexiaFont: boolean
+    showFrequentPhrasesSection: boolean
+    showPhraseCompletionSection: boolean
+    showGridCellPredictions: boolean
+    defaultTableroTab: DefaultTableroTab
+    shareUsageForPredictions: boolean
     currentPassword?: string
     newPassword?: string
-}) {
+}): Promise<PublicAccountSettings> {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
@@ -111,6 +156,11 @@ export async function updateAccountSettings(data: {
     const normalizedEmail = normalizeEmail(data.email)
     const preferredTheme = data.preferredTheme
     const preferredDyslexiaFont = Boolean(data.preferredDyslexiaFont)
+    const showFrequentPhrasesSection = Boolean(data.showFrequentPhrasesSection)
+    const showPhraseCompletionSection = Boolean(data.showPhraseCompletionSection)
+    const showGridCellPredictions = Boolean(data.showGridCellPredictions)
+    const defaultTableroTab = parseDefaultTableroTab(data.defaultTableroTab)
+    const shareUsageForPredictions = Boolean(data.shareUsageForPredictions)
     const currentPassword = data.currentPassword?.trim() ?? ''
     const newPassword = data.newPassword?.trim() ?? ''
 
@@ -158,26 +208,45 @@ export async function updateAccountSettings(data: {
                 email: normalizedEmail,
                 preferredTheme,
                 preferredDyslexiaFont,
-                ...(password ? { password } : {})
-            },
+                showFrequentPhrasesSection,
+                showPhraseCompletionSection,
+                showGridCellPredictions,
+                defaultTableroTab,
+                shareUsageForPredictions,
+                ...(password ? { password } : {}),
+            } as any,
             select: {
                 id: true,
                 name: true,
                 email: true,
                 preferredTheme: true,
                 preferredDyslexiaFont: true,
+                showFrequentPhrasesSection: true,
+                showPhraseCompletionSection: true,
+                showGridCellPredictions: true,
                 password: true,
-            }
+            } as any,
         })
         revalidatePath('/admin')
         revalidatePath('/tablero')
+        const prefs = await readAccountPrivacyPrefsFromDb(user.id)
         const { password: pw, ...rest } = updatedUser
         return {
             ...rest,
             hasLocalPassword: Boolean(pw),
-        }
+            showGridCellPredictions: Boolean((rest as { showGridCellPredictions?: boolean }).showGridCellPredictions ?? true),
+            defaultTableroTab: prefs.defaultTableroTab,
+            shareUsageForPredictions: prefs.shareUsageForPredictions,
+        } as PublicAccountSettings
     } catch (error) {
-        if (!isUnknownPrismaFieldError(error, ['preferredDyslexiaFont'])) {
+        if (
+            !isUnknownPrismaFieldError(error, [
+                'preferredDyslexiaFont',
+                'showFrequentPhrasesSection',
+                'showPhraseCompletionSection',
+                'showGridCellPredictions',
+            ])
+        ) {
             throw error
         }
     }
@@ -188,26 +257,33 @@ export async function updateAccountSettings(data: {
             name: trimmedName,
             email: normalizedEmail,
             preferredTheme,
-            ...(password ? { password } : {})
+            preferredDyslexiaFont,
+            ...(password ? { password } : {}),
         },
         select: {
             id: true,
             name: true,
             email: true,
             preferredTheme: true,
+            preferredDyslexiaFont: true,
             password: true,
-        }
+        },
     })
 
     revalidatePath('/admin')
     revalidatePath('/tablero')
 
+    const prefs = await readAccountPrivacyPrefsFromDb(session.user.id)
     const { password: pw, ...rest } = fallbackUser
     return {
         ...rest,
-        preferredDyslexiaFont: false,
+        showFrequentPhrasesSection: true,
+        showPhraseCompletionSection: true,
+        showGridCellPredictions: true,
+        defaultTableroTab: prefs.defaultTableroTab,
+        shareUsageForPredictions: prefs.shareUsageForPredictions,
         hasLocalPassword: Boolean(pw),
-    }
+    } as PublicAccountSettings
 }
 
 export async function updateThemePreference(preferredTheme: AccountThemePreference) {

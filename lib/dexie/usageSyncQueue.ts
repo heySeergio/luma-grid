@@ -48,3 +48,16 @@ export async function flushPendingUsageEvents(): Promise<number> {
   }
   return flushed
 }
+
+/** Elimina eventos de uso pendientes (p. ej. al desactivar la preferencia de privacidad). */
+export async function clearPendingUsageEvents(): Promise<number> {
+  const rows = await db.pendingSync.where('type').equals('usage_event').toArray()
+  let cleared = 0
+  for (const row of rows) {
+    if (row.id != null) {
+      await db.pendingSync.delete(row.id)
+      cleared += 1
+    }
+  }
+  return cleared
+}

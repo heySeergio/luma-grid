@@ -14,6 +14,7 @@ export async function resetDemoProfilePositionsToTemplate(profileId: string): Pr
 
   const profile = await prisma.profile.findFirst({
     where: { id: profileId, userId: session.user.id, isDemo: true },
+    select: { id: true },
   })
   if (!profile) throw new Error('Tablero no encontrado o no es el tablero demo')
 
@@ -25,6 +26,7 @@ export async function resetDemoProfilePositionsToTemplate(profileId: string): Pr
     await tx.profile.update({
       where: { id: profileId },
       data: { gridRows: 8, gridCols: 14 },
+      select: { id: true },
     })
     for (const s of symbols) {
       const pos = posMap.get(s.label.trim().toLowerCase())

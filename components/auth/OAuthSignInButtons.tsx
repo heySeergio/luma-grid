@@ -33,9 +33,11 @@ const btnClass =
 type Props = {
   callbackUrl: string
   googleLabel: string
+  /** p. ej. hasta aceptar términos legales en registro */
+  disabled?: boolean
 }
 
-export function OAuthSignInButtons({ callbackUrl, googleLabel }: Props) {
+export function OAuthSignInButtons({ callbackUrl, googleLabel, disabled = false }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -60,7 +62,8 @@ export function OAuthSignInButtons({ callbackUrl, googleLabel }: Props) {
 
       <button
         type="button"
-        disabled={loading}
+        disabled={loading || disabled}
+        title={disabled ? 'Marca la casilla de aceptación de términos legales para continuar' : undefined}
         className={btnClass}
         onClick={() => void handleGoogle()}
       >

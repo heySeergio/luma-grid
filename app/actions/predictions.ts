@@ -9,6 +9,7 @@ import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { isMissingLexemeColumnError } from '@/lib/prisma/lexemeColumnErrors'
 import { EXTENDED_TIER_PREDICTION_FACTOR } from '@/lib/lexicon/lexemeTier'
 import { prisma } from '@/lib/prisma'
+import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
 import type { PosType } from '@/lib/supabase/types'
 
 export type PredictionSymbolInput = {
@@ -607,6 +608,11 @@ export async function recordSymbolUsage({
 }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return
+
+  const privacyPrefs = await readAccountPrivacyPrefsFromDb(session.user.id)
+  if (privacyPrefs.shareUsageForPredictions === false) {
+    return
+  }
 
   const profile = await prisma.profile.findUnique({
     where: { id: profileId, userId: session.user.id },

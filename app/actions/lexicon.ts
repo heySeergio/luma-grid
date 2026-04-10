@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { isMissingLexemeColumnError } from '@/lib/prisma/lexemeColumnErrors'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
-import { normalizeTextForLexicon, tokenizePhraseInput } from '@/lib/lexicon/normalize'
+import { normalizeLabelForLexicalMatch, normalizeTextForLexicon, tokenizePhraseInput } from '@/lib/lexicon/normalize'
+import { backfillProfileSymbolLexicon } from '@/app/actions/symbols'
 
 async function safeDetectLexemeForLabel(label: string) {
   try {
@@ -19,7 +20,7 @@ async function safeDetectLexemeForLabel(label: string) {
       symbolPosType: 'other' as const,
       confidence: 0,
       method: 'unknown' as const,
-      normalizedLabel: normalizeTextForLexicon(label),
+      normalizedLabel: normalizeLabelForLexicalMatch(label),
       matchedForm: null,
       alternatives: [],
     }
@@ -88,7 +89,7 @@ function getCoverageReason(symbol: {
   posType: string
   posConfidence: number | null
 }) {
-  const normalizedFromLabel = normalizeTextForLexicon(symbol.label)
+  const normalizedFromLabel = normalizeLabelForLexicalMatch(symbol.label)
 
   if (!symbol.normalizedLabel || symbol.normalizedLabel !== normalizedFromLabel) {
     return 'normalizacion_pendiente' as const
@@ -107,10 +108,15 @@ export async function getProfileLexiconCoverage(profileId: string) {
 
   const profile = await prisma.profile.findUnique({
     where: { id: profileId, userId: session.user.id },
-    select: { id: true },
+    select: { id: true, isDemo: true },
   })
 
   if (!profile) return null
+
+  await backfillProfileSymbolLexicon(profileId, session.user.id)
+
+  /** Tablero base (demo fijo): no mostrar cola de revisión léxica; otros tableros sí. */
+  const skipLexiconReviewQueue = profile.isDemo
 
   let symbols: Array<{
     id: string
@@ -170,14 +176,16 @@ export async function getProfileLexiconCoverage(profileId: string) {
   const linkedLexemeCount = relevantSymbols.filter((symbol) => Boolean(symbol.lexemeId)).length
   const highConfidenceCount = relevantSymbols.filter((symbol) => (symbol.posConfidence ?? 0) >= 0.72).length
 
-  const reviewCandidates = relevantSymbols
-    .filter((symbol) => !symbol.manualGrammarOverride)
-    .map((symbol) => ({
-      symbol,
-      reason: getCoverageReason(symbol),
-    }))
-    .filter((item): item is { symbol: typeof relevantSymbols[number]; reason: LexiconCoverageReason } => Boolean(item.reason))
-    .sort((a, b) => (a.symbol.posConfidence ?? 0) - (b.symbol.posConfidence ?? 0))
+  const reviewCandidates = skipLexiconReviewQueue
+    ? []
+    : relevantSymbols
+        .filter((symbol) => !symbol.manualGrammarOverride)
+        .map((symbol) => ({
+          symbol,
+          reason: getCoverageReason(symbol),
+        }))
+        .filter((item): item is { symbol: typeof relevantSymbols[number]; reason: LexiconCoverageReason } => Boolean(item.reason))
+        .sort((a, b) => (a.symbol.posConfidence ?? 0) - (b.symbol.posConfidence ?? 0))
 
   const reviewItems: CoverageReviewItem[] = await Promise.all(
     reviewCandidates.slice(0, 8).map(async ({ symbol, reason }) => {

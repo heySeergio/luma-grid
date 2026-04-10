@@ -32,13 +32,17 @@ export default function BrandLockup({
         className={iconClassName}
       />
       <div className="min-w-0">
-        <Image
+        {/* SVG: <img> evita avisos del optimizador de next/image al redimensionar con CSS */}
+        <img
           src="/icons/Luma%20Grid%20Texto.svg"
           alt="Luma Grid"
           width={wordmarkWidth}
           height={Math.round(wordmarkWidth * 0.28)}
-          priority={priority}
+          decoding="async"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'low'}
           className="h-auto max-w-full"
+          style={{ maxWidth: `${wordmarkWidth}px` }}
         />
         {subtitle ? (
           <p className="mt-1 text-sm text-[var(--app-muted-foreground)]">
