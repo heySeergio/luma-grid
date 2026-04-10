@@ -8,9 +8,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useClientReady } from '@/lib/ui/useClientReady'
+import { useClientReady, useIsClient } from '@/lib/ui/useClientReady'
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { BookOpen, Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BookOpen, Check, ClipboardPaste, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
@@ -20,7 +20,11 @@ import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettin
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
 import { computeMainGrid, DEFAULT_FOLDER_CONTENTS, shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
-import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
+import {
+  findCoveringSymbolAtCellPreferringFixedMain,
+  mergeMainGridWithFolderView,
+} from '@/lib/grid/mergeMainGridWithFolderView'
+import { effectiveSymbolGridId } from '@/lib/grid/gridCellOverlap'
 import {
   buildDefaultFixedZoneKeySet,
   clampFixedZoneKeysToGrid,
@@ -53,6 +57,9 @@ import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
 import { VoiceCloneLiveWaveform, VoiceCloneSamplePreview } from '@/components/admin/VoiceCloneAudioStrip'
+import AdminGridContextMenu, {
+  type AdminGridContextMenuItem,
+} from '@/components/admin/AdminGridContextMenu'
 import {
   ProfileGridDimensionPicker,
   PROFILE_GRID_PICKER_MAX_COLS,
@@ -204,6 +211,30 @@ function stripAdminSymbolClientFields(symbol: AdminSymbol): AdminSymbol {
   return rest
 }
 
+function cloneSymbolForPaste(
+  source: AdminSymbol,
+  positionX: number,
+  positionY: number,
+  gridId: string,
+): AdminSymbol {
+  const base = JSON.parse(JSON.stringify(stripAdminSymbolClientFields(source))) as AdminSymbol
+  const newId = `new-${
+    typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}`
+  }`
+  return {
+    ...base,
+    id: newId,
+    positionX,
+    positionY,
+    position_x: positionX,
+    position_y: positionY,
+    gridId,
+    grid_id: gridId,
+  }
+}
+
 const STATE_OPTIONS = [
   { value: 'visible', label: 'Visible (Normal)' },
   { value: 'locked', label: 'Bloqueado (No clickeable)' },
@@ -299,6 +330,51 @@ function getSymbolPosition(symbol: Pick<AdminSymbol, 'positionX' | 'positionY' |
   }
 }
 
+function symbolOccupiesCell(s: AdminSymbol, cx: number, cy: number): boolean {
+  const p = getSymbolPosition(s)
+  return p.x === cx && p.y === cy
+}
+
+function symbolRectOverlapsAny(
+  px: number,
+  py: number,
+  symbols: AdminSymbol[],
+  excludeId?: string,
+): boolean {
+  for (const s of symbols) {
+    if (excludeId && s.id === excludeId) continue
+    if (symbolOccupiesCell(s, px, py)) return true
+  }
+  return false
+}
+
+function canPlaceCellAdmin(
+  px: number,
+  py: number,
+  gridCols: number,
+  gridRows: number,
+  symbols: AdminSymbol[],
+  excludeId?: string,
+): boolean {
+  if (px < 0 || py < 0 || px >= gridCols || py >= gridRows) return false
+  return !symbolRectOverlapsAny(px, py, symbols, excludeId)
+}
+
+/** Misma regla que `saveSymbols` / `findFootprintOverlaps`: solo compiten símbolos con el mismo `gridId`. */
+function adminSymbolsSameGridInBounds(
+  allSymbols: AdminSymbol[],
+  gridId: string | null | undefined,
+  gridCols: number,
+  gridRows: number,
+): AdminSymbol[] {
+  const gid = effectiveSymbolGridId({ gridId, grid_id: undefined })
+  return allSymbols.filter((s) => {
+    if (effectiveSymbolGridId(s) !== gid) return false
+    const p = getSymbolPosition(s)
+    return p.x >= 0 && p.y >= 0 && p.x < gridCols && p.y < gridRows
+  })
+}
+
 function symbolImageDisplayUrl(symbol: Pick<AdminSymbol, 'imageUrl' | 'image_url'>): string | undefined {
   const u = symbol.imageUrl ?? symbol.image_url
   return typeof u === 'string' && u.length > 0 ? u : undefined
@@ -343,7 +419,7 @@ function stableGridSnapshot(symbols: AdminSymbol[]): string {
         positionY: pos.y,
         color: normalizeSymbolColor(s.color ?? DEFAULT_SYMBOL_COLOR),
         state: s.state ?? 'visible',
-        gridId: s.gridId ?? s.grid_id ?? 'main',
+        gridId: effectiveSymbolGridId(s),
         hidden: Boolean(s.hidden),
         opensKeyboard: Boolean(s.opensKeyboard),
         fixedCell: Boolean(s.fixedCell),
@@ -389,11 +465,15 @@ function DroppableGridCell({
   className,
   style,
   children,
+  adminCellX,
+  adminCellY,
 }: {
   cellId: string
   className?: string
   style?: React.CSSProperties
   children: React.ReactNode
+  adminCellX?: number
+  adminCellY?: number
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: cellId })
 
@@ -401,6 +481,8 @@ function DroppableGridCell({
     <div
       ref={setNodeRef}
       style={style}
+      data-admin-cell-x={adminCellX}
+      data-admin-cell-y={adminCellY}
       className={`${className ?? ''} ${isOver ? 'rounded-lg ring-2 ring-indigo-400 ring-offset-2 ring-offset-slate-50' : ''}`.trim()}
     >
       {children}
@@ -408,16 +490,44 @@ function DroppableGridCell({
   )
 }
 
+/** No activar @dnd-kit en controles con `data-no-dnd`. */
+function pointerTargetBlocksAdminDrag(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof Element)) return false
+  return Boolean(target.closest('[data-no-dnd]'))
+}
+
+class AdminPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: (
+        ...args: Parameters<NonNullable<(typeof PointerSensor.activators)[0]['handler']>>
+      ) => {
+        const [event] = args
+        const native = 'nativeEvent' in event ? event.nativeEvent : null
+        if (native && 'target' in native && pointerTargetBlocksAdminDrag(native.target as EventTarget)) {
+          return false
+        }
+        const base = PointerSensor.activators[0]?.handler
+        return base ? base(...args) : false
+      },
+    },
+  ] as (typeof PointerSensor)['activators']
+}
+
 function DraggableGridItem({
   symbol,
   children,
+  contextMenuBlocksDrag = false,
 }: {
   symbol: AdminSymbol
   children: React.ReactNode
+  /** Evita iniciar/soltar arrastres mientras el menú ⋯ del grid está abierto (corrige solapes con «Copiar», etc.). */
+  contextMenuBlocksDrag?: boolean
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: symbol.id,
-    disabled: !isMovableSymbol(symbol),
+    disabled: !isMovableSymbol(symbol) || contextMenuBlocksDrag,
   })
 
   // No aplicar `transform` aquí: con <DragOverlay> el overlay sigue el puntero; sumar ambos
@@ -432,7 +542,7 @@ function DraggableGridItem({
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex min-h-0 min-w-0 h-full w-full ${isMovableSymbol(symbol) ? 'touch-none cursor-grab active:cursor-grabbing' : ''}`.trim()}
+      className={`flex min-h-0 min-w-0 h-full w-full ${isMovableSymbol(symbol) && !contextMenuBlocksDrag ? 'touch-none cursor-grab active:cursor-grabbing' : ''}`.trim()}
     >
       {children}
     </div>
@@ -533,8 +643,19 @@ export default function AdminPage() {
   const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
   const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
-  /** false hasta tras hidratar (1 hook interno vía useSyncExternalStore; no cambiar a useState+useEffect aquí). */
+  /** Portapapeles interno del grid (copiar / pegar en vista previa). */
+  const [gridClipboard, setGridClipboard] = useState<AdminSymbol | null>(null)
+  const [gridContextMenu, setGridContextMenu] = useState<{
+    x: number
+    y: number
+    cellX: number
+    cellY: number
+    symbol: AdminSymbol
+  } | null>(null)
+  /** false hasta tras el primer useEffect post-hidratación (`useClientReady`). */
   const adminChromeMounted = useClientReady()
+  /** Alinea el primer paint con el HTML del servidor (evita mismatch en `disabled` del header). */
+  const isClient = useIsClient()
   const [voiceTtsMode, setVoiceTtsMode] = useState<TtsMode>('browser')
   const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
   const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
@@ -578,7 +699,7 @@ export default function AdminPage() {
   )
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(AdminPointerSensor, {
       activationConstraint: {
         distance: 8,
       },
@@ -998,6 +1119,11 @@ export default function AdminPage() {
   }, [loadData])
 
   useEffect(() => {
+    setGridClipboard(null)
+    setGridContextMenu(null)
+  }, [selectedProfileId])
+
+  useEffect(() => {
     if (!status) return
     if (ADMIN_STATUS_SKIP_AUTO_DISMISS.has(status)) return
     const id = window.setTimeout(() => setStatus(''), 7000)
@@ -1360,7 +1486,8 @@ export default function AdminPage() {
       setGridSaveFeedback('saved')
     } catch (err) {
       console.error(err)
-      setStatus('❌ Error al guardar.')
+      const detail = err instanceof Error && err.message.trim() ? err.message.trim() : 'Error al guardar.'
+      setStatus(`❌ ${detail}`)
       setGridSaveFeedback('idle')
     } finally {
       setSavingSymbols(false)
@@ -1384,6 +1511,9 @@ export default function AdminPage() {
       setStatus('Error al eliminar símbolo.')
     }
   }
+
+  const deleteSymbolRef = useRef(deleteSymbol)
+  deleteSymbolRef.current = deleteSymbol
 
   const closeEditingSymbolModal = useCallback(() => {
     setEditingSymbol(null)
@@ -1415,6 +1545,13 @@ export default function AdminPage() {
         setStatus('Variantes: rellena al menos dos textos o desactiva la opción.')
         return
       }
+    }
+    const pos = getSymbolPosition(cleaned)
+    const gid = cleaned.gridId ?? 'main'
+    const peers = adminSymbolsSameGridInBounds(symbols, gid, previewGridCols, previewGridRows)
+    if (!canPlaceCellAdmin(pos.x, pos.y, previewGridCols, previewGridRows, peers, cleaned.id)) {
+      setStatus('Esa celda está ocupada u otra pieza impide colocar el símbolo en la misma vista.')
+      return
     }
     setSymbols(prev => {
       const existing = prev.find(s => s.id === cleaned.id)
@@ -1727,6 +1864,7 @@ export default function AdminPage() {
     return folderSym?.label ?? activeFolder
   }, [activeFolder, shouldUseDefaultGridTemplate, symbols])
 
+  /** Claves de zona fija del tablero seleccionado (`selectedProfile`); cada perfil tiene las suyas en BD. */
   const adminFixedZoneSet = useMemo(() => {
     if (!selectedProfile) return null
     const k = selectedProfile.fixedZoneCellKeys
@@ -1765,6 +1903,115 @@ export default function AdminPage() {
     previewGridRows,
     adminFixedZoneSet,
   ])
+
+  const targetPasteGridId = useMemo(
+    () => (!shouldUseDefaultGridTemplate && activeFolder ? String(activeFolder) : 'main'),
+    [shouldUseDefaultGridTemplate, activeFolder],
+  )
+
+  const closeGridContextMenu = useCallback(() => setGridContextMenu(null), [])
+
+  const openGridSymbolActionsMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, sym: AdminSymbol, cellX: number, cellY: number) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const rect = e.currentTarget.getBoundingClientRect()
+      setGridContextMenu({
+        x: rect.left,
+        y: rect.bottom + 4,
+        cellX,
+        cellY,
+        symbol: sym,
+      })
+    },
+    [],
+  )
+
+  const handleGridContextCopy = useCallback((symbol: AdminSymbol) => {
+    const cleaned = stripAdminSymbolClientFields({ ...symbol })
+    setGridClipboard(JSON.parse(JSON.stringify(cleaned)) as AdminSymbol)
+    setStatus('Copiado al portapapeles del editor. Pégalo en una celda vacía.')
+  }, [])
+
+  const handleGridContextPaste = useCallback(
+    (cellX: number, cellY: number) => {
+      if (!gridClipboard) return
+      const gridCols = previewGridCols
+      const gridRows = previewGridRows
+      const peers = adminSymbolsSameGridInBounds(symbols, targetPasteGridId, gridCols, gridRows)
+      if (!canPlaceCellAdmin(cellX, cellY, gridCols, gridRows, peers)) {
+        setStatus('Pega en una celda vacía.')
+        return
+      }
+      const pasted = cloneSymbolForPaste(gridClipboard, cellX, cellY, targetPasteGridId)
+      setSymbols((prev) => [...prev, pasted])
+      setStatus('Símbolo pegado. Pulsa «Guardar cambios» para persistir.')
+    },
+    [gridClipboard, symbols, targetPasteGridId, previewGridCols, previewGridRows],
+  )
+
+  const handleGridEditFolderContent = useCallback(
+    (sym: AdminSymbol) => {
+      const sid = String(sym.id ?? '')
+      if (sym.category !== 'Carpetas') return
+      if (sid.startsWith('draft-')) {
+        setStatus(
+          'Pulsa «Guardar en Grid» abajo para añadir la carpeta al tablero; luego podrás editar su contenido.',
+        )
+        return
+      }
+      if (sid.startsWith('new-')) {
+        setStatus('Guarda el tablero para poder abrir el contenido de la carpeta.')
+        return
+      }
+      if (sid.startsWith('template-') || sid.startsWith('folder-item-')) {
+        setStatus('Esta carpeta no se puede abrir desde aquí.')
+        return
+      }
+      const folderKey = isSelectedDemoProfile ? sym.label : sym.id
+      startTransition(() => {
+        setActiveFolder(String(folderKey))
+      })
+    },
+    [isSelectedDemoProfile],
+  )
+
+  const gridContextMenuItems = useMemo((): AdminGridContextMenuItem[] => {
+    if (!gridContextMenu) return []
+    const { symbol } = gridContextMenu
+    const items: AdminGridContextMenuItem[] = []
+    const sid = String(symbol.id ?? '')
+    const canEditFolder =
+      symbol.category === 'Carpetas' &&
+      !sid.startsWith('template-') &&
+      !sid.startsWith('folder-item-')
+    if (isMovableSymbol(symbol)) {
+      items.push({
+        key: 'copy',
+        label: 'Copiar',
+        onSelect: () => handleGridContextCopy(symbol),
+      })
+    }
+    if (canEditFolder) {
+      items.push({
+        key: 'edit-folder',
+        label: 'Editar contenido',
+        onSelect: () => handleGridEditFolderContent(symbol),
+      })
+    }
+    if (isMovableSymbol(symbol)) {
+      items.push({
+        key: 'delete',
+        label: 'Eliminar',
+        destructive: true,
+        onSelect: () => {
+          void deleteSymbolRef.current(symbol.id)
+        },
+      })
+    }
+    return items
+  }, [gridContextMenu, handleGridContextCopy, handleGridEditFolderContent])
+
   const draggableSymbolsById = useMemo(() => {
     return new Map(mainGridSymbols.filter((symbol) => isMovableSymbol(symbol)).map((symbol) => [symbol.id, symbol]))
   }, [mainGridSymbols])
@@ -1803,16 +2050,16 @@ export default function AdminPage() {
   const findNextEmptyGridPosition = useCallback(() => {
     const gridCols = pendingGridDimensions?.cols ?? selectedProfile?.gridCols ?? 14
     const gridRows = pendingGridDimensions?.rows ?? selectedProfile?.gridRows ?? 8
+    const targetGid = !shouldUseDefaultGridTemplate && activeFolder ? String(activeFolder) : 'main'
+    const peers = adminSymbolsSameGridInBounds(symbols, targetGid, gridCols, gridRows)
     for (let y = 0; y < gridRows; y += 1) {
       for (let x = 0; x < gridCols; x += 1) {
-        const occupied = mainGridSymbols.some((symbol) => {
-          const position = getSymbolPosition(symbol)
-          return position.x === x && position.y === y
-        })
-        if (!occupied) return { x, y }
+        if (canPlaceCellAdmin(x, y, gridCols, gridRows, peers)) {
+          return { x, y }
+        }
       }
     }
-    const sortedSymbols = [...mainGridSymbols].sort(sortSymbolsByPosition)
+    const sortedSymbols = [...peers].sort(sortSymbolsByPosition)
     const lastSymbol = sortedSymbols[sortedSymbols.length - 1]
     const lastPosition = lastSymbol ? getSymbolPosition(lastSymbol) : { x: 0, y: 0 }
     const nextIndex = lastPosition.y * gridCols + lastPosition.x + 1
@@ -1820,7 +2067,14 @@ export default function AdminPage() {
       x: nextIndex % gridCols,
       y: Math.floor(nextIndex / gridCols),
     }
-  }, [mainGridSymbols, selectedProfile?.gridCols, selectedProfile?.gridRows, pendingGridDimensions])
+  }, [
+    symbols,
+    activeFolder,
+    shouldUseDefaultGridTemplate,
+    selectedProfile?.gridCols,
+    selectedProfile?.gridRows,
+    pendingGridDimensions,
+  ])
 
   const openSymbolReviewFromCoverageItem = useCallback(
     (symbolId: string) => {
@@ -1924,13 +2178,17 @@ export default function AdminPage() {
   }, [selectedProfileId, selectedProfile, previewGridCols, previewGridRows, fixedZoneDraftKeys, loadData])
 
   const handleDragStart = (event: DragStartEvent) => {
-    if (activeFolder || fixedZoneEditMode) return
+    // Solo bloquear en modo pincel de zona fija; con carpeta activa sí se debe poder mover la base fija (main).
+    if (fixedZoneEditMode) return
+    if (gridContextMenu) return
     setActiveDraggedSymbolId(String(event.active.id))
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDraggedSymbolId(null)
-    if (activeFolder || fixedZoneEditMode) return
+    if (fixedZoneEditMode) return
+    // Mientras el menú contextual está abierto, no aplicar soltar (evita «Copiar»/clic que dispara un drop fantasma).
+    if (gridContextMenu) return
 
     const overRaw = event.over?.id
     if (overRaw === undefined || overRaw === null) return
@@ -1960,23 +2218,48 @@ export default function AdminPage() {
     const sourcePosition = getSymbolPosition(draggedSymbol)
     if (sourcePosition.x === x && sourcePosition.y === y) return
 
-    const targetSymbol = mainGridSymbols.find((symbol) => {
+    const gridCols = previewGridCols
+    const gridRows = previewGridRows
+    const dragGid = draggedSymbol.gridId ?? draggedSymbol.grid_id ?? 'main'
+    const peers = adminSymbolsSameGridInBounds(symbols, dragGid, gridCols, gridRows)
+
+    if (canPlaceCellAdmin(x, y, gridCols, gridRows, peers, draggedSymbol.id)) {
+      setSymbols((prev) =>
+        prev.map((symbol) =>
+          symbol.id === draggedSymbol.id ? updateSymbolCoordinates(symbol, x, y) : symbol,
+        ),
+      )
+      return
+    }
+
+    const targetSymbol = peers.find((symbol) => {
       if (!isMovableSymbol(symbol) || symbol.id === draggedSymbol.id) return false
       const position = getSymbolPosition(symbol)
       return position.x === x && position.y === y
     })
-
-    setSymbols((prev) => prev.map((symbol) => {
-      if (symbol.id === draggedSymbol.id) {
-        return updateSymbolCoordinates(symbol, x, y)
-      }
-
-      if (targetSymbol && symbol.id === targetSymbol.id) {
-        return updateSymbolCoordinates(symbol, sourcePosition.x, sourcePosition.y)
-      }
-
-      return symbol
-    }))
+    if (
+      targetSymbol &&
+      canPlaceCellAdmin(
+        sourcePosition.x,
+        sourcePosition.y,
+        gridCols,
+        gridRows,
+        peers,
+        targetSymbol.id,
+      )
+    ) {
+      setSymbols((prev) =>
+        prev.map((symbol) => {
+          if (symbol.id === draggedSymbol.id) {
+            return updateSymbolCoordinates(symbol, x, y)
+          }
+          if (symbol.id === targetSymbol.id) {
+            return updateSymbolCoordinates(symbol, sourcePosition.x, sourcePosition.y)
+          }
+          return symbol
+        }),
+      )
+    }
   }
 
   const handleCreateSymbolFromList = () => {
@@ -2074,6 +2357,8 @@ export default function AdminPage() {
   }, [selectedProfileId])
 
   useEffect(() => {
+    fixedZoneBrushRef.current = null
+    setFixedZoneDraftKeys(new Set())
     setFixedZoneEditMode(false)
   }, [selectedProfileId])
 
@@ -2094,6 +2379,17 @@ export default function AdminPage() {
 
   const canAddPreviewColumn = (previewGridCols < ADMIN_GRID_DIM_MAX)
   const canAddPreviewRow = (previewGridRows < ADMIN_GRID_DIM_MAX)
+  /** Tablero base (`isDemo`): sin recuadros de ampliar grid. En el resto, ocultar al llegar al máximo. */
+  const showAdminAddColumnChrome = !isSelectedDemoProfile && canAddPreviewColumn
+  const showAdminAddRowChrome = !isSelectedDemoProfile && canAddPreviewRow
+  const adminPreviewChromeOuterClass =
+    showAdminAddColumnChrome && showAdminAddRowChrome
+      ? 'md:grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_auto]'
+      : showAdminAddColumnChrome
+        ? 'md:grid-cols-[minmax(0,1fr)_auto]'
+        : showAdminAddRowChrome
+          ? 'md:grid-cols-1 md:grid-rows-[auto_auto]'
+          : ''
   const canDecDimRows =
     previewGridRows > ADMIN_GRID_DIM_MIN && !savingSymbols && !symbolsLoadPending
   const canIncDimRows =
@@ -2107,6 +2403,10 @@ export default function AdminPage() {
 
   const blockProfileHeaderActions =
     !adminChromeMounted || !selectedProfileId || loadingData || symbolsLoadPending
+  const headerExportDisabled = !isClient || Boolean(blockProfileHeaderActions)
+  const headerSaveDisabled =
+    !isClient ||
+    Boolean(blockProfileHeaderActions || !hasUnsavedGridChanges || savingSymbols)
   /** Misma base que el header (chrome + datos) para evitar desajustes de hidratación en botones de zona fija. */
   const fixedZoneToolbarActionsDisabled = Boolean(blockProfileHeaderActions || savingSymbols)
   const blockGridResizeChrome =
@@ -2152,7 +2452,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => void handleExportBoard()}
                 suppressHydrationWarning
-                disabled={Boolean(blockProfileHeaderActions)}
+                disabled={headerExportDisabled}
                 title={!selectedProfileId ? 'Selecciona un tablero' : 'Descargar copia del tablero (.luma)'}
                 className="ui-secondary-button inline-flex w-full items-center justify-center self-center rounded-full px-4 py-2 text-sm font-medium text-[var(--app-foreground)] transition disabled:pointer-events-none disabled:opacity-45 lg:col-start-3 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end"
               >
@@ -2162,9 +2462,8 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => void handleSaveAll()}
-                disabled={Boolean(
-                  blockProfileHeaderActions || !hasUnsavedGridChanges || savingSymbols,
-                )}
+                suppressHydrationWarning
+                disabled={headerSaveDisabled}
                 title={
                   !selectedProfileId
                     ? 'Selecciona un tablero'
@@ -2217,7 +2516,7 @@ export default function AdminPage() {
               className="w-full min-w-0 shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)] lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
               aria-label="Panel lateral de administración"
             >
-            <div className="flex w-full min-w-0 flex-col gap-4 p-4">
+            <div className="flex w-full min-w-0 flex-col gap-4 py-4 px-4 sm:px-6 lg:px-8">
               <div className="app-panel w-full min-w-0 rounded-2xl p-5">
                 <div className="mb-4 flex w-full min-w-0 items-center justify-between gap-3">
                   <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -2353,14 +2652,15 @@ export default function AdminPage() {
                   <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
                     Ajusta filas y columnas y pulsa <span className="font-semibold text-slate-600 dark:text-slate-300">Guardar cambios</span> arriba para aplicarlas en el servidor.
                   </p>
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-slate-900 shadow-inner dark:border-slate-700/90 dark:bg-zinc-950 dark:text-white">
-                    <div className="border-b border-slate-200/90 bg-slate-100/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 text-slate-900 shadow-inner dark:border-slate-700/90 dark:bg-zinc-950 dark:text-white">
+                    <div className="overflow-hidden rounded-t-xl border-b border-slate-200/90 bg-slate-100/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                       Tamaño del grid
                     </div>
-                    <div className="divide-y divide-slate-200/90 dark:divide-white/10">
-                      <div className="flex items-stretch gap-2 px-2 py-1 sm:px-3">
-                        <span className="flex w-20 shrink-0 items-center pl-1 text-xs font-medium text-slate-600 dark:text-slate-400">Filas</span>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pl-1 pr-3 sm:pr-4">
+                    <div className="divide-y divide-slate-200/90 overflow-hidden rounded-b-xl dark:divide-white/10">
+                      <div className="flex min-w-0 flex-col gap-2 px-2 py-2 sm:px-3">
+                        <span className="pl-1 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Filas</span>
+                        <div className="flex w-full justify-center">
+                          <div className="inline-flex min-w-min items-center gap-2 sm:gap-3">
                           <button
                             type="button"
                             aria-label="Restar una fila"
@@ -2382,11 +2682,13 @@ export default function AdminPage() {
                           >
                             <Plus size={18} strokeWidth={2.25} />
                           </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-stretch gap-2 px-2 py-1 sm:px-3">
-                        <span className="flex w-20 shrink-0 items-center pl-1 text-xs font-medium text-slate-600 dark:text-slate-400">Columnas</span>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-2 pl-1 pr-3 sm:pr-4">
+                      <div className="flex min-w-0 flex-col gap-2 px-2 py-2 sm:px-3">
+                        <span className="pl-1 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Columnas</span>
+                        <div className="flex w-full justify-center">
+                          <div className="inline-flex min-w-min items-center gap-2 sm:gap-3">
                           <button
                             type="button"
                             aria-label="Restar una columna"
@@ -2412,6 +2714,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                   </div>
+                </div>
                 </div>
               )}
 
@@ -3436,23 +3739,19 @@ export default function AdminPage() {
                           ) : null}
                           <button
                             type="button"
-                            onClick={activeFolderTitle ? () => setActiveFolder(null) : enterFixedZoneEdit}
+                            onClick={enterFixedZoneEdit}
                             suppressHydrationWarning
                             disabled={fixedZoneToolbarActionsDisabled}
                             className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-300/90 bg-gradient-to-b from-violet-50 to-violet-100/90 px-4 py-2.5 text-sm font-semibold text-violet-950 shadow-sm transition hover:border-violet-400 hover:from-violet-100 hover:to-violet-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto dark:border-violet-500/45 dark:from-violet-950/90 dark:to-violet-900/55 dark:text-violet-50 dark:hover:border-violet-400/70 dark:hover:from-violet-900/80 dark:hover:to-violet-950/70"
                           >
-                            {activeFolderTitle ? (
-                              <Eye className="h-4 w-4 shrink-0" aria-hidden />
-                            ) : (
-                              <Pin className="h-4 w-4 shrink-0" aria-hidden />
-                            )}
-                            {activeFolderTitle ? 'Ver base fija' : 'Editar base fija'}
+                            <Pin className="h-4 w-4 shrink-0" aria-hidden />
+                            Editar base fija
                           </button>
                         </div>
                       </div>
                     ) : null}
 
-                    {!symbolsLoadPending && fixedZoneEditMode && !activeFolderTitle ? (
+                    {!symbolsLoadPending && fixedZoneEditMode ? (
                       <div className="flex flex-col gap-3 rounded-2xl border border-violet-300/60 bg-gradient-to-br from-violet-50/95 to-white/80 px-4 py-3 shadow-sm dark:border-violet-500/35 dark:from-violet-950/50 dark:to-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <p className="min-w-0 text-sm leading-snug text-violet-950 dark:text-violet-100">
                           <span className="font-semibold">Editando base fija.</span> Clic o arrastra: las celdas fijas se
@@ -3463,16 +3762,18 @@ export default function AdminPage() {
                           para cancelar.
                         </p>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={applyDefaultFixedZoneDraft}
-                            className="ui-secondary-button rounded-xl px-3 py-2 text-left text-sm font-semibold leading-snug"
-                          >
-                            Plantilla por defecto
-                            <span className="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">
-                              7 columnas + 1.ª fila
-                            </span>
-                          </button>
+                          {isSelectedDemoProfile ? (
+                            <button
+                              type="button"
+                              onClick={applyDefaultFixedZoneDraft}
+                              className="ui-secondary-button rounded-xl px-3 py-2 text-left text-sm font-semibold leading-snug"
+                            >
+                              Plantilla por defecto
+                              <span className="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">
+                                7 columnas + 1.ª fila
+                              </span>
+                            </button>
+                          ) : null}
                           <button type="button" onClick={exitFixedZoneEdit} className="ui-secondary-button rounded-xl px-4 py-2 text-sm font-semibold">
                             Cancelar
                           </button>
@@ -3497,7 +3798,9 @@ export default function AdminPage() {
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   >
-                    <div className="grid w-full max-w-full grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_auto]">
+                    <div
+                      className={`grid w-full max-w-full grid-cols-1 gap-2 ${adminPreviewChromeOuterClass}`}
+                    >
                       <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
                       <div
                         className={`aac-grid-surface grid w-max max-w-none content-start gap-4 rounded-[1.25rem] p-4 transition-shadow duration-300 sm:p-6 ${symbolsLoadPending ? 'pointer-events-none' : ''} ${
@@ -3530,11 +3833,59 @@ export default function AdminPage() {
                           )
                         }
 
-                        const symbol = mainGridSymbols.find((s) => (s.positionX === x && s.positionY === y) || (s.position_x === x && s.position_y === y))
+                        const cover = findCoveringSymbolAtCellPreferringFixedMain(
+                          mainGridSymbols,
+                          x,
+                          y,
+                          previewGridCols,
+                          previewGridRows,
+                          adminFixedZoneSet,
+                        )
+                        const isAnchor =
+                          Boolean(cover) &&
+                          getSymbolPosition(cover!).x === x &&
+                          getSymbolPosition(cover!).y === y
+
+                        if (cover && !isAnchor) {
+                          return (
+                            <DroppableGridCell
+                              key={`cell-${x}-${y}`}
+                              cellId={`cell-${x}-${y}`}
+                              adminCellX={x}
+                              adminCellY={y}
+                              className="pointer-events-none relative z-0 flex min-h-0 min-w-0 w-full"
+                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                            >
+                              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col justify-stretch">
+                                <div
+                                  className={`min-h-[2.75rem] flex-1 rounded-lg border border-transparent ${fadeVariableCellClass}`}
+                                  aria-hidden
+                                />
+                                {fixedZoneEditMode ? (
+                                  <button
+                                    type="button"
+                                    tabIndex={-1}
+                                    className="pointer-events-auto absolute inset-0 z-20 cursor-crosshair touch-none rounded-lg border-0 bg-transparent"
+                                    aria-label={`Marcar celda ${x + 1},${y + 1} como base fija`}
+                                    onPointerDown={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      onFixedZoneBrushPointerDown(x, y)
+                                    }}
+                                    onPointerEnter={() => onFixedZoneBrushPointerEnter(x, y)}
+                                  />
+                                ) : null}
+                              </div>
+                            </DroppableGridCell>
+                          )
+                        }
+
+                        const symbol = isAnchor ? cover : undefined
 
                         if (symbol) {
                           const gridCellImageSrc = symbolImageDisplayUrl(symbol)
                           const pos = getSymbolPosition(symbol)
+                          const shapeClass = 'aspect-video'
                           const showFixedHighlight =
                             !fixedZoneEditMode &&
                             (symbol.gridId ?? 'main') === 'main' &&
@@ -3552,16 +3903,24 @@ export default function AdminPage() {
                             <DroppableGridCell
                               key={`cell-${x}-${y}`}
                               cellId={`cell-${x}-${y}`}
-                              className="flex min-h-0 min-w-0 w-full"
-                              style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                              adminCellX={x}
+                              adminCellY={y}
+                              className="relative z-[2] flex min-h-0 min-w-0 w-full"
+                              style={{
+                                gridColumn: `${x + 1} / span 1`,
+                                gridRow: `${y + 1} / span 1`,
+                              }}
                             >
-                              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                              <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
                               <motion.div
                                 whileHover={fixedZoneEditMode ? undefined : { scale: 1.05 }}
                                 whileTap={fixedZoneEditMode ? undefined : { scale: 0.95 }}
-                                className={`group relative flex aspect-video w-full min-h-0 min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button.symbol-cell]:pointer-events-none' : ''}`}
+                                className={`group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${shapeClass} ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button.symbol-cell]:pointer-events-none' : ''}`}
                               >
-                                <DraggableGridItem symbol={symbol}>
+                                <DraggableGridItem
+                                  symbol={symbol}
+                                  contextMenuBlocksDrag={Boolean(gridContextMenu)}
+                                >
                                   <button
                                     onClick={() =>
                                       setEditingSymbol({
@@ -3595,12 +3954,18 @@ export default function AdminPage() {
                                     ) : null}
                                     <div className="text-xl mb-1">
                                       {gridCellImageSrc ? (
-                                        <img src={gridCellImageSrc} alt={symbol.label} className="h-8 w-8 object-contain" />
+                                        <img
+                                          src={gridCellImageSrc}
+                                          alt={symbol.label}
+                                          className="h-8 w-8 object-contain"
+                                          draggable={false}
+                                          onContextMenu={(e) => e.preventDefault()}
+                                        />
                                       ) : (
                                         symbol.emoji || '❓'
                                       )}
                                     </div>
-                                    <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
+                                    <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
                                       {symbol.label}
                                     </span>
                                     {symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) && (
@@ -3615,18 +3980,28 @@ export default function AdminPage() {
                                     )}
                                   </button>
                                 </DraggableGridItem>
-                                {isMovableSymbol(symbol) && !fixedZoneEditMode && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      deleteSymbol(symbol.id)
-                                    }}
-                                    type="button"
-                                    className="absolute right-1 top-1 z-10 hidden h-5 w-5 place-items-center rounded-full bg-rose-500 text-white shadow-sm group-hover:grid"
-                                  >
-                                    <Trash2 size={10} />
-                                  </button>
-                                )}
+                                {!fixedZoneEditMode &&
+                                  (() => {
+                                    const sid = String(symbol.id ?? '')
+                                    const canEditFolder =
+                                      symbol.category === 'Carpetas' &&
+                                      !sid.startsWith('template-') &&
+                                      !sid.startsWith('folder-item-')
+                                    if (!isMovableSymbol(symbol) && !canEditFolder) return null
+                                    return (
+                                      <button
+                                        type="button"
+                                        data-no-dnd
+                                        aria-label="Más acciones del símbolo"
+                                        aria-haspopup="menu"
+                                        onClick={(e) => openGridSymbolActionsMenu(e, symbol, x, y)}
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        className="absolute right-1 top-1 z-30 grid h-6 w-6 place-items-center rounded-full border border-slate-200/90 bg-white/95 text-slate-700 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 focus-visible:opacity-100 group-hover:opacity-100 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+                                      >
+                                        <Menu size={14} strokeWidth={2.25} aria-hidden />
+                                      </button>
+                                    )
+                                  })()}
                               </motion.div>
                               {fixedZoneEditMode ? (
                                 <button
@@ -3653,10 +4028,41 @@ export default function AdminPage() {
                           <DroppableGridCell
                             key={`cell-${x}-${y}`}
                             cellId={`cell-${x}-${y}`}
+                            adminCellX={x}
+                            adminCellY={y}
                             className="flex min-h-0 min-w-0 w-full"
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
-                            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                            <div className="group/emptycel relative flex min-h-0 min-w-0 flex-1 flex-col">
+                            {!fixedZoneEditMode ? (
+                              <button
+                                type="button"
+                                disabled={!gridClipboard}
+                                aria-label={
+                                  gridClipboard
+                                    ? 'Pegar símbolo copiado en esta celda'
+                                    : 'Nada copiado; usa Copiar en el menú de otra celda'
+                                }
+                                title={
+                                  gridClipboard
+                                    ? 'Pegar en esta celda'
+                                    : 'Copia un símbolo con el menú (⋯) de otra celda'
+                                }
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  if (gridClipboard) handleGridContextPaste(x, y)
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                className={`pointer-events-none absolute right-1 top-1 z-30 grid h-6 w-6 place-items-center rounded-full border shadow-sm opacity-0 transition-[opacity,colors] duration-150 group-hover/emptycel:pointer-events-auto group-hover/emptycel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 ${
+                                  gridClipboard
+                                    ? 'cursor-pointer border-indigo-300/90 bg-white/95 text-indigo-600 hover:bg-indigo-50 focus-visible:outline-indigo-500 dark:border-indigo-500/55 dark:bg-slate-900/95 dark:text-indigo-300 dark:hover:bg-indigo-950/45'
+                                    : 'cursor-not-allowed border-slate-200/90 bg-white/95 text-slate-400 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-500'
+                                }`}
+                              >
+                                <ClipboardPaste size={14} strokeWidth={2.25} aria-hidden />
+                              </button>
+                            ) : null}
                             {isSplitHere ? (
                               <div
                                 className={`flex aspect-video w-full min-w-0 overflow-hidden rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter] duration-300 ease-out dark:border-slate-500/60 dark:bg-slate-950/45 ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button]:pointer-events-none' : ''}`}
@@ -3731,45 +4137,47 @@ export default function AdminPage() {
                       </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
-                        disabled={Boolean(blockGridResizeChrome || !canAddPreviewColumn)}
-                        title={
-                          symbolsLoadPending
-                            ? 'Cargando tablero…'
-                            : !canAddPreviewColumn
-                              ? 'Máximo 20 columnas'
+                      {showAdminAddColumnChrome ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleGridSizeUpdate(previewGridRows, previewGridCols + 1)}
+                          disabled={Boolean(blockGridResizeChrome)}
+                          title={
+                            symbolsLoadPending
+                              ? 'Cargando tablero…'
                               : activeFolder
                                 ? 'Sal de la carpeta para cambiar el tamaño del tablero'
                                 : 'Añadir una columna a la derecha'
-                        }
-                        className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
-                      >
-                        <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
-                        <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
-                          Añadir columna
-                        </span>
-                      </button>
+                          }
+                          className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
+                        >
+                          <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
+                          <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
+                            Añadir columna
+                          </span>
+                        </button>
+                      ) : null}
 
-                      <button
-                        type="button"
-                        onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
-                        disabled={Boolean(blockGridResizeChrome || !canAddPreviewRow)}
-                        title={
-                          symbolsLoadPending
-                            ? 'Cargando tablero…'
-                            : !canAddPreviewRow
-                              ? 'Máximo 20 filas'
+                      {showAdminAddRowChrome ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleGridSizeUpdate(previewGridRows + 1, previewGridCols)}
+                          disabled={Boolean(blockGridResizeChrome)}
+                          title={
+                            symbolsLoadPending
+                              ? 'Cargando tablero…'
                               : activeFolder
                                 ? 'Sal de la carpeta para cambiar el tamaño del tablero'
                                 : 'Añadir una fila abajo'
-                        }
-                        className="col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-span-2 md:col-start-1 md:row-start-2 md:py-5"
-                      >
-                        <Rows className="h-7 w-7 shrink-0" aria-hidden />
-                        <span>Añadir fila</span>
-                      </button>
+                          }
+                          className={`col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-1 md:row-start-2 md:py-5 ${
+                            showAdminAddColumnChrome ? 'md:col-span-2' : 'md:col-span-1'
+                          }`}
+                        >
+                          <Rows className="h-7 w-7 shrink-0" aria-hidden />
+                          <span>Añadir fila</span>
+                        </button>
+                      ) : null}
                     </div>
 
                     <DragOverlay>
@@ -5199,6 +5607,14 @@ export default function AdminPage() {
           }
           return { ok: false as const, error: result.error }
         }}
+      />
+
+      <AdminGridContextMenu
+        open={Boolean(gridContextMenu && gridContextMenuItems.length > 0)}
+        x={gridContextMenu?.x ?? 0}
+        y={gridContextMenu?.y ?? 0}
+        items={gridContextMenuItems}
+        onClose={closeGridContextMenu}
       />
 
     </div>

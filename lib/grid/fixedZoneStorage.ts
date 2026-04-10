@@ -1,5 +1,7 @@
 import { isPositionInBaseFixedZone } from '@/lib/grid/baseFixedZone'
 
+/** Persistido en `profiles.fixed_zone_cells`: un valor por tablero (`Profile`), independiente de los demás. */
+
 export const FIXED_ZONE_JSON_VERSION = 1 as const
 
 export type FixedZoneJson = {

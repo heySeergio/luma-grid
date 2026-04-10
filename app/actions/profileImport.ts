@@ -165,7 +165,6 @@ export async function importProfileBoardFromLuma(
     const positionX = Number(s.positionX)
     const positionY = Number(s.positionY)
     if (!Number.isFinite(positionX) || !Number.isFinite(positionY)) continue
-
     const color = typeof s.color === 'string' && s.color ? s.color : '#6366f1'
     const hidden = Boolean(s.hidden)
     const state =

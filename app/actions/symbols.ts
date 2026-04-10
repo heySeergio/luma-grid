@@ -22,6 +22,11 @@ import {
     wordVariantsCanonical,
 } from '@/lib/symbolWordVariants'
 import type { PosType, Symbol as AppSymbol } from '@/lib/supabase/types'
+import {
+    effectiveSymbolGridId,
+    findCellOverlaps,
+    resolveCellOverlapsBeforeSave,
+} from '@/lib/grid/gridCellOverlap'
 
 /** Prisma interactive tx default timeout is 5s; large grids exceed it and fail with "Transaction not found". */
 const SYMBOL_PERSIST_TX = { maxWait: 15_000, timeout: 60_000 } as const
@@ -117,15 +122,51 @@ function effectiveGridDimensions(profile: { gridCols: number; gridRows: number }
     }
 }
 
-/** Evita símbolos con coordenadas fuera del grid (columnas CSS implícitas comprimidas en /tablero). */
+/** `gridId` vacío o solo espacios no debe persistirse como «» (Prisma acepta string vacío y rompe el reparto por tablero). */
+function normalizeGridIdForPersist(sym: SymbolInput): string {
+    const raw = sym.gridId ?? sym.grid_id
+    if (raw == null) return 'main'
+    const t = String(raw).trim()
+    return t.length > 0 ? t : 'main'
+}
+
+/** Coacciona enteros de rejilla (el cliente a veces envía strings por inputs). */
+function parseGridInt(v: unknown, fallback: number): number {
+    if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
+    if (typeof v === 'string' && v.trim() !== '') {
+        const n = Number.parseInt(v.trim(), 10)
+        if (Number.isFinite(n)) return n
+    }
+    return fallback
+}
+
+/**
+ * El cliente puede enviar el mismo símbolo duplicado por id (doble envío, estado); solo debe contar una fila por id.
+ * Las filas sin id (creaciones nuevas) se mantienen todas.
+ */
+function dedupeSymbolInputsLastWins(symbols: SymbolInput[]): SymbolInput[] {
+    const byId = new Map<string, SymbolInput>()
+    const withoutId: SymbolInput[] = []
+    for (const s of symbols) {
+        const id = typeof s.id === 'string' && s.id.trim().length > 0 ? s.id.trim() : null
+        if (id) {
+            byId.set(id, s)
+        } else {
+            withoutId.push(s)
+        }
+    }
+    return [...withoutId, ...byId.values()]
+}
+
+/** Evita símbolos fuera del grid (1×1 por celda). */
 function filterSymbolInputsToGridBounds(
     symbols: SymbolInput[],
     cols: number,
     rows: number,
 ): SymbolInput[] {
     return symbols.filter((s) => {
-        const x = s.positionX ?? s.position_x ?? 0
-        const y = s.positionY ?? s.position_y ?? 0
+        const x = parseGridInt(s.positionX ?? s.position_x, 0)
+        const y = parseGridInt(s.positionY ?? s.position_y, 0)
         return x >= 0 && y >= 0 && x < cols && y < rows
     })
 }
@@ -181,7 +222,7 @@ function symbolInputMatchesDb(sym: SymbolInput, db: SymbolRowForDiff): boolean {
 
     if ((sym.state ?? 'visible') !== db.state) return false
 
-    const gridId = sym.gridId ?? sym.grid_id ?? 'main'
+    const gridId = normalizeGridIdForPersist(sym)
     if (gridId !== db.gridId) return false
 
     const opensKb = Boolean(sym.opensKeyboard ?? sym.opens_keyboard)
@@ -325,11 +366,11 @@ async function enrichSymbolInput(sym: SymbolInput) {
         posConfidence: resolvedPosConfidence,
         manualGrammarOverride,
         lexemeId: resolvedLexemeId,
-        positionX: sym.positionX ?? sym.position_x ?? 0,
-        positionY: sym.positionY ?? sym.position_y ?? 0,
+        positionX: parseGridInt(sym.positionX ?? sym.position_x, 0),
+        positionY: parseGridInt(sym.positionY ?? sym.position_y, 0),
         color: normalizeSymbolColor(sym.color ?? DEFAULT_SYMBOL_COLOR),
         state: sym.state ?? 'visible',
-        gridId: sym.gridId ?? sym.grid_id ?? 'main',
+        gridId: normalizeGridIdForPersist(sym),
         opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
         wordVariants: normalizeWordVariantsInput(sym.wordVariants ?? sym.word_variants),
         fixedCell: Boolean(sym.fixedCell ?? sym.fixed_cell),
@@ -464,7 +505,12 @@ async function persistSymbols(
             if (!enriched) continue
 
             const sym = symbols[index]
-            const data = buildSymbolWriteData(enriched, includeLexicalFields, includeWordVariants, includeFixedCell)
+            const data = buildSymbolWriteData(
+                enriched,
+                includeLexicalFields,
+                includeWordVariants,
+                includeFixedCell,
+            )
 
             if (sym.id && !sym.id.startsWith('new-') && !sym.id.startsWith('template') && !sym.id.startsWith('fixed-left')) {
                 await tx.symbol.update({
@@ -506,7 +552,12 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
     try {
         const rows = await prisma.symbol.findMany({
             where: { profileId },
-            select: { ...selectBase, opensKeyboard: true, wordVariants: true, fixedCell: true },
+            select: {
+                ...selectBase,
+                opensKeyboard: true,
+                wordVariants: true,
+                fixedCell: true,
+            },
         })
         return rows as SymbolRowForDiff[]
     } catch (error) {
@@ -523,7 +574,10 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
                 where: { profileId },
                 select: { ...selectBase, opensKeyboard: true, wordVariants: true },
             })
-            return rows.map((r) => ({ ...r, fixedCell: false }))
+            return rows.map((r) => ({
+                ...r,
+                fixedCell: false,
+            })) as SymbolRowForDiff[]
         } catch (e2) {
             if (
                 !isUnknownPrismaFieldError(e2, ['opensKeyboard', 'wordVariants']) &&
@@ -537,7 +591,11 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
                     where: { profileId },
                     select: { ...selectBase, opensKeyboard: true },
                 })
-                return rows.map((r) => ({ ...r, wordVariants: null, fixedCell: false }))
+                return rows.map((r) => ({
+                    ...r,
+                    wordVariants: null,
+                    fixedCell: false,
+                })) as SymbolRowForDiff[]
             } catch (e3) {
                 if (
                     !isUnknownPrismaFieldError(e3, ['opensKeyboard']) &&
@@ -549,7 +607,12 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
                     where: { profileId },
                     select: selectBase,
                 })
-                return rows.map((r) => ({ ...r, opensKeyboard: false, wordVariants: null, fixedCell: false }))
+                return rows.map((r) => ({
+                    ...r,
+                    opensKeyboard: false,
+                    wordVariants: null,
+                    fixedCell: false,
+                })) as SymbolRowForDiff[]
             }
         }
     }
@@ -605,7 +668,70 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         },
     })
 
-    const symbolsInBounds = filterSymbolInputsToGridBounds(symbols, cols, rows)
+    try {
+        const maybeStray = await prisma.symbol.findMany({
+            where: { profileId },
+            select: { id: true, positionX: true, positionY: true },
+        })
+        const strayIds = maybeStray
+            .filter(
+                (s) =>
+                    s.positionX < 0 ||
+                    s.positionY < 0 ||
+                    s.positionX >= cols ||
+                    s.positionY >= rows,
+            )
+            .map((s) => s.id)
+        if (strayIds.length > 0) {
+            await prisma.symbol.deleteMany({ where: { id: { in: strayIds }, profileId } })
+        }
+    } catch {
+        /* noop */
+    }
+
+    let symbolsInBounds = filterSymbolInputsToGridBounds(symbols, cols, rows)
+    symbolsInBounds = dedupeSymbolInputsLastWins(symbolsInBounds)
+    /** Antes de resolver solapes: mismo criterio que `enrichSymbolInput` (evita «main» vs cadena vacía). */
+    symbolsInBounds = symbolsInBounds.map((s) => ({
+        ...s,
+        gridId: normalizeGridIdForPersist(s),
+        grid_id: normalizeGridIdForPersist(s),
+    }))
+
+    /** Reubicar celdas para evitar dos símbolos en la misma celda (mismo gridId). */
+    const withIdsForResolve: SymbolInput[] = symbolsInBounds.map((s, i) => {
+        if (typeof s.id === 'string' && s.id.trim().length > 0) return s
+        return { ...s, id: `__pending_save_${i}` }
+    })
+    symbolsInBounds = resolveCellOverlapsBeforeSave(
+        withIdsForResolve as Array<SymbolInput & { id: string }>,
+        cols,
+        rows,
+    ).map((s) => {
+        if (typeof s.id === 'string' && s.id.startsWith('__pending_save_')) {
+            const { id: _drop, ...rest } = s
+            return rest as SymbolInput
+        }
+        return s as SymbolInput
+    })
+
+    const footprintProbeForSave = (list: SymbolInput[]) =>
+        findCellOverlaps(
+            list.map((s, i) => ({
+                id: typeof s.id === 'string' && s.id.length > 0 ? s.id : `row-${i}`,
+                positionX: parseGridInt(s.positionX ?? s.position_x, 0),
+                positionY: parseGridInt(s.positionY ?? s.position_y, 0),
+                gridId: effectiveSymbolGridId(s),
+            })),
+        )
+
+    const overlaps = footprintProbeForSave(symbolsInBounds)
+    if (overlaps.length > 0) {
+        const first = overlaps[0]
+        throw new Error(
+            `Hay símbolos que se solapan en el tablero (celda ${first.cell}: «${first.a}» y «${first.b}»). Ajusta posiciones antes de guardar.`,
+        )
+    }
 
     const owner = await prisma.user.findUnique({
         where: { id: session.user.id },
@@ -666,7 +792,12 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
                 await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, true)
             } catch (e3) {
                 if (!persistErrorRetriable(e3)) throw e3
-                await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false)
+                try {
+                    await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false)
+                } catch (e4) {
+                    if (!persistErrorRetriable(e4)) throw e4
+                    await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false)
+                }
             }
         }
     }

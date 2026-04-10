@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import { Delete, CornerDownLeft } from 'lucide-react'
 import { SPANISH_DICTIONARY } from '@/lib/data/spanishDictionary'
 import { keyboardThemeToCssVars, type KeyboardThemeColors } from '@/lib/keyboard/theme'
@@ -97,9 +97,25 @@ export default function Keyboard({
         ) : (
           <div
             style={keyFill(KB_SPECIAL_IDS.composer)}
-            className="kb-composer-input app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2 text-2xl font-semibold"
+            className="kb-composer-input app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2"
           >
-            {currentText || <span className="text-slate-400 dark:text-slate-500">Escribe aquí...</span>}
+            <input
+              type="text"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-label="Borrador de escritura antes de enviar a la frase"
+              value={currentText}
+              onChange={(e) => setCurrentText(e.target.value)}
+              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void handleAddWord()
+                }
+              }}
+              placeholder="Escribe aquí..."
+              className="w-full min-w-0 border-0 bg-transparent p-0 text-2xl font-semibold text-[inherit] outline-none ring-0 placeholder:text-slate-400 focus:ring-0 dark:placeholder:text-slate-500"
+            />
           </div>
         )}
         <button

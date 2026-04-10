@@ -102,7 +102,8 @@ model Profile {
   gridCols    Int                  @default(14) @map("grid_cols")
   /// Colores del teclado en /tablero (solo tema visual; JSON con claves hex).
   keyboardTheme Json?               @map("keyboard_theme")
-  /// Zona fija personalizada: `{ "v": 1, "keys": ["0:0","1:0",...] }`. Null = plantilla por defecto (7 col + fila 0).
+  /// Zona fija personalizada por tablero (independiente de otros `Profile` del mismo usuario).
+  /// Formato: `{ "v": 1, "keys": ["0:0","1:0",...] }`. Null = plantilla por defecto (7 col + fila 0).
   fixedZoneCells Json?              @map("fixed_zone_cells")
   symbols     Symbol[]
   transitions PredictionTransition[]

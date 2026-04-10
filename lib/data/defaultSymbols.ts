@@ -1298,7 +1298,12 @@ export function computeMainGrid(symbols: Symbol[], activeFolder: string | null):
         ...mergeDefaultVisualsForLabel(symbol.label, symbol),
       }
     })
-  const occupiedCells = new Set(customSymbols.map((symbol) => `${symbol.positionX}:${symbol.positionY}`))
+  const occupiedCells = new Set<string>()
+  for (const symbol of customSymbols) {
+    const px = symbol.positionX
+    const py = symbol.positionY
+    occupiedCells.add(`${px}:${py}`)
+  }
 
   /** Columnas a la derecha de la franja fija; filas desde la 2.ª (la 1.ª fila entera es zona fija). */
   const VARIABLE_COL_COUNT = TOTAL_COLUMNS - FIXED_COLUMNS

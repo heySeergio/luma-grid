@@ -62,7 +62,7 @@ export default function PhraseBar({
   const [, setHomeClickCount] = useState(0)
   const [showAdminAccessPrompt, setShowAdminAccessPrompt] = useState(false)
   const homeClickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** Alinea `disabled` de la barra con SSR/hidratación (evita mismatch si `symbols` difiere en el primer frame). */
+  /** Hasta tras hidratar: botones desactivados para alinear con SSR si `symbols` difiere en el primer frame. */
   const phraseChromeReady = useClientReady()
   const phraseActionsDisabled = !phraseChromeReady || symbols.length === 0
 

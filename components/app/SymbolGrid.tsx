@@ -95,7 +95,7 @@ export default function SymbolGrid({
   })
   const maxRow = Math.max(
     gridRows,
-    sorted.reduce((acc, symbol) => Math.max(acc, symbol.positionY + 1), 0)
+    sorted.reduce((acc, symbol) => Math.max(acc, symbol.positionY + 1), 0),
   )
 
   const gridDensity = getGridDensity(gridCols, gridRows)
@@ -164,10 +164,10 @@ export default function SymbolGrid({
           <div
             key={`${symbol.gridId ?? 'main'}-${posX}-${posY}-${symbol.id}-${idx}`}
             style={{
-              gridColumnStart: posX + 1,
-              gridRowStart: posY + 1,
+              gridColumn: `${posX + 1} / span 1`,
+              gridRow: `${posY + 1} / span 1`,
             }}
-            className="h-full"
+            className="h-full min-h-0"
           >
             {symbol.state !== 'hidden' && (
               <SymbolCell
