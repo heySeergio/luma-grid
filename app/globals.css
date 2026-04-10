@@ -387,6 +387,41 @@ textarea::placeholder {
   transform: scale(0.985);
 }
 
+/* Tema personalizado del teclado (/tablero): solo colores; variables opcionales desde AppInterface */
+.keyboard-theme-scope {
+  background: var(--kb-area-bg, transparent);
+}
+
+.keyboard-theme-scope .kb-composer-input {
+  background: var(--kb-input-bg, var(--app-surface-elevated)) !important;
+  color: var(--kb-input-text, var(--app-foreground)) !important;
+  border-color: var(--kb-input-border, var(--app-border)) !important;
+}
+
+.keyboard-theme-scope .ui-key-button {
+  background: var(--kb-key-bg, var(--app-surface-elevated));
+  border-color: var(--kb-key-border, var(--app-border));
+  color: var(--kb-key-text, var(--app-foreground));
+}
+
+.keyboard-theme-scope .ui-key-button:hover {
+  background: var(
+    --kb-key-bg-hover,
+    color-mix(in srgb, var(--kb-key-bg, var(--app-surface-elevated)) 88%, var(--app-hover))
+  );
+  border-color: var(--kb-key-border-hover, var(--app-border-strong));
+}
+
+.keyboard-theme-scope .ui-soft-badge {
+  background: var(--kb-pred-bg, color-mix(in srgb, var(--accent) 10%, transparent));
+  border-color: var(--kb-pred-border, color-mix(in srgb, var(--accent) 20%, transparent));
+  color: var(--kb-pred-text, inherit);
+}
+
+.dark .keyboard-theme-scope .ui-soft-badge {
+  color: var(--kb-pred-text, #c7d2fe);
+}
+
 .ui-empty-slot {
   background: color-mix(in srgb, var(--app-surface-muted) 78%, transparent);
   border: 1px dashed color-mix(in srgb, var(--app-border-strong) 75%, transparent);

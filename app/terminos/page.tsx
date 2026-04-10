@@ -7,7 +7,7 @@ const sections = [
       <>
         <p>
           Luma Grid es una aplicación orientada a la Comunicación Aumentativa y Alternativa (CAA/AAC), pensada para facilitar la creación
-          de frases, el uso de símbolos, la gestión de perfiles y la reproducción de voz. Puede utilizarse en navegador y, cuando el sistema lo
+          de frases, el uso de símbolos, la gestión de tableros y la reproducción de voz. Puede utilizarse en navegador y, cuando el sistema lo
           permita, instalarse como aplicación web (PWA).
         </p>
         <p>
@@ -25,7 +25,7 @@ const sections = [
           y sin realizar acciones que comprometan la seguridad o disponibilidad del sistema.
         </p>
         <p>
-          Los perfiles, símbolos, configuraciones y frases guardadas deben gestionarse de acuerdo con la finalidad asistencial y educativa del producto.
+          Los tableros, símbolos, configuraciones y frases guardadas deben gestionarse de acuerdo con la finalidad asistencial y educativa del producto.
         </p>
       </>
     ),

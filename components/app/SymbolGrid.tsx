@@ -2,7 +2,7 @@
 
 import { useRef, useCallback } from 'react'
 import { Apple, BookOpen, Heart, MapPin, Sparkles, Users } from 'lucide-react'
-import SymbolCell, { type SymbolGridDensity } from './SymbolCell'
+import SymbolCell, { type SymbolGridDensity, type SymbolSelectChoice } from './SymbolCell'
 import { shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
 
 function getGridDensity(gridCols: number, gridRows: number): SymbolGridDensity {
@@ -22,7 +22,7 @@ interface Props {
   symbols: Symbol[]
   predictedIds: string[]
   cellSize: GridCellSize
-  onSymbolSelect: (symbol: Symbol) => void
+  onSymbolSelect: (symbol: Symbol, choice?: SymbolSelectChoice) => void
   folders?: FolderItem[]
   onFolderSelect?: (folderName: string) => void
   gridCols?: number
@@ -47,9 +47,12 @@ export default function SymbolGrid({
     large: 'h-full',
   }
 
-  const handleSelect = useCallback((symbol: Symbol) => {
-    onSymbolSelect(symbol)
-  }, [onSymbolSelect])
+  const handleSelect = useCallback(
+    (symbol: Symbol, choice?: SymbolSelectChoice) => {
+      onSymbolSelect(symbol, choice)
+    },
+    [onSymbolSelect],
+  )
 
   const folderIconMap: Record<string, typeof Users> = {
     'Yo/Tú': Users,

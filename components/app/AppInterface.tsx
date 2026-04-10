@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import SymbolGrid from './SymbolGrid'
+import type { SymbolSelectChoice } from './SymbolCell'
 import PhraseBar from './PhraseBar'
 import Keyboard from './Keyboard'
 import QuickPhrases from './QuickPhrases'
@@ -11,7 +12,7 @@ import ProfileSelector from './ProfileSelector'
 import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
 import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymbols'
 import { detectQuestionType } from '@/lib/lexicon/questions'
-import { getProfiles } from '@/app/actions/profiles'
+import { getProfiles, updateProfileKeyboardTheme } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
 import { getPinnedPhrases, getFrequentPhrases, saveQuickPhrase } from '@/app/actions/phrases'
 import { getPhraseCompletionSuggestions, type PhraseCompletionChip } from '@/app/actions/phraseCompletion'
@@ -26,6 +27,8 @@ import { applyProfileGenders } from '@/lib/profileGender'
 import { speakText } from '@/lib/voice/speakClient'
 import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
+import type { KeyboardThemeColors } from '@/lib/keyboard/theme'
+import KeyboardThemeModal from '@/components/app/KeyboardThemeModal'
 
 type TabMode = 'grid' | 'keyboard'
 
@@ -35,6 +38,7 @@ type LocalProfile = Profile & {
   gridCols?: number
   gridRows?: number
   communication_gender?: 'male' | 'female'
+  keyboardTheme?: KeyboardThemeColors | null
 }
 
 type PredictionInputSymbol = {
@@ -67,6 +71,7 @@ export default function AppInterface() {
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
+  const [keyboardThemeModalOpen, setKeyboardThemeModalOpen] = useState(false)
 
   const profileId = profile?.id ?? ''
 
@@ -275,7 +280,7 @@ export default function AppInterface() {
     return subscribeToChanges()
   }, [profileId, resetPhraseTracking, loadSymbols, loadPinnedPhrases, loadFrequentPhrases, loadAccessConfig, subscribeToChanges])
 
-  const handleSymbolSelect = useCallback(async (symbol: Symbol) => {
+  const handleSymbolSelect = useCallback(async (symbol: Symbol, choice?: SymbolSelectChoice) => {
     const normalizedLabel = symbol.label.toLowerCase()
 
     if (shouldUseDefaultGridTemplate) {
@@ -314,8 +319,9 @@ export default function AppInterface() {
       return
     }
 
+    const rawPhraseLabel = choice?.phraseLabel ?? symbol.label
     const normalizedTokenLabel =
-      symbol.label === 'Y' ? 'y' : symbol.label === 'A' ? 'a' : symbol.label
+      rawPhraseLabel === 'Y' ? 'y' : rawPhraseLabel === 'A' ? 'a' : rawPhraseLabel
     const currentPhraseSymbols = [...selectedSymbols, {
       id: symbol.id,
       label: normalizedTokenLabel,
@@ -621,6 +627,7 @@ export default function AppInterface() {
           />
         ) : (
           <Keyboard
+            theme={profile?.keyboardTheme ?? null}
             onTextAdd={async (text) => {
               const analyzedTokens = await analyzeLexicalTextInput(text)
               if (analyzedTokens.length === 0) return
@@ -715,6 +722,41 @@ export default function AppInterface() {
           />
         )}
       </div>
+
+      {profile ? (
+        <div className="flex shrink-0 items-center gap-3 border-t border-slate-200/90 bg-[var(--app-surface-muted)] px-3 py-2 dark:border-slate-800">
+          <div
+            className="h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-600"
+            role="separator"
+            aria-orientation="vertical"
+          />
+          <button
+            type="button"
+            onClick={() => setKeyboardThemeModalOpen(true)}
+            className="text-left text-sm font-semibold text-indigo-600 transition hover:text-indigo-700 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
+          >
+            Colores del teclado
+          </button>
+        </div>
+      ) : null}
+
+      <KeyboardThemeModal
+        open={keyboardThemeModalOpen}
+        initialTheme={profile?.keyboardTheme ?? null}
+        profileName={profile?.name ?? ''}
+        onClose={() => setKeyboardThemeModalOpen(false)}
+        onSave={async (theme) => {
+          if (!profile) return { ok: false as const, error: 'Sin perfil' }
+          const result = await updateProfileKeyboardTheme(profile.id, theme)
+          if (result.ok) {
+            setProfile((p) =>
+              p && p.id === profile.id ? { ...p, keyboardTheme: result.theme } : p,
+            )
+            return { ok: true as const }
+          }
+          return { ok: false as const, error: result.error }
+        }}
+      />
 
       {/* Profile selector modal */}
       {showProfileSelector && (

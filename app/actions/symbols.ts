@@ -1,18 +1,29 @@
 'use server'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+import { isMissingDatabaseColumnError, isUnknownPrismaFieldError } from '@/lib/prisma/compat'
+import { findManySymbolsByProfileId } from '@/lib/prisma/symbolsForProfile'
 import { effectiveSubscriptionPlan, FREE_MAX_TOTAL_SYMBOLS } from '@/lib/subscription/plans'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
+import {
+    normalizeWordVariantsInput,
+    parseWordVariantsForClient,
+    wordVariantsCanonical,
+} from '@/lib/symbolWordVariants'
 import type { PosType, Symbol as AppSymbol } from '@/lib/supabase/types'
 
 /** Prisma interactive tx default timeout is 5s; large grids exceed it and fail with "Transaction not found". */
 const SYMBOL_PERSIST_TX = { maxWait: 15_000, timeout: 60_000 } as const
+
+/** Enriquecimiento léxico en segundo plano: como mucho este número de símbolos por transacción (y en secuencia por símbolo dentro del lote). */
+const LEXICON_BACKFILL_BATCH_SIZE = 50
 
 function mapPrismaSymbolToClient(
     s: {
@@ -33,6 +44,7 @@ function mapPrismaSymbolToClient(
         hidden: boolean
         state: string
         opensKeyboard?: boolean
+        wordVariants?: unknown | null
         createdAt: Date
         updatedAt: Date
     },
@@ -55,6 +67,7 @@ function mapPrismaSymbolToClient(
         hidden: s.hidden,
         state: s.state,
         opensKeyboard: Boolean(s.opensKeyboard),
+        wordVariants: parseWordVariantsForClient(s.wordVariants),
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
     }
@@ -85,6 +98,8 @@ type SymbolInput = {
     grid_id?: string | null
     opensKeyboard?: boolean
     opens_keyboard?: boolean
+    wordVariants?: unknown
+    word_variants?: unknown
 }
 
 function effectiveGridDimensions(profile: { gridCols: number; gridRows: number }) {
@@ -132,6 +147,7 @@ type SymbolRowForDiff = {
     gridId: string
     normalizedLabel: string
     opensKeyboard: boolean
+    wordVariants: unknown | null
 }
 
 /** Si devuelve true, el payload coincide con la fila: no hace falta enrich ni UPDATE. */
@@ -161,6 +177,13 @@ function symbolInputMatchesDb(sym: SymbolInput, db: SymbolRowForDiff): boolean {
 
     const opensKb = Boolean(sym.opensKeyboard ?? sym.opens_keyboard)
     if (opensKb !== db.opensKeyboard) return false
+
+    if (
+        wordVariantsCanonical(sym.wordVariants ?? sym.word_variants) !==
+        wordVariantsCanonical(db.wordVariants)
+    ) {
+        return false
+    }
 
     const manual = Boolean(sym.manualGrammarOverride ?? sym.manual_grammar_override)
     if (manual !== db.manualGrammarOverride) return false
@@ -293,10 +316,16 @@ async function enrichSymbolInput(sym: SymbolInput) {
         state: sym.state ?? 'visible',
         gridId: sym.gridId ?? sym.grid_id ?? 'main',
         opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
+        wordVariants: normalizeWordVariantsInput(sym.wordVariants ?? sym.word_variants),
     }
 }
 
-async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
+/**
+ * Persiste metadatos léxicos faltantes. Pensado para ejecutarse tras enviar la respuesta (`after`).
+ * Procesa en lotes de LEXICON_BACKFILL_BATCH_SIZE y enriquece un símbolo tras otro dentro de cada lote
+ * para no saturar el pool de Prisma/Neon.
+ */
+async function backfillProfileSymbolLexicon(profileId: string, userId: string): Promise<void> {
     try {
         const symbols = await prisma.symbol.findMany({
             where: {
@@ -325,36 +354,32 @@ async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
         })
 
         const symbolsToBackfill = symbols.filter(shouldBackfillLexicalMetadata)
-        if (symbolsToBackfill.length === 0) return null
+        if (symbolsToBackfill.length === 0) return
 
-        const enrichedSymbols = await Promise.all(symbolsToBackfill.map(enrichSymbolInput))
-
-        await prisma.$transaction(async (tx) => {
-            for (let index = 0; index < enrichedSymbols.length; index += 1) {
-                const enriched = enrichedSymbols[index]
-                await tx.symbol.update({
-                    where: { id: symbolsToBackfill[index].id },
-                    data: {
-                        normalizedLabel: enriched.normalizedLabel,
-                        posType: enriched.posType,
-                        posConfidence: enriched.posConfidence,
-                        manualGrammarOverride: enriched.manualGrammarOverride,
-                        lexemeId: enriched.lexemeId,
-                        color: enriched.color,
-                    },
-                })
+        for (let offset = 0; offset < symbolsToBackfill.length; offset += LEXICON_BACKFILL_BATCH_SIZE) {
+            const slice = symbolsToBackfill.slice(offset, offset + LEXICON_BACKFILL_BATCH_SIZE)
+            const enrichedSymbols: Awaited<ReturnType<typeof enrichSymbolInput>>[] = []
+            for (const sym of slice) {
+                enrichedSymbols.push(await enrichSymbolInput(sym))
             }
-        }, SYMBOL_PERSIST_TX)
 
-        return new Map(
-            symbolsToBackfill.map((symbol, index) => [
-                symbol.id,
-                {
-                    ...symbol,
-                    ...enrichedSymbols[index],
-                },
-            ]),
-        )
+            await prisma.$transaction(async (tx) => {
+                for (let index = 0; index < slice.length; index += 1) {
+                    const enriched = enrichedSymbols[index]
+                    await tx.symbol.update({
+                        where: { id: slice[index].id },
+                        data: {
+                            normalizedLabel: enriched.normalizedLabel,
+                            posType: enriched.posType,
+                            posConfidence: enriched.posConfidence,
+                            manualGrammarOverride: enriched.manualGrammarOverride,
+                            lexemeId: enriched.lexemeId,
+                            color: enriched.color,
+                        },
+                    })
+                }
+            }, SYMBOL_PERSIST_TX)
+        }
     } catch (error) {
         if (
             isUnknownPrismaFieldError(error, [
@@ -365,7 +390,7 @@ async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
                 'opensKeyboard',
             ])
         ) {
-            return null
+            return
         }
         throw error
     }
@@ -374,6 +399,7 @@ async function backfillProfileSymbolLexicon(profileId: string, userId: string) {
 function buildSymbolWriteData(
     enriched: Awaited<ReturnType<typeof enrichSymbolInput>>,
     includeLexicalFields: boolean,
+    includeWordVariants = true,
 ) {
     return {
         label: enriched.label,
@@ -387,6 +413,14 @@ function buildSymbolWriteData(
         state: enriched.state,
         gridId: enriched.gridId,
         opensKeyboard: enriched.opensKeyboard,
+        ...(includeWordVariants
+            ? {
+                wordVariants:
+                    enriched.wordVariants === null
+                        ? Prisma.JsonNull
+                        : (JSON.parse(JSON.stringify(enriched.wordVariants)) as Prisma.InputJsonValue),
+            }
+            : {}),
         ...(includeLexicalFields
             ? {
                 normalizedLabel: enriched.normalizedLabel,
@@ -403,6 +437,7 @@ async function persistSymbols(
     symbols: SymbolInput[],
     enrichedSymbols: Array<Awaited<ReturnType<typeof enrichSymbolInput>> | null>,
     includeLexicalFields: boolean,
+    includeWordVariants = true,
 ) {
     await prisma.$transaction(async (tx) => {
         for (let index = 0; index < symbols.length; index += 1) {
@@ -410,7 +445,7 @@ async function persistSymbols(
             if (!enriched) continue
 
             const sym = symbols[index]
-            const data = buildSymbolWriteData(enriched, includeLexicalFields)
+            const data = buildSymbolWriteData(enriched, includeLexicalFields, includeWordVariants)
 
             if (sym.id && !sym.id.startsWith('new-') && !sym.id.startsWith('template') && !sym.id.startsWith('fixed-left')) {
                 await tx.symbol.update({
@@ -452,16 +487,36 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
     try {
         const rows = await prisma.symbol.findMany({
             where: { profileId },
-            select: { ...selectBase, opensKeyboard: true },
+            select: { ...selectBase, opensKeyboard: true, wordVariants: true },
         })
         return rows as SymbolRowForDiff[]
     } catch (error) {
-        if (!isUnknownPrismaFieldError(error, ['opensKeyboard'])) throw error
-        const rows = await prisma.symbol.findMany({
-            where: { profileId },
-            select: selectBase,
-        })
-        return rows.map((r) => ({ ...r, opensKeyboard: false }))
+        if (
+            !isUnknownPrismaFieldError(error, ['opensKeyboard', 'wordVariants']) &&
+            !isMissingDatabaseColumnError(error, 'word_variants') &&
+            !isMissingDatabaseColumnError(error, 'opens_keyboard')
+        ) {
+            throw error
+        }
+        try {
+            const rows = await prisma.symbol.findMany({
+                where: { profileId },
+                select: { ...selectBase, opensKeyboard: true },
+            })
+            return rows.map((r) => ({ ...r, wordVariants: null }))
+        } catch (e2) {
+            if (
+                !isUnknownPrismaFieldError(e2, ['opensKeyboard']) &&
+                !isMissingDatabaseColumnError(e2, 'opens_keyboard')
+            ) {
+                throw e2
+            }
+            const rows = await prisma.symbol.findMany({
+                where: { profileId },
+                select: selectBase,
+            })
+            return rows.map((r) => ({ ...r, opensKeyboard: false, wordVariants: null }))
+        }
     }
 }
 
@@ -478,21 +533,16 @@ export async function getProfileSymbols(profileId: string) {
 
     const { cols, rows } = effectiveGridDimensions(profile)
 
-    const [symbols, backfilledById] = await Promise.all([
-        prisma.symbol.findMany({
-            where: { profileId },
-        }),
-        backfillProfileSymbolLexicon(profileId, session.user.id).catch(() => null),
-    ])
+    const symbols = await findManySymbolsByProfileId(profileId)
 
-    const merged = !backfilledById
-        ? symbols
-        : symbols.map((symbol) => {
-            const backfilled = backfilledById.get(symbol.id)
-            return backfilled ? { ...symbol, ...backfilled } : symbol
+    const userId = session.user.id
+    after(() => {
+        void backfillProfileSymbolLexicon(profileId, userId).catch(() => {
+            // Igual que antes: no fallar la petición si el backfill falla (p. ej. migración pendiente).
         })
+    })
 
-    const inBounds = merged.filter(
+    const inBounds = symbols.filter(
         (row) =>
             row.positionX >= 0 &&
             row.positionY >= 0 &&
@@ -511,7 +561,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         where: { id: profileId, userId: session.user.id }
     })
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (!profile) throw new Error('Tablero no encontrado')
 
     const { cols, rows } = effectiveGridDimensions(profile)
 
@@ -548,7 +598,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         })
         if (symbolsOnOtherNonDemoProfiles + symbolsInBounds.length > FREE_MAX_TOTAL_SYMBOLS) {
             throw new Error(
-                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total en tus perfiles (el tablero Demo no cuenta). Incluye carpetas. Visita /plan para ampliar el plan o reduce símbolos.`,
+                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total en tus tableros (el tablero Demo no cuenta). Incluye carpetas. Visita /plan para ampliar el plan o reduce símbolos.`,
             )
         }
     }
@@ -564,21 +614,30 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
     )
 
     try {
-        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, true)
+        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, true, true)
     } catch (error) {
-        if (
-            !isUnknownPrismaFieldError(error, [
+        const persistRetry =
+            isUnknownPrismaFieldError(error, [
                 'normalizedLabel',
                 'posConfidence',
                 'manualGrammarOverride',
                 'lexemeId',
                 'opensKeyboard',
-            ])
-        ) {
+                'wordVariants',
+            ]) || isMissingDatabaseColumnError(error, 'word_variants')
+        if (!persistRetry) {
             throw error
         }
 
-        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false)
+        try {
+            await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, true)
+        } catch (e2) {
+            const persistRetry2 =
+                isUnknownPrismaFieldError(e2, ['wordVariants']) ||
+                isMissingDatabaseColumnError(e2, 'word_variants')
+            if (!persistRetry2) throw e2
+            await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false)
+        }
     }
 
     revalidatePath('/admin')

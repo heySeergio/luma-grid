@@ -34,7 +34,7 @@ export async function createUserWithPasswordAndDemo(opts: {
         planSelectionCompletedAt: null,
         profiles: {
           create: {
-            name: 'Demo Profile',
+            name: 'Tablero Base',
             isDemo: true,
             gender: 'male',
           },
@@ -45,7 +45,7 @@ export async function createUserWithPasswordAndDemo(opts: {
 
     const profileId = created.profiles[0]?.id
     if (!profileId) {
-      throw new Error('No se pudo crear el perfil DEMO')
+      throw new Error('No se pudo crear el tablero DEMO')
     }
 
     await tx.symbol.createMany({
@@ -76,7 +76,7 @@ export async function createUserWithPasswordAndDemo(opts: {
 }
 
 /**
- * Busca usuario por email o lo crea con perfil DEMO y símbolos iniciales (p. ej. Google).
+ * Busca usuario por email o lo crea con tablero DEMO y símbolos iniciales (p. ej. Google).
  */
 export async function findOrCreateUserFromOAuth(opts: {
   email: string
@@ -99,7 +99,7 @@ export async function findOrCreateUserFromOAuth(opts: {
         planSelectionCompletedAt: null,
         profiles: {
           create: {
-            name: 'Demo Profile',
+            name: 'Tablero Base',
             isDemo: true,
             gender: 'male',
           },
@@ -110,7 +110,7 @@ export async function findOrCreateUserFromOAuth(opts: {
 
     const profileId = created.profiles[0]?.id
     if (!profileId) {
-      throw new Error('No se pudo crear el perfil DEMO')
+      throw new Error('No se pudo crear el tablero DEMO')
     }
 
     await tx.symbol.createMany({

@@ -1,3 +1,7 @@
+import type { WordVariantsConfig } from '@/lib/symbolWordVariants'
+
+export type { WordVariantsConfig } from '@/lib/symbolWordVariants'
+
 export type PosType = 'pronoun' | 'verb' | 'noun' | 'adj' | 'adverb' | 'prep' | 'other'
 export type VoiceEngine = 'webspeech' | 'elevenlabs'
 export type ScannerPattern = 'row' | 'cell' | 'quadrant'
@@ -45,6 +49,8 @@ export interface Symbol {
   state: string
   /** Si es true, en el tablero esta celda abre el teclado al pulsarse. */
   opensKeyboard?: boolean
+  /** Formas alternativas al pulsar (menú: mantener / botón / doble clic). */
+  wordVariants?: WordVariantsConfig
   arasaacId?: number
   createdAt: string
   updatedAt: string

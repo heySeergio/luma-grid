@@ -90,6 +90,8 @@ model Profile {
   isDemo      Boolean              @default(false) @map("is_demo")
   gridRows    Int                  @default(8) @map("grid_rows")
   gridCols    Int                  @default(14) @map("grid_cols")
+  /// Colores del teclado en /tablero (solo tema visual; JSON con claves hex).
+  keyboardTheme Json?               @map("keyboard_theme")
   symbols     Symbol[]
   transitions PredictionTransition[]
   usageEvents SymbolUsageEvent[]
@@ -121,10 +123,13 @@ model Symbol {
   state                 String             @default("visible") // "visible" | "locked" | "hidden"
   /// En el tablero, al pulsar abre la pestaña teclado (además de etiquetas Teclado / Números).
   opensKeyboard         Boolean            @default(false) @map("opens_keyboard")
+  /// Hasta 4 formas de palabra (JSON: enabled, defaultIndex, variants). Opcional.
+  wordVariants          Json?              @map("word_variants")
   usageEvents           SymbolUsageEvent[]
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
 
+  @@index([profileId])
   @@index([normalizedLabel])
   @@index([lexemeId])
 
@@ -146,6 +151,7 @@ model Phrase {
 model Lexeme {
   id               String                @id @default(cuid())
   lemma            String
+  /// Búsqueda por subcadena (p. ej. /api/vocabulary?q=): índice GIN `pg_trgm` en migración `lexeme_normalized_lemma_trgm`.
   normalizedLemma  String                @map("normalized_lemma")
   primaryPos       String                @map("primary_pos")
   secondaryPos     String?               @map("secondary_pos")

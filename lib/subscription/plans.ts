@@ -1,3 +1,5 @@
+import { hasComplimentaryUnlimitedPlan } from '@/lib/subscription/complimentary'
+
 /** Plan de producto Luma Grid (facturación y límites). */
 export type SubscriptionPlan = 'free' | 'voice' | 'identity'
 
@@ -9,10 +11,15 @@ export type UserSubscriptionFields = {
 }
 
 /**
- * Plan de pago (voz/identidad) con suscripción Stripe vigente y periodo no vencido.
- * Sin esto, ElevenLabs no aplica: se usa solo voz del navegador.
+ * Suscripción de pago vigente (Stripe) o cuenta de cortesía con plan Identidad.
+ * Sin suscripción activa (y sin cortesía), ElevenLabs no aplica: solo voz del navegador.
+ * Pasa `email` cuando lo tengas para aplicar cortesía aunque no haya suscripción en BD.
  */
-export function hasActivePaidSubscription(user: UserSubscriptionFields): boolean {
+export function hasActivePaidSubscription(
+  user: UserSubscriptionFields,
+  email?: string | null,
+): boolean {
+  if (hasComplimentaryUnlimitedPlan(email)) return true
   const tier = normalizeSubscriptionPlan(user.plan)
   if (tier !== 'voice' && tier !== 'identity') return false
   const sid = user.stripeSubscriptionId?.trim()
@@ -32,11 +39,12 @@ export function normalizeSubscriptionPlan(raw: string | null | undefined): Subsc
   return 'free'
 }
 
-/** Plan efectivo para permisos y cuotas (según campo `plan` en BD). */
+/** Plan efectivo para permisos y cuotas (BD + cuentas de cortesía al máximo). */
 export function effectiveSubscriptionPlan(
-  _email: string | null | undefined,
+  email: string | null | undefined,
   raw: string | null | undefined,
 ): SubscriptionPlan {
+  if (hasComplimentaryUnlimitedPlan(email)) return 'identity'
   return normalizeSubscriptionPlan(raw)
 }
 

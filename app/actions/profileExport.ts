@@ -3,9 +3,10 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { findManySymbolsByProfileId } from '@/lib/prisma/symbolsForProfile'
 
 /**
- * Exporta el tablero del perfil como JSON (respaldo / traslado manual).
+ * Exporta el tablero como JSON (respaldo / traslado manual).
  * No incluye datos de facturación ni historial de uso.
  */
 export async function exportProfileBoardJson(profileId: string): Promise<
@@ -17,19 +18,20 @@ export async function exportProfileBoardJson(profileId: string): Promise<
 
   const profile = await prisma.profile.findFirst({
     where: { id: profileId, userId: session.user.id },
-    include: {
-      symbols: {
-        orderBy: [{ positionY: 'asc' }, { positionX: 'asc' }],
-      },
-    },
   })
 
-  if (!profile) return { ok: false, error: 'Perfil no encontrado' }
+  if (!profile) return { ok: false, error: 'Tablero no encontrado' }
+
+  const symbolRows = await findManySymbolsByProfileId(profileId)
+  const symbolsOrdered = [...symbolRows].sort((a, b) => {
+    if (a.positionY !== b.positionY) return a.positionY - b.positionY
+    return a.positionX - b.positionX
+  })
 
   const safeName = profile.name
     .trim()
     .replace(/[^a-zA-Z0-9\-_.]+/g, '_')
-    .slice(0, 48) || 'perfil'
+    .slice(0, 48) || 'tablero'
   const filename = `luma-grid-${safeName}-${profile.id.slice(0, 8)}.json`
 
   const payload = {
@@ -43,7 +45,7 @@ export async function exportProfileBoardJson(profileId: string): Promise<
       gridCols: profile.gridCols,
       isDemo: profile.isDemo,
     },
-    symbols: profile.symbols.map((s) => ({
+    symbols: symbolsOrdered.map((s) => ({
       id: s.id,
       gridId: s.gridId,
       label: s.label,
@@ -61,6 +63,7 @@ export async function exportProfileBoardJson(profileId: string): Promise<
       hidden: s.hidden,
       state: s.state,
       opensKeyboard: s.opensKeyboard,
+      wordVariants: s.wordVariants,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),

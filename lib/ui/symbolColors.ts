@@ -18,6 +18,37 @@ export const PRESET_SYMBOL_COLORS = [
   { value: 'preset:folder', cssVar: 'var(--symbol-color-folder)' },
 ] as const
 
+/** Tonos hex adicionales para el editor de símbolos (complementan a los presets semánticos). */
+export const EXTRA_SYMBOL_HEX_SWATCHES = [
+  '#ffffff',
+  '#f1f5f9',
+  '#e2e8f0',
+  '#94a3b8',
+  '#64748b',
+  '#475569',
+  '#1e293b',
+  '#fecdd3',
+  '#fda4af',
+  '#fb7185',
+  '#f97316',
+  '#fbbf24',
+  '#fde047',
+  '#bef264',
+  '#4ade80',
+  '#16a34a',
+  '#0f766e',
+  '#5eead4',
+  '#22d3ee',
+  '#38bdf8',
+  '#3b82f6',
+  '#6366f1',
+  '#8b5cf6',
+  '#c084fc',
+  '#e879f9',
+  '#f472b6',
+  '#d946ef',
+] as const
+
 const LEGACY_COLOR_MAP: Record<string, string> = {
   '#f8fafc': 'preset:surface',
   '#dbeafe': 'preset:sky',

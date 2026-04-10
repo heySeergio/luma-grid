@@ -1,6 +1,6 @@
 # Luma Grid
 
-Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y alternativa en español. Combina un tablero de símbolos, construcción de frases, voz, perfiles configurables, panel de administración y una capa léxica que ayuda a conjugar, clasificar palabras y mejorar la predicción contextual.
+Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y alternativa en español. Combina un tablero de símbolos, construcción de frases, voz, tableros configurables, panel de administración y una capa léxica que ayuda a conjugar, clasificar palabras y mejorar la predicción contextual.
 
 **Descripción orientada a familias y equipos no técnicos:** [PROYECTO.md](./PROYECTO.md).
 
@@ -9,7 +9,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
 - Permite comunicarse mediante un grid de símbolos y carpetas temáticas.
 - Construye frases naturales a partir de selecciones AAC.
 - Usa una capa léxica para detectar tipo de palabra, enlazar lexemas y mejorar predicción/conjugación.
-- Incluye administración por perfiles con edición visual del tablero.
+- Incluye administración por tableros con edición visual del tablero.
 - Soporta tema claro/oscuro, branding propio y opción de tipografía adaptada a dislexia.
 - Está pensado para uso web tipo PWA y para evolucionar hacia flujos offline y accesibles.
 
@@ -19,7 +19,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
   Selección de símbolos, carpetas, frases rápidas, teclado y reproducción de voz.
 
 - `Panel de administración`
-  Gestión de perfiles (incl. perfil seleccionado al abrir el tablero), símbolos, posiciones, grid, carpetas en tablero demo y en perfiles propios, categorías, colores, cuenta y revisión léxica.
+  Gestión de tableros (incl. cuál se abre por defecto al iniciar), símbolos, posiciones, grid, carpetas en tablero demo y en tableros propios, categorías, colores, cuenta y revisión léxica.
 
 - `Autenticación`
   Login y registro con `NextAuth` + credenciales.
@@ -28,7 +28,7 @@ Luma Grid es una aplicación AAC/CAA pensada para comunicación aumentativa y al
   Detección automática de lema, POS, confianza, overrides manuales, conjugación y predicción por contexto.
 
 - `Predicción AAC`
-  Aprende de secuencias de uso y combina reglas gramaticales con historial del perfil.
+  Aprende de secuencias de uso y combina reglas gramaticales con historial del tablero.
 
 - `Branding y páginas públicas`
   Landing, branding, páginas legales y footer global.
@@ -88,7 +88,7 @@ prisma/
   Interfaz principal de comunicación AAC.
 
 - `/admin`
-  Panel de administración para perfiles y símbolos.
+  Panel de administración para tableros y símbolos.
 
 - `/branding`
   Página de sistema visual, logos, activos y paleta.
@@ -110,7 +110,7 @@ El proyecto separa muy claramente la parte visual AAC de la parte lingüística:
   Cuenta, tema preferido y opción de tipografía adaptada a dislexia.
 
 - `Profile`
-  Perfil de uso del comunicador. Cada usuario puede tener varios.
+  Tablero de uso del comunicador. Cada usuario puede tener varios.
 
 - `Symbol`
   Botón visual del grid. Guarda etiqueta, emoji, color, posición y metadatos léxicos.
@@ -152,7 +152,7 @@ Flujo general:
 2. Se busca coincidencia en alias, formas y lema.
 3. Si no hay coincidencia buena, se aplican heurísticas.
 4. Se guarda el análisis en el símbolo.
-5. La predicción reutiliza esa información junto al historial del perfil.
+5. La predicción reutiliza esa información junto al historial del tablero.
 
 La arquitectura léxica vive en el código: modelo en `prisma/schema.prisma`, datos semilla en `prisma/seed-lexicon.mjs`, lógica en `lib/lexicon/` y acciones en `app/actions/lexicon.ts` y `app/actions/predictions.ts`.
 
@@ -168,14 +168,14 @@ Incluye:
 - frases rápidas
 - sugerencias predictivas
 - lectura con voz
-- selector de perfil
+- selector de tablero
 - lógica de seguimiento de secuencia para aprendizaje
 
 ## Panel de administración
 
 El admin permite:
 
-- crear, editar y eliminar perfiles
+- crear, editar y eliminar tableros
 - cambiar dimensiones del grid
 - editar símbolos
 - cambiar color, emoji, categoría y tipo gramatical
@@ -256,7 +256,7 @@ npm run test:lexicon-detection
 
 ### Restaurar posiciones del tablero demo (BD)
 
-Si el perfil **demo** quedó descolocado (coordenadas en base de datos distintas de la plantilla), con `DATABASE_URL` cargada (`.env` / `.env.local`):
+Si el tablero **demo** quedó descolocado (coordenadas en base de datos distintas de la plantilla), con `DATABASE_URL` cargada (`.env` / `.env.local`):
 
 ```bash
 npm run repair:demo-email
@@ -268,7 +268,7 @@ Por defecto actúa sobre `sergio.tdc.tdc@gmail.com`. Otro usuario:
 REPAIR_EMAIL=correo@ejemplo.com npm run repair:demo-email
 ```
 
-En el panel **Admin** también hay el botón **Restaurar plantilla demo** (sidebar, con el perfil demo seleccionado, y en la cabecera de la vista grid).
+En el panel **Admin** también hay el botón **Restaurar plantilla demo** (sidebar, con el tablero demo seleccionado, y en la cabecera de la vista grid).
 
 ## Notas de desarrollo
 
@@ -279,7 +279,7 @@ En el panel **Admin** también hay el botón **Restaurar plantilla demo** (sideb
 
 ## Observabilidad léxica
 
-Además de `getProfileLexiconCoverage`, existe `getProfileLexiconObservability` en `app/actions/lexicon.ts` para exponer métricas operativas por perfil:
+Además de `getProfileLexiconCoverage`, existe `getProfileLexiconObservability` en `app/actions/lexicon.ts` para exponer métricas operativas por tablero:
 
 - cobertura y ratio resuelto
 - tasa de override manual
@@ -316,7 +316,7 @@ Buenas prácticas:
 Luma Grid ya tiene:
 
 - autenticación funcional
-- panel admin con perfiles
+- panel admin con tableros
 - grid base por defecto
 - branding integrado
 - sistema léxico operativo
@@ -328,7 +328,7 @@ Luma Grid ya tiene:
 
 - mejorar cobertura léxica de vocabulario no default
 - enriquecer aún más el diccionario de español AAC
-- ampliar analítica de uso por perfil
+- ampliar analítica de uso por tablero
 - afinar accesibilidad y scanning
 - preparar despliegue de producción y PWA completa
 

@@ -10,7 +10,7 @@ const sections = [
           de interfaz (por ejemplo tema claro/oscuro o tipografía), identificador de sesión y datos técnicos necesarios para el funcionamiento seguro.
         </p>
         <p>
-          Relacionados con el uso del producto: perfiles configurados, símbolos, disposición del tablero, frases, historial funcional dentro de la app,
+          Relacionados con el uso del producto: tableros configurados, símbolos, disposición del tablero, frases, historial funcional dentro de la app,
           ajustes de voz (modo de síntesis, identificador de voz cuando aplica) y métricas de uso del servicio de texto a voz (por ejemplo caracteres
           utilizados en un periodo de facturación), según el plan contratado.
         </p>
@@ -34,7 +34,7 @@ const sections = [
     content: (
       <>
         <p>
-          Los datos se utilizan para permitir el acceso a la aplicación, gestionar cuentas y suscripciones, guardar configuraciones, personalizar perfiles,
+          Los datos se utilizan para permitir el acceso a la aplicación, gestionar cuentas y suscripciones, guardar configuraciones, personalizar tableros,
           aplicar los límites del plan contratado, mejorar el sistema léxico y ofrecer funcionalidades como historial, predicción y reproducción de frases
           con voz del sistema o mediante proveedores de síntesis.
         </p>

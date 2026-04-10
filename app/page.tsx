@@ -87,7 +87,7 @@ export const metadata: Metadata = {
 const features = [
   {
     title: 'Grid AAC adaptable',
-    description: 'Pictogramas por categorías, búsqueda rápida y tamaño de celda configurable por perfil.',
+    description: 'Pictogramas por categorías, búsqueda rápida y tamaño de celda configurable por tablero.',
   },
   {
     title: 'Frases naturales con IA',
@@ -99,7 +99,7 @@ const features = [
   },
   {
     title: 'Panel para cuidadores',
-    description: 'Gestión centralizada de perfiles, voz, editor de grid y analítica de uso.',
+    description: 'Gestión centralizada de tableros, voz, editor de grid y analítica de uso.',
   },
 ]
 
@@ -194,7 +194,7 @@ export default function RootPage() {
                   href="/admin"
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-300/90 bg-white/70 px-6 py-3.5 text-sm font-semibold text-slate-800 backdrop-blur-sm transition hover:border-slate-400 hover:bg-white dark:border-white/20 dark:bg-white/5 dark:text-white/90 dark:hover:border-white/35 dark:hover:bg-white/10"
                 >
-                  Configurar perfiles
+                  Configurar tableros
                 </Link>
                 <Link
                   href="#precios"

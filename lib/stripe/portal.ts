@@ -1,13 +1,18 @@
 import { prisma } from '@/lib/prisma'
+import { hasComplimentaryUnlimitedPlan } from '@/lib/subscription/complimentary'
 import { getStripe } from '@/lib/stripe/server'
 
-export type PortalSessionResult = { url: string } | { error: 'no_customer' }
+export type PortalSessionResult = { url: string } | { error: 'no_customer' | 'complimentary' }
 
 export async function createStripePortalSessionUrl(userId: string): Promise<PortalSessionResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { stripeCustomerId: true },
+    select: { email: true, stripeCustomerId: true },
   })
+
+  if (hasComplimentaryUnlimitedPlan(user?.email)) {
+    return { error: 'complimentary' }
+  }
 
   if (!user?.stripeCustomerId) {
     return { error: 'no_customer' }

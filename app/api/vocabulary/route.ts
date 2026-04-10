@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 const DEFAULT_LIMIT = 200
 const MAX_LIMIT = 500
 
-/** Consultas filtran por índices en lexemes (primaryPos, aacPriority, semanticLayer, isCore); take limitado evita cargas grandes. */
+/** Filtros por columna usan B-tree donde aplica; `q` usa ILIKE/LIKE %% — rama `normalizedLemma` puede usar GIN(trgm) en `normalized_lemma` (migración lexeme_normalized_lemma_trgm). */
 
 /**
  * GET /api/vocabulary

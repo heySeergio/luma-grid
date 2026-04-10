@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
     }
 
-    if (!hasActivePaidSubscription(user)) {
+    if (!hasActivePaidSubscription(user, user.email)) {
       return NextResponse.json(
         { error: 'Clonar voz requiere suscripción activa (plan Identidad).' },
         { status: 403 },

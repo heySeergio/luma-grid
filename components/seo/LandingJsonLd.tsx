@@ -17,9 +17,9 @@ const FAQ_ITEMS = [
       'Hay un plan gratuito para empezar sin tarjeta. Los planes de pago incluyen voces naturales ElevenLabs, más tableros personalizados y funciones avanzadas según el plan.',
   },
   {
-    question: '¿Cómo configuro perfiles y voces?',
+    question: '¿Cómo configuro tableros y voces?',
     answer:
-      'Desde el panel de administración puedes crear perfiles, ajustar el grid, el género de comunicación, la voz y más. El acceso al panel está disponible desde el tablero según la configuración de tu cuenta.',
+      'Desde el panel de administración puedes crear tableros, ajustar el grid, el género de comunicación, la voz y más. El acceso al panel está disponible desde el tablero según la configuración de tu cuenta.',
   },
 ] as const
 

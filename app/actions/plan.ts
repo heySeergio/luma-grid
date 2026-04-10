@@ -50,7 +50,7 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
   return {
     signedIn: true,
     needsPlanSelection:
-      user.planSelectionCompletedAt == null && !hasActivePaidSubscription(user),
+      user.planSelectionCompletedAt == null && !hasActivePaidSubscription(user, user.email),
     plan: effectiveSubscriptionPlan(user.email, user.plan),
     stripeCustomerId: user.stripeCustomerId,
   }

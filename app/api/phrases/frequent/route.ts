@@ -28,7 +28,7 @@ export async function GET(req: Request) {
       select: { id: true },
     })
     if (!profile) {
-      return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Tablero no encontrado' }, { status: 404 })
     }
 
     const phrases = await prisma.phrase.findMany({

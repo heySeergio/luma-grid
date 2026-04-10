@@ -10,6 +10,7 @@ import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import type { TtsMode } from '@/lib/tts/types'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
 import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
+import { hasComplimentaryUnlimitedPlan } from '@/lib/subscription/complimentary'
 import {
   canUseElevenLabsPresets,
   canUseVoiceCloning,
@@ -26,6 +27,8 @@ export type VoiceSettingsDto = {
   monthlyCharLimit: number
   /** Suscripción Stripe vigente (voz/identidad); si es false, solo aplica voz del navegador. */
   hasActivePaidSubscription: boolean
+  /** Plan Identidad de cortesía (sin portal Stripe). */
+  complimentaryUnlimited: boolean
 }
 
 const DEFAULT_SETTINGS: VoiceSettingsDto = {
@@ -36,6 +39,7 @@ const DEFAULT_SETTINGS: VoiceSettingsDto = {
   ttsBillingMonth: '',
   monthlyCharLimit: getMonthlyCharLimit('free'),
   hasActivePaidSubscription: false,
+  complimentaryUnlimited: false,
 }
 
 function normalizeTtsMode(value: string | null | undefined): TtsMode {
@@ -67,7 +71,8 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
     if (!user) return null
 
     const plan = effectiveSubscriptionPlan(user.email, user.plan)
-    const activePaid = hasActivePaidSubscription(user)
+    const complimentary = hasComplimentaryUnlimitedPlan(user.email)
+    const activePaid = hasActivePaidSubscription(user, user.email)
     const ttsMode = activePaid ? normalizeTtsMode(user.ttsMode) : 'browser'
     const voiceId = activePaid ? user.voiceId : null
     return {
@@ -78,6 +83,7 @@ export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
       ttsBillingMonth: user.ttsBillingMonth ?? '',
       monthlyCharLimit: getMonthlyCharLimit(plan),
       hasActivePaidSubscription: activePaid,
+      complimentaryUnlimited: complimentary,
     }
   } catch (error) {
     if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId', 'plan', 'charactersUsed', 'ttsBillingMonth', 'stripeSubscriptionId', 'planExpiresAt'])) {
@@ -116,7 +122,7 @@ export async function updateVoiceSettings(data: {
   if (!user) throw new Error('Usuario no encontrado')
 
   const plan = effectiveSubscriptionPlan(user.email, user.plan)
-  const activePaid = hasActivePaidSubscription(user)
+  const activePaid = hasActivePaidSubscription(user, user.email)
 
   if (!activePaid) {
     if (ttsMode !== 'browser') {

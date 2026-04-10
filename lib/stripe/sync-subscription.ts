@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
 import { resolveDbPlanFromSubscriptionItems } from '@/lib/stripe/plan-mapping'
 import { periodEndFromSubscription } from '@/lib/stripe/subscription-helpers'
+import { shouldSkipStripeSubscriptionPull } from '@/lib/stripe/sync-bypass'
 import { hasActivePaidSubscription } from '@/lib/subscription/plans'
 import type Stripe from 'stripe'
 
@@ -26,6 +27,7 @@ export async function syncStripeSubscriptionForUser(userId: string): Promise<voi
     },
   })
   if (!user?.email?.trim()) return
+  if (shouldSkipStripeSubscriptionPull(user.email)) return
 
   const stripe = getStripe()
   const email = user.email.trim()
@@ -102,13 +104,15 @@ export async function maybeSyncStripeSubscriptionFromStripe(userId: string): Pro
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      email: true,
       plan: true,
       stripeSubscriptionId: true,
       planExpiresAt: true,
     },
   })
   if (!user) return
-  if (hasActivePaidSubscription(user)) return
+  if (shouldSkipStripeSubscriptionPull(user.email)) return
+  if (hasActivePaidSubscription(user, user.email)) return
 
   const now = Date.now()
   const last = lastStripeSyncByUser.get(userId) ?? 0

@@ -87,7 +87,10 @@ export default async function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
-      <body className={`${inter.variable} ${openDyslexic.variable} ${dyslexiaFontEnabled ? 'font-dyslexia-enabled' : ''}`}>
+      <body
+        className={`${inter.variable} ${openDyslexic.variable} ${dyslexiaFontEnabled ? 'font-dyslexia-enabled' : ''}`}
+        suppressHydrationWarning
+      >
         <Providers session={session}>
           {children}
         </Providers>
