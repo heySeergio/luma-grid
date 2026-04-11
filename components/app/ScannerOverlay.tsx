@@ -1,5 +1,10 @@
 'use client'
 
+/**
+ * Escáner para acceso asistido. Comprobaciones útiles con lector de pantalla: leer la tecla de confirmación,
+ * recorrer fila/celda/cuadrante, pausa al seleccionar, y velocidad extrema (lenta/rápida).
+ */
+
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { Symbol } from '@/lib/supabase/types'
 import type { ScannerPattern } from '@/lib/supabase/types'
@@ -14,6 +19,13 @@ interface Props {
 
 type RowSub = 'rows' | 'cells'
 type QuadSub = 'quads' | 'cells'
+
+function humanScanKey(scanKey: string): string {
+  const k = scanKey.trim()
+  if (!k || k === 'Space') return 'Espacio'
+  if (k.startsWith('Key') && k.length > 3) return k.slice(3)
+  return k
+}
 
 function sortGrid(symbols: Symbol[]) {
   return [...symbols].sort((a, b) => {
@@ -344,11 +356,21 @@ export default function ScannerOverlay({ symbols, pattern, speed, scanKey, onSel
     quadData,
   ])
 
+  const instructionsId = 'scanner-overlay-instructions'
+  const confirmHint = humanScanKey(scanKey)
+
   return (
-    <div
-      className="absolute inset-0 cursor-pointer"
-      onClick={handleActivation}
-      aria-label="Área del escáner — activa para seleccionar o bajar de nivel"
-    />
+    <>
+      <p id={instructionsId} className="sr-only">
+        Modo escáner activo. Pulsa {confirmHint} o activa esta zona para confirmar el símbolo o la región resaltada.
+        También puedes hacer clic en pantalla.
+      </p>
+      <div
+        className="absolute inset-0 cursor-pointer"
+        onClick={handleActivation}
+        aria-label={`Escáner AAC. Pulsa ${confirmHint} o clic para confirmar la selección resaltada.`}
+        aria-describedby={instructionsId}
+      />
+    </>
   )
 }

@@ -9,7 +9,7 @@ const FAQ_ITEMS = [
   {
     question: '¿Funciona sin conexión a internet?',
     answer:
-      'Sí. Luma Grid incluye modo offline con almacenamiento local (IndexedDB) y sincronización cuando vuelve la red, para usar el comunicador en cualquier situación.',
+      'Puedes seguir usando el tablero con almacenamiento local en el dispositivo; al recuperar la red se sincronizan los datos. Las sugerencias de predicción que dependen del servidor pueden actualizarse con retraso hasta completar la sincronización.',
   },
   {
     question: '¿Luma Grid es gratis?',
@@ -35,7 +35,7 @@ export function LandingJsonLd() {
       url: siteUrl,
       name: 'Luma Grid',
       description:
-        'Comunicación AAC en español: tablero de pictogramas, frases con IA, predicción, voz del dispositivo y voces naturales y realistas en planes de pago, PWA. Plan gratuito y opciones de pago.',
+        'Comunicación AAC en español: tablero de pictogramas, frases con IA, predicción, voz del dispositivo y voces naturales y realistas en planes de pago, continuidad con caché local y PWA. Plan gratuito y opciones de pago.',
       inLanguage: 'es-ES',
       isAccessibleForFree: true,
       publisher: { '@id': orgId },
@@ -68,7 +68,7 @@ export function LandingJsonLd() {
         description: 'Plan gratuito disponible; planes de pago opcionales.',
       },
       description:
-        'Aplicación AAC con grid de símbolos, conjugación en español, predicción contextual, voces naturales y realistas en planes de pago, modo offline y panel para familias y profesionales.',
+        'Aplicación AAC con grid de símbolos, conjugación en español, predicción contextual, voces naturales y realistas en planes de pago, continuidad con caché local y sincronización, y panel para familias y profesionales.',
       url: siteUrl,
       browserRequirements: 'Requiere navegador moderno con JavaScript.',
     },

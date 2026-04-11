@@ -9,7 +9,7 @@ const sections = [
           Las <strong className="text-[var(--app-foreground)]">cookies</strong> son pequeños archivos que el sitio puede guardar en tu dispositivo a
           través del navegador. Las tecnologías similares incluyen el <strong className="text-[var(--app-foreground)]">almacenamiento local</strong>{' '}
           (<em>localStorage</em>, <em>sessionStorage</em>) y, en aplicaciones web avanzadas, bases de datos en el dispositivo como{' '}
-          <strong className="text-[var(--app-foreground)]">IndexedDB</strong>, usadas para funcionar sin conexión o guardar datos de la aplicación.
+          <strong className="text-[var(--app-foreground)]">IndexedDB</strong>, usadas para datos de aplicación, colas de sincronización o caché.
         </p>
       </>
     ),
@@ -20,17 +20,21 @@ const sections = [
       <>
         <p>
           <strong className="text-[var(--app-foreground)]">Sesión e identificación:</strong> Luma Grid utiliza cookies o mecanismos equivalentes
-          (por ejemplo asociados a NextAuth) para mantener la sesión iniciada de forma segura tras el inicio de sesión y proteger rutas que requieren
-          autenticación (tablero, panel de administración, etc.).
+          asociados a <strong className="text-[var(--app-foreground)]">NextAuth</strong> (sesión basada en JWT) para mantener el inicio de sesión de forma
+          segura y proteger rutas que requieren autenticación (tablero, panel de administración, etc.). Si usas{' '}
+          <strong className="text-[var(--app-foreground)]">inicio de sesión con Google</strong>, el flujo de OAuth puede implicar cookies o almacenamiento
+          gestionado por Google durante la redirección; rigen las políticas de Google en ese contexto.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Preferencias en el navegador:</strong> pueden guardarse datos en almacenamiento local para
-          recordar opciones de la interfaz (por ejemplo tema claro u oscuro) o avisos ya mostrados (como confirmaciones de uso de funciones sensibles),
-          de modo que no tengas que repetir el mismo paso en cada visita.
+          <strong className="text-[var(--app-foreground)]">Preferencias y estado en el navegador:</strong> pueden guardarse datos en{' '}
+          <em>sessionStorage</em> o <em>localStorage</em> para recordar la bienvenida en el tablero, consejos ya mostrados, preferencias de interfaz o
+          estados de la sesión de navegación, según la versión del producto.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Funcionamiento de la aplicación:</strong> parte del contenido del tablero y datos de uso
-          pueden almacenarse en el dispositivo para permitir trabajo sin conexión o rendimiento fluido, según la versión del producto.
+          <strong className="text-[var(--app-foreground)]">IndexedDB (incl. Dexie):</strong> la aplicación puede usar una base de datos local en el
+          dispositivo para, entre otras cosas: mantener una <strong className="text-[var(--app-foreground)]">cola de eventos de uso</strong> pendientes de
+          envío al servidor cuando compartes datos para predicción y la conexión falla; almacenar <strong className="text-[var(--app-foreground)]">caché</strong>{' '}
+          de contenidos o audio; y datos de configuración de acceso. Así se mejora la continuidad con red intermitente hasta sincronizar.
         </p>
         <p>
           <strong className="text-[var(--app-foreground)]">Pagos (Stripe):</strong> si completas un pago o gestionas la suscripción a través de Stripe,
@@ -46,7 +50,8 @@ const sections = [
       <>
         <p>
           Si instalas Luma Grid como aplicación (PWA), el navegador puede registrar un <strong className="text-[var(--app-foreground)]">service worker</strong>{' '}
-          para cachear recursos y permitir el uso similar a una app nativa. Ese mecanismo es técnico y está orientado al funcionamiento del servicio.
+          para cachear recursos y permitir el uso similar a una app nativa. Ese mecanismo es técnico y está orientado al funcionamiento del servicio y a
+          la disponibilidad offline parcial descrita en la política de privacidad.
         </p>
       </>
     ),
@@ -56,11 +61,12 @@ const sections = [
     content: (
       <>
         <p>
-          <strong className="text-[var(--app-foreground)]">Necesarias / técnicas:</strong> imprescindibles para el inicio de sesión, la seguridad y
-          el funcionamiento básico de la aplicación.
+          <strong className="text-[var(--app-foreground)]">Necesarias / técnicas:</strong> imprescindibles para el inicio de sesión, la seguridad, la
+          sesión autenticada y el funcionamiento básico de la aplicación.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Preferencias:</strong> recuerdan elecciones de la interfaz o avisos ya aceptados.
+          <strong className="text-[var(--app-foreground)]">Preferencias y continuidad:</strong> recuerdan elecciones de la interfaz, avisos ya mostrados
+          o permiten retener datos localmente hasta sincronizar.
         </p>
         <p>
           Luma Grid no utiliza cookies de publicidad de terceros con fines de perfilado comercial en el sentido tradicional; cualquier medición orientada
@@ -74,8 +80,9 @@ const sections = [
     content: (
       <>
         <p>
-          Puedes configurar tu navegador para bloquear o eliminar cookies y datos de sitios, o borrar el almacenamiento local de Luma Grid. Ten en cuenta
-          que hacerlo puede cerrar tu sesión, borrar preferencias o afectar al modo sin conexión hasta que la aplicación vuelva a sincronizar.
+          Puedes configurar tu navegador para bloquear o eliminar cookies y datos de sitios, o borrar el almacenamiento local e IndexedDB de Luma Grid. Ten
+          en cuenta que hacerlo puede cerrar tu sesión, borrar preferencias, vaciar colas pendientes de sincronización o afectar al modo sin conexión hasta
+          que la aplicación vuelva a cargar y sincronizar.
         </p>
       </>
     ),
@@ -85,8 +92,8 @@ const sections = [
     content: (
       <>
         <p>
-          Esta política podrá actualizarse si cambian los mecanismos de almacenamiento, se incorporan nuevas integraciones (pagos, voz, analítica) o
-          funciones que utilicen cookies o almacenamiento local de forma distinta.
+          Esta política podrá actualizarse si cambian los mecanismos de almacenamiento, se incorporan nuevas integraciones (pagos, voz, identidad social,
+          modelos de IA) o funciones que utilicen cookies o almacenamiento local de forma distinta.
         </p>
       </>
     ),
@@ -98,7 +105,7 @@ export default function CookiesPage() {
     <LegalPage
       eyebrow="Cookies"
       title="Política de cookies"
-      intro="Resumen del uso de cookies, almacenamiento local y tecnologías similares en Luma Grid: sesión, preferencias, PWA y relación con el pago por Stripe."
+      intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google, PWA con service worker y relación con pagos Stripe."
       sections={sections}
     />
   )

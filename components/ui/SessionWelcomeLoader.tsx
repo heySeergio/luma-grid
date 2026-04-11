@@ -1,9 +1,9 @@
 'use client'
 
-import { useLayoutEffect, useState, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 
-const WELCOME_DURATION_MS = 7_000
+const WELCOME_DURATION_MS = 3_000
 
 type Props = {
   /** Clave única por ruta en sessionStorage (primera visita a esa ruta en la sesión del navegador). */
@@ -14,8 +14,26 @@ type Props = {
 /**
  * Pantalla de bienvenida fija la primera vez que se entra en una ruta en la sesión actual.
  */
+function markSeen(sessionKey: string) {
+  try {
+    sessionStorage.setItem(sessionKey, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function SessionWelcomeLoader({ sessionKey, children }: Props) {
   const [showOverlay, setShowOverlay] = useState(true)
+  const autoDismissTimerRef = useRef<number | null>(null)
+
+  const dismiss = useCallback(() => {
+    if (autoDismissTimerRef.current != null) {
+      window.clearTimeout(autoDismissTimerRef.current)
+      autoDismissTimerRef.current = null
+    }
+    markSeen(sessionKey)
+    setShowOverlay(false)
+  }, [sessionKey])
 
   useLayoutEffect(() => {
     let cancelled = false
@@ -31,19 +49,16 @@ export default function SessionWelcomeLoader({ sessionKey, children }: Props) {
 
     const id = window.setTimeout(() => {
       if (cancelled) return
-      try {
-        sessionStorage.setItem(sessionKey, '1')
-      } catch {
-        /* ignore */
-      }
-      setShowOverlay(false)
+      dismiss()
     }, WELCOME_DURATION_MS)
+    autoDismissTimerRef.current = id
 
     return () => {
       cancelled = true
       window.clearTimeout(id)
+      autoDismissTimerRef.current = null
     }
-  }, [sessionKey])
+  }, [sessionKey, dismiss])
 
   return (
     <>
@@ -66,6 +81,13 @@ export default function SessionWelcomeLoader({ sessionKey, children }: Props) {
             <p className="text-base text-[var(--app-muted-foreground)] sm:text-lg">
               Estamos preparando todo para ti
             </p>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="mt-4 rounded-2xl border border-indigo-300/60 bg-white/90 px-5 py-2.5 text-sm font-semibold text-indigo-900 shadow-sm transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-indigo-500/40 dark:bg-slate-900/80 dark:text-indigo-100 dark:hover:bg-slate-900"
+            >
+              Continuar ahora
+            </button>
           </div>
         </div>
       ) : null}

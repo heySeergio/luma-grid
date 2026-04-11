@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { getSubscriptionGateState } from '@/app/actions/plan'
 import PlanGateClient from '@/components/plan/PlanGateClient'
 import TableroForceLight from '@/components/tablero/TableroForceLight'
+import TableroQuickTips from '@/components/tablero/TableroQuickTips'
 import SessionWelcomeLoader from '@/components/ui/SessionWelcomeLoader'
 
 export const metadata: Metadata = {
@@ -18,7 +19,10 @@ export default async function TableroLayout({
     <TableroForceLight>
       <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
         <SessionWelcomeLoader sessionKey="luma-session-welcome-tablero-v1">
-          <PlanGateClient initialGate={initialGate}>{children}</PlanGateClient>
+          <PlanGateClient initialGate={initialGate}>
+            <TableroQuickTips />
+            {children}
+          </PlanGateClient>
         </SessionWelcomeLoader>
       </div>
     </TableroForceLight>

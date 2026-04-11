@@ -7,6 +7,24 @@ import Keyboard from '@/components/app/Keyboard'
 import { KEYBOARD_THEME_KEYS, type KeyboardGlobalThemeKey, type KeyboardThemeColors } from '@/lib/keyboard/theme'
 import { keyboardKeyIdLabel, isAllowedKeyColorId } from '@/lib/keyboard/layout'
 
+/** Colores habituales para el texto sobre fondos claros u oscuros. */
+const KEY_TEXT_PRESETS = [
+  '#0f172a',
+  '#1e293b',
+  '#334155',
+  '#ffffff',
+  '#f8fafc',
+  '#e2e8f0',
+  '#dc2626',
+  '#ea580c',
+  '#ca8a04',
+  '#16a34a',
+  '#2563eb',
+  '#7c3aed',
+  '#db2777',
+  '#0891b2',
+] as const
+
 /** Paleta rápida para teclas: tonos equilibrados para fondos de tecla (contraste con texto habitual). */
 const KEY_COLOR_PRESETS = [
   '#6366f1',
@@ -57,6 +75,7 @@ export default function KeyboardThemeModal({
 }: Props) {
   const [globalsDraft, setGlobalsDraft] = useState(() => emptyGlobals())
   const [keyColors, setKeyColors] = useState<Record<string, string>>({})
+  const [keyTextColors, setKeyTextColors] = useState<Record<string, string>>({})
   const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,6 +99,16 @@ export default function KeyboardThemeModal({
           )
         : {},
     )
+    const ktc = src.keyTextColors
+    setKeyTextColors(
+      ktc && typeof ktc === 'object'
+        ? Object.fromEntries(
+            Object.entries(ktc).filter(
+              ([id, v]) => typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v) && isAllowedKeyColorId(id),
+            ),
+          )
+        : {},
+    )
     setSelectedKeyId(null)
     setError(null)
   }, [open, initialTheme])
@@ -91,12 +120,18 @@ export default function KeyboardThemeModal({
       return acc
     }, {} as KeyboardThemeColors),
     keyColors: Object.keys(keyColors).length > 0 ? { ...keyColors } : undefined,
+    keyTextColors: Object.keys(keyTextColors).length > 0 ? { ...keyTextColors } : undefined,
   }
 
   const selectedHex =
     selectedKeyId && keyColors[selectedKeyId] && /^#[0-9A-Fa-f]{6}$/.test(keyColors[selectedKeyId])
       ? keyColors[selectedKeyId]
       : '#6366f1'
+
+  const selectedTextHex =
+    selectedKeyId && keyTextColors[selectedKeyId] && /^#[0-9A-Fa-f]{6}$/.test(keyTextColors[selectedKeyId])
+      ? keyTextColors[selectedKeyId]
+      : '#0f172a'
 
   const setSelectedKeyColor = useCallback(
     (hex: string) => {
@@ -116,6 +151,24 @@ export default function KeyboardThemeModal({
     })
   }, [selectedKeyId])
 
+  const setSelectedKeyTextColor = useCallback(
+    (hex: string) => {
+      if (!selectedKeyId) return
+      if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return
+      setKeyTextColors((prev) => ({ ...prev, [selectedKeyId]: hex }))
+    },
+    [selectedKeyId],
+  )
+
+  const clearSelectedKeyTextColor = useCallback(() => {
+    if (!selectedKeyId) return
+    setKeyTextColors((prev) => {
+      const n = { ...prev }
+      delete n[selectedKeyId]
+      return n
+    })
+  }, [selectedKeyId])
+
   const buildThemePayload = (): KeyboardThemeColors => {
     const out: KeyboardThemeColors = {}
     for (const k of KEYBOARD_THEME_KEYS) {
@@ -123,6 +176,7 @@ export default function KeyboardThemeModal({
       if (v && /^#[0-9A-Fa-f]{6}$/.test(v)) out[k] = v
     }
     if (Object.keys(keyColors).length > 0) out.keyColors = { ...keyColors }
+    if (Object.keys(keyTextColors).length > 0) out.keyTextColors = { ...keyTextColors }
     return out
   }
 
@@ -174,7 +228,7 @@ export default function KeyboardThemeModal({
                 <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
                   <span className="font-medium text-slate-700 dark:text-slate-300">{profileName}</span>
                   {' · '}
-                  Vista previa a la izquierda; color por tecla en el panel derecho.
+                  Vista previa a la izquierda; fondo y texto por tecla en el panel derecho.
                 </p>
               </div>
               <button
@@ -214,11 +268,11 @@ export default function KeyboardThemeModal({
                     </div>
 
                     <div>
-                      <p className="mb-2 text-xs font-semibold text-slate-800 dark:text-slate-200">Sugeridos</p>
+                      <p className="mb-2 text-xs font-semibold text-slate-800 dark:text-slate-200">Fondo — sugeridos</p>
                       <div
                         className="grid grid-cols-7 gap-1.5"
                         role="group"
-                        aria-label="Colores sugeridos para la tecla"
+                        aria-label="Colores sugeridos para el fondo de la tecla"
                       >
                         {KEY_COLOR_PRESETS.map((hex) => {
                           const current = keyColors[selectedKeyId]
@@ -252,18 +306,18 @@ export default function KeyboardThemeModal({
                     </div>
 
                     <div className="rounded-xl border border-slate-200/90 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Personalizado</p>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Fondo — personalizado</p>
                       <div className="mt-2 flex items-end gap-2">
                         <input
                           type="color"
                           value={selectedHex}
                           onChange={(e) => setSelectedKeyColor(e.target.value)}
                           className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-transparent p-0.5 dark:border-slate-600"
-                          aria-label="Selector de color personalizado"
+                          aria-label="Selector de color de fondo personalizado"
                         />
                         <div className="min-w-0 flex-1">
                           <label htmlFor="kb-key-hex" className="sr-only">
-                            Código HEX
+                            Código HEX del fondo
                           </label>
                           <input
                             id="kb-key-hex"
@@ -291,13 +345,104 @@ export default function KeyboardThemeModal({
                       onClick={clearSelectedKeyColor}
                       className="w-full rounded-lg border border-slate-200/90 bg-white/90 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
                     >
-                      Quitar color de esta tecla
+                      Quitar color de fondo de esta tecla
+                    </button>
+
+                    <div className="border-t border-slate-200/80 pt-3 dark:border-white/10">
+                      <p className="mb-2 text-xs font-semibold text-slate-800 dark:text-slate-200">Texto — sugeridos</p>
+                      <div
+                        className="grid grid-cols-7 gap-1.5"
+                        role="group"
+                        aria-label="Colores sugeridos para el texto de la tecla"
+                      >
+                        {KEY_TEXT_PRESETS.map((hex) => {
+                          const current = keyTextColors[selectedKeyId]
+                          const active =
+                            typeof current === 'string' &&
+                            /^#[0-9A-Fa-f]{6}$/.test(current) &&
+                            current.toLowerCase() === hex.toLowerCase()
+                          const isLight =
+                            hex === '#ffffff' || hex === '#f8fafc' || hex === '#e2e8f0'
+                          return (
+                            <button
+                              key={hex}
+                              type="button"
+                              onClick={() => setSelectedKeyTextColor(hex)}
+                              title={hex}
+                              aria-pressed={active}
+                              className={`relative aspect-square min-h-7 w-full max-h-9 rounded-lg border-2 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--app-surface-muted)] dark:focus-visible:ring-offset-slate-900 ${
+                                active
+                                  ? 'border-indigo-500 ring-1 ring-indigo-400/50 dark:border-indigo-400'
+                                  : 'border-black/[0.08] hover:scale-105 hover:border-slate-300 dark:border-white/15 dark:hover:border-white/30'
+                              }`}
+                              style={{ backgroundColor: hex }}
+                            >
+                              <span
+                                className={`absolute inset-0 flex items-center justify-center text-[0.65rem] font-bold ${
+                                  isLight ? 'text-slate-800' : 'text-white'
+                                }`}
+                                aria-hidden
+                              >
+                                A
+                              </span>
+                              {active ? (
+                                <span className="absolute inset-0 flex items-start justify-end p-0.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-sm ring-1 ring-white" />
+                                </span>
+                              ) : null}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200/90 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Texto — personalizado</p>
+                      <div className="mt-2 flex items-end gap-2">
+                        <input
+                          type="color"
+                          value={selectedTextHex}
+                          onChange={(e) => setSelectedKeyTextColor(e.target.value)}
+                          className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-transparent p-0.5 dark:border-slate-600"
+                          aria-label="Selector de color de texto personalizado"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <label htmlFor="kb-key-text-hex" className="sr-only">
+                            Código HEX del texto
+                          </label>
+                          <input
+                            id="kb-key-text-hex"
+                            type="text"
+                            value={keyTextColors[selectedKeyId] ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value.trim()
+                              if (v === '') {
+                                clearSelectedKeyTextColor()
+                                return
+                              }
+                              if (/^#[0-9A-Fa-f]{6}$/.test(v)) setSelectedKeyTextColor(v)
+                            }}
+                            placeholder="#rrggbb"
+                            spellCheck={false}
+                            autoComplete="off"
+                            className="app-input w-full rounded-lg px-2 py-2 font-mono text-sm tracking-wide"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={clearSelectedKeyTextColor}
+                      className="w-full rounded-lg border border-slate-200/90 bg-white/90 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+                    >
+                      Quitar color de texto de esta tecla
                     </button>
                   </div>
                 ) : (
                   <div className="flex flex-1 items-center p-4 sm:p-5">
                     <p className="text-center text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Pulsa una tecla del teclado para elegir su color.
+                      Pulsa una tecla del teclado para ajustar su fondo y el color del texto.
                     </p>
                   </div>
                 )}

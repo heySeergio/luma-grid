@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type KeyboardEvent } from 'react'
+import { useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { Delete, CornerDownLeft } from 'lucide-react'
 import { SPANISH_DICTIONARY } from '@/lib/data/spanishDictionary'
 import { keyboardThemeToCssVars, type KeyboardThemeColors } from '@/lib/keyboard/theme'
@@ -45,11 +45,29 @@ export default function Keyboard({
       : SPANISH_DICTIONARY.filter(w => w.startsWith(lastWord) && w !== lastWord).slice(0, 8)
 
   const keyColors = theme?.keyColors
+  const keyTextColors = theme?.keyTextColors
 
   const keyFill = (id: string) => {
     const hex = keyColors?.[id]
     if (hex && /^#[0-9A-Fa-f]{6}$/.test(hex)) return { backgroundColor: hex } as const
     return undefined
+  }
+
+  /** Color de texto por tecla; en la barra de escritura usa `--kb-input-text` por el `!important` del tema. */
+  const keyTextFill = (id: string): CSSProperties | undefined => {
+    const hex = keyTextColors?.[id]
+    if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return undefined
+    if (id === KB_SPECIAL_IDS.composer) {
+      return { ['--kb-input-text' as string]: hex }
+    }
+    return { color: hex }
+  }
+
+  const keyStyle = (id: string): CSSProperties | undefined => {
+    const bg = keyFill(id)
+    const tx = keyTextFill(id)
+    if (!bg && !tx) return undefined
+    return { ...bg, ...tx }
   }
 
   const keyRing = (id: string) =>
@@ -89,14 +107,14 @@ export default function Keyboard({
           <button
             type="button"
             onClick={() => onKeyPick?.(KB_SPECIAL_IDS.composer)}
-            style={keyFill(KB_SPECIAL_IDS.composer)}
+            style={keyStyle(KB_SPECIAL_IDS.composer)}
             className={`kb-composer-input app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2 text-left text-2xl font-semibold transition cursor-pointer ${keyRing(KB_SPECIAL_IDS.composer)}`}
           >
             {currentText || <span className="text-slate-400 dark:text-slate-500">Escribe aquí...</span>}
           </button>
         ) : (
           <div
-            style={keyFill(KB_SPECIAL_IDS.composer)}
+            style={keyStyle(KB_SPECIAL_IDS.composer)}
             className="kb-composer-input app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2"
           >
             <input
@@ -127,7 +145,7 @@ export default function Keyboard({
             void handleAddWord()
           }}
           disabled={pickMode ? false : !currentText.trim() || isSubmitting}
-          style={keyFill(KB_SPECIAL_IDS.send)}
+          style={keyStyle(KB_SPECIAL_IDS.send)}
           className={`ui-icon-button ui-key-button col-span-1 grid place-items-center rounded-[1.3rem] disabled:opacity-40 ${keyRing(KB_SPECIAL_IDS.send)}`}
           aria-label="Agregar palabra"
           type="button"
@@ -142,7 +160,7 @@ export default function Keyboard({
             }
             handleDelete()
           }}
-          style={keyFill(KB_SPECIAL_IDS.backspace)}
+          style={keyStyle(KB_SPECIAL_IDS.backspace)}
           className={`ui-icon-button ui-key-button col-span-1 grid place-items-center rounded-[1.3rem] ${keyRing(KB_SPECIAL_IDS.backspace)}`}
           aria-label="Borrar caracter"
           type="button"
@@ -168,7 +186,7 @@ export default function Keyboard({
                     }
                     handleKey(key)
                   }}
-                  style={keyFill(id)}
+                  style={keyStyle(id)}
                   className={`ui-key-button h-full rounded-[1.25rem] text-5xl font-bold ${keyRing(id)}`}
                 >
                   {key}
@@ -193,7 +211,7 @@ export default function Keyboard({
                       }
                       handleKey(key)
                     }}
-                    style={keyFill(id)}
+                    style={keyStyle(id)}
                     className={`ui-key-button h-full rounded-[1.25rem] text-5xl font-bold ${keyRing(id)}`}
                   >
                     {key}
@@ -218,7 +236,7 @@ export default function Keyboard({
                     }
                     handleKey(key)
                   }}
-                  style={keyFill(id)}
+                  style={keyStyle(id)}
                   className={`ui-key-button h-full rounded-[1.25rem] text-5xl font-bold ${keyRing(id)}`}
                 >
                   {key}
@@ -234,7 +252,7 @@ export default function Keyboard({
                 }
                 setCurrentText(prev => prev + ' ')
               }}
-              style={keyFill(KB_SPECIAL_IDS.space)}
+              style={keyStyle(KB_SPECIAL_IDS.space)}
               className={`ui-key-button col-span-6 h-full rounded-[1.25rem] text-3xl font-semibold ${keyRing(KB_SPECIAL_IDS.space)}`}
             >
               Espacio
@@ -252,7 +270,7 @@ export default function Keyboard({
                     }
                     handleKey(key)
                   }}
-                  style={keyFill(id)}
+                  style={keyStyle(id)}
                   className={`ui-key-button h-full rounded-[1.25rem] text-5xl font-bold ${keyRing(id)}`}
                 >
                   {key}

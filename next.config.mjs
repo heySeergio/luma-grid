@@ -36,9 +36,21 @@ const nextConfig = {
    * a veces genera ENOENT (*.pack.gz, routes-manifest) en Windows si la carpeta se toca con el servidor en marcha.
    * Desactivar la caché de Webpack en desarrollo evita ese estado roto (algo más lento al compilar).
    */
-  webpack: (config, { dev }) => {
+  webpack: (config, { dev, isServer }) => {
     if (dev) {
-      config.cache = false
+      /**
+       * `cache: false` evitaba ENOENT en caché en disco (Windows), pero recompila todo en cada
+       * navegación y provoca timeouts al cargar chunks grandes (p. ej. `/admin`).
+       * Caché en memoria acelera sin escribir los `.pack` problemáticos bajo `.next/dev/cache/webpack`.
+       */
+      config.cache = { type: 'memory' }
+    }
+    /** Evita ChunkLoadError si la compilación del chunk tarda más de lo habitual (dev lento). */
+    if (!isServer) {
+      config.output = {
+        ...config.output,
+        chunkLoadTimeout: 180000,
+      }
     }
     return config
   },

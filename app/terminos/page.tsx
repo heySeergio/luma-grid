@@ -38,9 +38,14 @@ const sections = [
           Cada usuario es responsable de mantener la confidencialidad de sus credenciales y de la actividad realizada con su cuenta.
         </p>
         <p>
-          Luma Grid incorpora autenticación y control de acceso para proteger áreas como el tablero y el panel de administración. Tras el registro
-          o el inicio de sesión puede solicitarse la elección de un plan de uso (incluido un plan gratuito sin obligación de pago); hasta completar
-          ese paso, el acceso a determinadas áreas puede estar condicionado según la configuración del producto.
+          Luma Grid incorpora autenticación y control de acceso para proteger áreas como el tablero y el panel de administración. Puedes registrarte
+          e iniciar sesión con <strong className="text-[var(--app-foreground)]">correo electrónico y contraseña</strong> y, cuando esté habilitado en la
+          instalación, con <strong className="text-[var(--app-foreground)]">Google</strong> u otros proveedores de identidad. Al usar el inicio de sesión
+          social aceptas también las condiciones aplicables de ese proveedor en lo que corresponda.
+        </p>
+        <p>
+          Tras el registro o el inicio de sesión puede solicitarse la elección de un plan de uso (incluido un plan gratuito sin obligación de pago);
+          hasta completar ese paso, el acceso a determinadas áreas puede estar condicionado según la configuración del producto.
         </p>
       </>
     ),
@@ -77,14 +82,32 @@ const sections = [
           de esos datos por parte del proveedor conforme a sus términos y políticas.
         </p>
         <p>
-          Los límites de uso (por ejemplo, número de tableros, caracteres de voz al mes o funciones disponibles) dependen del plan contratado y de
-          la configuración técnica del servicio en cada momento.
+          Los límites de uso (por ejemplo, caracteres de síntesis de voz al mes según facturación, voces disponibles o funciones del plan) dependen del
+          plan contratado y de la configuración técnica del servicio en cada momento.
         </p>
       </>
     ),
   },
   {
-    title: '6. Propiedad intelectual',
+    title: '6. Predicción AAC y datos de uso',
+    content: (
+      <>
+        <p>
+          Las sugerencias de palabras en el comunicador se calculan en el servidor a partir del léxico, del historial de uso asociado a tu cuenta
+          (cuando lo permitas) y de reglas del producto. Puedes{' '}
+          <strong className="text-[var(--app-foreground)]">desactivar el envío de pulsaciones y transiciones para aprendizaje de predicción</strong> en
+          la configuración de cuenta; en ese caso el servicio deja de registrar esos datos para ese fin, sin perjuicio de lo necesario para el
+          funcionamiento básico descrito en la política de privacidad.
+        </p>
+        <p>
+          Sin conexión o durante cortes de red, parte de la experiencia puede apoyarse en almacenamiento local del dispositivo; la predicción que
+          dependa del servidor puede actualizarse con retraso hasta sincronizar.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: '7. Propiedad intelectual',
     content: (
       <>
         <p>
@@ -97,7 +120,7 @@ const sections = [
     ),
   },
   {
-    title: '7. Limitación de responsabilidad',
+    title: '8. Limitación de responsabilidad',
     content: (
       <>
         <p>
@@ -111,7 +134,7 @@ const sections = [
     ),
   },
   {
-    title: '8. Modificaciones',
+    title: '9. Modificaciones',
     content: (
       <>
         <p>
@@ -127,7 +150,7 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Términos y condiciones"
       title="Términos y condiciones de uso"
-      intro="Estas condiciones regulan el acceso y uso de Luma Grid, incluidos planes gratuitos y de pago, integración con proveedores de pago y de voz, y el uso de la aplicación como PWA."
+      intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, inicio de sesión con correo o Google, integración con pagos (Stripe), voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."
       sections={sections}
     />
   )

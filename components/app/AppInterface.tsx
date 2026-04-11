@@ -8,6 +8,7 @@ import Keyboard from './Keyboard'
 import QuickPhrases from './QuickPhrases'
 import PhraseCompletionChips from './PhraseCompletionChips'
 import ScannerOverlay from './ScannerOverlay'
+import PendingSyncStatus from './PendingSyncStatus'
 import ProfileSelector from './ProfileSelector'
 import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
 import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymbols'
@@ -84,7 +85,7 @@ export default function AppInterface({
   const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null)
   const [activeTab, setActiveTab] = useState<TabMode>(initialDefaultTableroTab)
-  const [, setIsOnline] = useState(true)
+  const [isOnline, setIsOnline] = useState(true)
   const [predictedIds, setPredictedIds] = useState<string[]>([])
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
   const [, setFolderHistory] = useState<string[]>([])
@@ -657,6 +658,7 @@ export default function AppInterface({
 
   return (
     <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+      <PendingSyncStatus isOnline={isOnline} shareUsageForPredictions={shareUsageForPredictions} />
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
         <QuickPhrases phrases={pinnedPhrases} onSpeak={handleQuickPhraseTap} />

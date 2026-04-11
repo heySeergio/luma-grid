@@ -19,12 +19,14 @@ const features = [
       'Conjugación y predicción en español para comunicar más rápido. Puedes escuchar con la voz del dispositivo o con voces naturales y realistas —muy parecidas a una persona— y con buena entonación.',
   },
   {
-    title: 'Modo offline real',
-    description: 'Funciona sin conexión con IndexedDB, sincronización automática y caché inteligente.',
+    title: 'Continuidad con poca o sin red',
+    description:
+      'Caché local en el dispositivo para seguir usando el tablero; al volver la conexión se sincronizan datos. Sin red, las sugerencias de predicción pueden ir con retraso hasta que el servidor reciba el aprendizaje pendiente.',
   },
   {
     title: 'Panel para cuidadores',
-    description: 'Gestión centralizada de tableros, voz, editor de grid y analítica de uso.',
+    description:
+      'Gestión de tableros, voz, editor de grid, revisión léxica y métricas de cobertura por tablero para priorizar mejoras de vocabulario.',
   },
 ]
 
@@ -170,7 +172,7 @@ export default function LandingPageOriginal({ includeJsonLd = true, comingSoon =
                 </li>
                 <li className="flex items-center gap-2">
                   <WifiOff className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-                  Modo offline con sincronización
+                  Uso con intermitencia de red y sincronización al reconectar
                 </li>
               </ul>
             </div>

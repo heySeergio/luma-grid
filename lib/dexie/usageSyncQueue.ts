@@ -49,6 +49,11 @@ export async function flushPendingUsageEvents(): Promise<number> {
   return flushed
 }
 
+/** Número de eventos de uso pendientes de envío al servidor (p. ej. tras cortes de red). */
+export async function getPendingUsageEventCount(): Promise<number> {
+  return db.pendingSync.where('type').equals('usage_event').count()
+}
+
 /** Elimina eventos de uso pendientes (p. ej. al desactivar la preferencia de privacidad). */
 export async function clearPendingUsageEvents(): Promise<number> {
   const rows = await db.pendingSync.where('type').equals('usage_event').toArray()

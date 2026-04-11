@@ -26,10 +26,12 @@ export type KeyboardThemeColors = {
   predictionText?: string
   /** Anula solo el color de fondo de teclas concretas (ids en `lib/keyboard/layout`). */
   keyColors?: Record<string, string>
+  /** Anula solo el color del texto de teclas concretas (mismos ids que `keyColors`). */
+  keyTextColors?: Record<string, string>
 }
 
-/** Solo colores «globales» (no `keyColors` por tecla). */
-export type KeyboardGlobalThemeKey = Exclude<keyof KeyboardThemeColors, 'keyColors'>
+/** Solo colores «globales» (no mapas por tecla). */
+export type KeyboardGlobalThemeKey = Exclude<keyof KeyboardThemeColors, 'keyColors' | 'keyTextColors'>
 
 export const KEYBOARD_THEME_LABELS: Record<KeyboardGlobalThemeKey, string> = {
   areaBg: 'Fondo del teclado',
@@ -45,7 +47,7 @@ export const KEYBOARD_THEME_LABELS: Record<KeyboardGlobalThemeKey, string> = {
 
 export const KEYBOARD_THEME_KEYS = Object.keys(KEYBOARD_THEME_LABELS) as KeyboardGlobalThemeKey[]
 
-function parseKeyColors(raw: unknown): Record<string, string> | undefined {
+function parseKeyColorMap(raw: unknown): Record<string, string> | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const o = raw as Record<string, unknown>
   const out: Record<string, string> = {}
@@ -67,8 +69,10 @@ export function parseKeyboardTheme(raw: unknown): KeyboardThemeColors | null {
       out[key] = v
     }
   }
-  const kc = parseKeyColors(o.keyColors)
+  const kc = parseKeyColorMap(o.keyColors)
   if (kc) out.keyColors = kc
+  const ktc = parseKeyColorMap(o.keyTextColors)
+  if (ktc) out.keyTextColors = ktc
   return Object.keys(out).length > 0 ? out : null
 }
 
@@ -83,6 +87,7 @@ export function isKeyboardThemeEmpty(theme: KeyboardThemeColors): boolean {
     if (theme[key]) return false
   }
   if (theme.keyColors && Object.keys(theme.keyColors).length > 0) return false
+  if (theme.keyTextColors && Object.keys(theme.keyTextColors).length > 0) return false
   return true
 }
 

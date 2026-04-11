@@ -22,7 +22,7 @@ export function charKeyId(char: string): string {
   return `key:${char}`
 }
 
-/** Todos los ids válidos para `keyColors` (whitelist persistencia). */
+/** Todos los ids válidos para `keyColors` / `keyTextColors` (whitelist persistencia). */
 export function allKeyboardKeyColorIds(): Set<string> {
   const s = new Set<string>(Object.values(KB_SPECIAL_IDS))
   for (const c of NUMBER_ROW) s.add(charKeyId(c))

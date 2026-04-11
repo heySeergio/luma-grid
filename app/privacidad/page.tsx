@@ -6,25 +6,54 @@ const sections = [
     content: (
       <>
         <p>
-          Luma Grid puede tratar datos básicos de cuenta: correo electrónico, nombre si lo facilitas, contraseña de forma protegida, preferencias
-          de interfaz (por ejemplo tema claro/oscuro o tipografía), identificador de sesión y datos técnicos necesarios para el funcionamiento seguro.
+          <strong className="text-[var(--app-foreground)]">Cuenta e identificación:</strong> correo electrónico, nombre si lo facilitas, contraseña
+          de forma protegida (salvo cuentas que solo usan inicio de sesión con Google u otro proveedor, sin contraseña en Luma Grid), preferencias de
+          interfaz (tema, tipografía adaptada, opciones del tablero y de predicción), identificadores de sesión y datos técnicos necesarios para el
+          funcionamiento seguro.
         </p>
         <p>
-          Relacionados con el uso del producto: tableros configurados, símbolos, disposición del tablero, frases, historial funcional dentro de la app,
-          ajustes de voz (modo de síntesis, identificador de voz cuando aplica) y métricas de uso del servicio de texto a voz (por ejemplo caracteres
-          utilizados en un periodo de facturación), según el plan contratado.
+          <strong className="text-[var(--app-foreground)]">Inicio de sesión con Google:</strong> si lo utilizas, Google puede facilitar datos básicos
+          de perfil (por ejemplo correo y nombre) según tu configuración y su política; Luma Grid los asocia a tu cuenta en la aplicación.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Planes y pagos:</strong> tipo de plan, estado de la suscripción, identificador de cliente
-          ante el proveedor de pagos cuando exista, y los datos que resulten necesarios para emitir facturas o cumplir obligaciones fiscales y contables.
+          <strong className="text-[var(--app-foreground)]">Uso del comunicador:</strong> tableros, símbolos, disposición del grid, carpetas, frases
+          guardadas, ajustes de acceso asistido (p. ej. escáner), configuración de voz en la aplicación (modo de síntesis, identificador de voz cuando
+          aplica) y contenidos que guardes como usuario.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Voz y ElevenLabs:</strong> el texto enviado para generar audio con voces de ElevenLabs;
-          en el caso de la clonación de voz, las muestras de audio que envíes para crear tu voz personalizada. Esos contenidos se transmiten al
-          proveedor para su tratamiento conforme a su política.
+          <strong className="text-[var(--app-foreground)]">Aprendizaje de predicción AAC (opcional):</strong> si mantienes activa la opción de compartir
+          pulsaciones y transiciones para mejorar predicciones, se pueden registrar en el servidor eventos relativos a la secuencia de símbolos
+          utilizados en el tablero (identificadores de símbolo, información léxica asociada al símbolo y metadatos de sesión), con la finalidad de
+          ajustar sugerencias. Puedes desactivar esta opción en la configuración de cuenta; al hacerlo se dejan de acumular esos datos para ese fin y se
+          pueden eliminar colas locales pendientes en el dispositivo.
         </p>
         <p>
-          En función de la configuración del producto, también pueden tratarse datos de uso necesarios para la predicción AAC, la experiencia y la estabilidad técnica.
+          <strong className="text-[var(--app-foreground)]">Voz y facturación de síntesis:</strong> texto enviado a servicios de síntesis de voz de
+          terceros cuando elijas voces gestionadas por proveedor externo; contadores de caracteres u otros límites asociados al plan y periodo de
+          facturación; en el caso de clonación de voz, muestras de audio que envíes para crear una voz personalizada.
+        </p>
+        <p>
+          <strong className="text-[var(--app-foreground)]">Caché de audio en servidor:</strong> para determinadas voces, la aplicación puede almacenar de
+          forma acotada frases ya sintetizadas para evitar regenerar el mismo audio (texto acotado a la petición de voz).
+        </p>
+        <p>
+          <strong className="text-[var(--app-foreground)]">Planes y pagos:</strong> tipo de plan, estado de la suscripción, identificadores de cliente o
+          suscripción ante el proveedor de pagos cuando existan, y los datos necesarios para facturación u obligaciones fiscales y contables.
+        </p>
+        <p>
+          <strong className="text-[var(--app-foreground)]">Panel de administración y léxico:</strong> datos que visualices o generes al revisar
+          cobertura léxica, sugerencias de detección y métricas asociadas al tablero; no suponen por sí una “analítica” de terceros comercial, sino
+          funciones del propio producto sobre tus contenidos.
+        </p>
+        <p>
+          <strong className="text-[var(--app-foreground)]">Almacenamiento en el dispositivo:</strong> el navegador puede guardar datos en{' '}
+          <em>IndexedDB</em> u otros medios locales (p. ej. cola de eventos de uso pendientes de sincronizar, caché de la aplicación) para continuidad
+          cuando la red es intermitente. El detalle se describe en la política de cookies y almacenamiento local.
+        </p>
+        <p>
+          <strong className="text-[var(--app-foreground)]">Funciones con modelos de lenguaje:</strong> si en una versión del producto se utilizan
+          proveedores de inteligencia artificial para asistencia o predicción (p. ej. envío de texto o listas de símbolos a un modelo en la nube), esos
+          contenidos se tratarán según la política del proveedor correspondiente y solo en la medida necesaria para esa función.
         </p>
       </>
     ),
@@ -34,13 +63,17 @@ const sections = [
     content: (
       <>
         <p>
-          Los datos se utilizan para permitir el acceso a la aplicación, gestionar cuentas y suscripciones, guardar configuraciones, personalizar tableros,
-          aplicar los límites del plan contratado, mejorar el sistema léxico y ofrecer funcionalidades como historial, predicción y reproducción de frases
-          con voz del sistema o mediante proveedores de síntesis.
+          Los datos se utilizan para permitir el acceso a la aplicación, gestionar cuentas y suscripciones, guardar configuraciones, personalizar
+          tableros, aplicar los límites del plan, ofrecer predicción y comunicación aumentativa, aplicar el sistema léxico (incluida conjugación y
+          detección cuando corresponda), reproducir frases con voz del sistema o mediante proveedores de síntesis, y mantener la seguridad del servicio.
         </p>
         <p>
-          Los datos de pago se tratan para formalizar la relación contractual, procesar cobros recurrentes o puntuales y permitir la gestión de la suscripción
-          (incluido acceso al portal de cliente del proveedor de pagos cuando esté disponible).
+          Los datos opcionales de uso del tablero para predicción se tratan para mejorar las sugerencias contextuales en tu cuenta, no para publicidad de
+          terceros.
+        </p>
+        <p>
+          Los datos de pago se tratan para formalizar la relación contractual, procesar cobros y permitir la gestión de la suscripción (incluido acceso
+          al portal del proveedor de pagos cuando esté disponible).
         </p>
         <p>
           También pueden emplearse para prevenir abusos y fraudes, proteger la seguridad del servicio y mantener la continuidad operativa de la plataforma.
@@ -54,24 +87,36 @@ const sections = [
       <>
         <p>
           Para prestar el servicio, Luma Grid puede recurrir a proveedores que tratan datos en nombre del responsable del tratamiento o según su propia
-          política cuando actúan como responsables independientes. Entre ellos pueden figurar:
+          política cuando actúan como responsables independientes. Según la configuración del despliegue, pueden intervenir, entre otros:
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong className="text-[var(--app-foreground)]">Stripe</strong> (u otro procesador de pagos) para cobros, suscripciones, facturación y
-            gestión del cliente de pago. Te recomendamos consultar la política de privacidad y las condiciones de Stripe aplicables a tu región.
+            <strong className="text-[var(--app-foreground)]">Proveedor de alojamiento y base de datos</strong> (p. ej. infraestructura en la nube y{' '}
+            <strong className="text-[var(--app-foreground)]">PostgreSQL</strong>) para almacenar cuentas, tableros y datos de aplicación.
           </li>
           <li>
-            <strong className="text-[var(--app-foreground)]">ElevenLabs</strong> para síntesis de voz y, si lo utilizas, creación de voces clonadas a
-            partir de tus muestras de audio. El tratamiento queda regulado por las condiciones y la política de privacidad de ElevenLabs.
+            <strong className="text-[var(--app-foreground)]">Stripe</strong> (u otro procesador de pagos) para cobros, suscripciones y gestión del cliente
+            de pago.
           </li>
           <li>
-            Proveedores de alojamiento, base de datos, correo o infraestructura necesarios para operar la aplicación.
+            <strong className="text-[var(--app-foreground)]">ElevenLabs</strong> u otros proveedores de voz para síntesis y, si lo utilizas, creación de
+            voces a partir de muestras de audio.
+          </li>
+          <li>
+            <strong className="text-[var(--app-foreground)]">Google</strong> (u otro proveedor OAuth) cuando inicies sesión con una cuenta externa.
+          </li>
+          <li>
+            <strong className="text-[var(--app-foreground)]">Proveedores de almacenamiento de objetos</strong> (p. ej. para subida opcional de recursos
+            gráficos en flujos concretos del sitio), cuando estén configurados.
+          </li>
+          <li>
+            <strong className="text-[var(--app-foreground)]">Proveedores de modelos de lenguaje o IA</strong>, si una función del producto envía datos a
+            dichos servicios.
           </li>
         </ul>
         <p>
-          Algunos de estos proveedores pueden estar ubicados fuera del Espacio Económico Europeo; en esos casos se aplicarán las garantías previstas
-          en la normativa de protección de datos (por ejemplo cláusulas contractuales tipo u otras medidas adecuadas).
+          Algunos de estos proveedores pueden estar ubicados fuera del Espacio Económico Europeo; en esos casos se aplicarán las garantías previstas en la
+          normativa de protección de datos (por ejemplo cláusulas contractuales tipo u otras medidas adecuadas).
         </p>
       </>
     ),
@@ -85,7 +130,13 @@ const sections = [
           cumplir obligaciones legales y atender requisitos técnicos.
         </p>
         <p>
-          El diseño de Luma Grid prioriza la minimización de datos y el almacenamiento vinculado a la utilidad real para el usuario final.
+          El diseño de Luma Grid prioriza la minimización de datos y el almacenamiento vinculado a la utilidad para la persona usuaria. Los eventos de
+          uso para predicción solo se generan mientras mantengas activa la opción correspondiente.
+        </p>
+        <p>
+          Esos mismos eventos pueden conservarse en servidor mientras la cuenta exista para permitir informes de uso en el panel (p. ej. resúmenes por
+          periodos y comparación entre tramos). No se trata de un borrado automático al «cerrar» un informe en pantalla: el informe es una vista calculada
+          sobre los datos almacenados. Podrán aplicarse políticas de retención o supresión al eliminar la cuenta o según lo publicado en su momento.
         </p>
       </>
     ),
@@ -142,7 +193,7 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Privacidad"
       title="Política de privacidad"
-      intro="Esta política describe qué datos puede tratar Luma Grid, con qué finalidad, cómo intervienen proveedores como Stripe y ElevenLabs, y cuáles son tus derechos."
+      intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz y límites de plan, pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo."
       sections={sections}
     />
   )
