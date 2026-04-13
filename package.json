@@ -29,16 +29,15 @@
     "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs",
     "test:lexicon-detection": "node scripts/test-lexicon-detection.mjs",
     "test:mejora-plan": "node scripts/test-mejora-plan.mjs",
-    "repair:demo-email": "node scripts/repair-demo-by-email.mjs"
+    "repair:demo-email": "node scripts/repair-demo-by-email.mjs",
+    "reset:demo-board": "npx tsx --tsconfig tsconfig.json scripts/reset-demo-board-by-email.ts",
+    "test:admin-move": "npx tsx --test lib/admin/applyAdminSymbolGridMove.test.ts"
   },
   "prisma": {
     "seed": "node prisma/seed-lexicon.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^5.22.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.0",

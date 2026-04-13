@@ -105,6 +105,10 @@ model Profile {
   /// Zona fija personalizada por tablero (independiente de otros `Profile` del mismo usuario).
   /// Formato: `{ "v": 1, "keys": ["0:0","1:0",...] }`. Null = plantilla por defecto (7 col + fila 0).
   fixedZoneCells Json?              @map("fixed_zone_cells")
+  /// Solo tablero demo: etiquetas de `MAIN_GRID_TEMPLATE` que el usuario borró (minúsculas); no reinyectar pictos de plantilla.
+  demoSuppressedTemplateLabels Json? @map("demo_suppressed_template_labels")
+  /// Solo tablero demo: ítems de contenido de carpeta no reinyectados; cadenas `carpeta|etiqueta` en minúsculas.
+  demoSuppressedFolderItems Json? @map("demo_suppressed_folder_items")
   symbols     Symbol[]
   transitions PredictionTransition[]
   usageEvents SymbolUsageEvent[]

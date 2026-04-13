@@ -105,13 +105,18 @@ export default function SymbolGrid({
       : gridDensity === 'comfortable'
         ? 'gap-2 p-2 md:p-3'
         : 'gap-1.5 p-2 md:p-3'
-  const folderIconSize = gridDensity === 'sparse' ? 28 : gridDensity === 'comfortable' ? 24 : 20
+  const folderIconClass =
+    gridDensity === 'sparse'
+      ? 'h-[clamp(1.35rem,calc(0.45rem+9cqmin),1.85rem)] w-[clamp(1.35rem,calc(0.45rem+9cqmin),1.85rem)]'
+      : gridDensity === 'comfortable'
+        ? 'h-[clamp(1.2rem,calc(0.4rem+8cqmin),1.65rem)] w-[clamp(1.2rem,calc(0.4rem+8cqmin),1.65rem)]'
+        : 'h-[clamp(1.05rem,calc(0.35rem+7cqmin),1.45rem)] w-[clamp(1.05rem,calc(0.35rem+7cqmin),1.45rem)]'
   const folderLabelClass =
     gridDensity === 'sparse'
-      ? 'text-sm font-bold md:text-base'
+      ? 'text-[clamp(0.75rem,calc(0.28rem+3.5cqmin),1.05rem)] font-bold'
       : gridDensity === 'comfortable'
-        ? 'text-xs font-bold md:text-sm'
-        : 'text-[11px] font-bold md:text-xs'
+        ? 'text-[clamp(0.65rem,calc(0.24rem+3.1cqmin),0.95rem)] font-bold'
+        : 'text-[clamp(0.55rem,calc(0.2rem+2.75cqmin),0.85rem)] font-bold'
 
   return (
     <>
@@ -137,6 +142,7 @@ export default function SymbolGrid({
               symbol-cell flex flex-col items-center justify-center rounded-[1.35rem] border
               bg-gradient-to-br ${folderColors}
               ${sizeMap[cellSize]} w-full select-none p-1.5 shadow-sm
+              [container-type:size] min-w-0
               transition-all duration-150
               ${dimChrome ? 'pointer-events-none' : ''}
             `}
@@ -147,9 +153,9 @@ export default function SymbolGrid({
             aria-label={`Abrir carpeta ${folder.name}`}
           >
             <div className="ui-chip mb-1 rounded-2xl p-2">
-              <FolderIcon size={folderIconSize} />
+              <FolderIcon className={folderIconClass} strokeWidth={2} />
             </div>
-            <span className={`w-full text-center leading-tight line-clamp-2 ${folderLabelClass}`}>
+            <span className={`w-full text-center leading-tight line-clamp-2 text-balance break-words ${folderLabelClass}`}>
               {folder.name}
             </span>
           </button>

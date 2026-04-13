@@ -21,10 +21,11 @@ import {
   serializeFixedZoneJson,
 } from '@/lib/grid/fixedZoneStorage'
 import {
-  readFixedZoneCellsMapForUser,
   readFixedZoneCellsForProfile,
   setFixedZoneCellsForProfile,
 } from '@/lib/prisma/profileFixedZoneSql'
+import { parseDemoSuppressedTemplateLabelsJson } from '@/lib/data/defaultSymbols'
+import { loadDemoSuppressedFolderItemsMap } from '@/lib/prisma/demoSuppressedFolderItemsSql'
 
 const DEFAULT_PROFILE_COLOR = '#6366f1'
 
@@ -32,7 +33,7 @@ export async function getProfiles() {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
 
-    const [user, rows, fixedZoneMap] = await Promise.all([
+    const [user, rows, folderItemsMap] = await Promise.all([
         prisma.user.findUnique({
             where: { id: session.user.id },
             select: { defaultProfileId: true },
@@ -51,9 +52,11 @@ export async function getProfiles() {
                 createdAt: true,
                 updatedAt: true,
                 keyboardTheme: true,
+                fixedZoneCells: true,
+                demoSuppressedTemplateLabels: true,
             },
         }),
-        readFixedZoneCellsMapForUser(session.user.id),
+        loadDemoSuppressedFolderItemsMap(session.user.id),
     ])
 
     const openingId = user?.defaultProfileId ?? null
@@ -67,8 +70,10 @@ export async function getProfiles() {
         gender: string
         keyboardTheme: KeyboardThemeColors | null
         fixedZoneCellKeys: string[] | null
+        demoSuppressedTemplateLabels: string[]
+        demoSuppressedFolderItems: string[]
     } => {
-        const fz = parseProfileFixedZoneJson(fixedZoneMap.get(p.id) ?? null)
+        const fz = parseProfileFixedZoneJson(p.fixedZoneCells)
         return {
             id: p.id,
             name: p.name,
@@ -85,6 +90,10 @@ export async function getProfiles() {
             gender: p.gender,
             keyboardTheme: parseKeyboardTheme(p.keyboardTheme),
             fixedZoneCellKeys: fz === null ? null : [...fz],
+            demoSuppressedTemplateLabels: parseDemoSuppressedTemplateLabelsJson(
+                p.demoSuppressedTemplateLabels,
+            ),
+            demoSuppressedFolderItems: folderItemsMap.get(p.id) ?? [],
         }
     })
 }
@@ -511,6 +520,51 @@ export async function resetProfileFixedZoneToDefault(profileId: string) {
     if (!session?.user?.id) throw new Error('No autorizado')
 
     await setFixedZoneCellsForProfile(profileId, session.user.id, null)
+
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+}
+
+/**
+ * Persiste listas completas de supresiones del tablero demo (plantilla y contenido de carpetas).
+ * El cliente envía el estado ya fusionado (BD + cambios pendientes).
+ */
+export async function saveDemoBoardSuppressionsAction(
+    profileId: string,
+    templateLabels: string[],
+    folderItemKeys: string[],
+) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    const profile = await prisma.profile.findFirst({
+        where: { id: profileId, userId: session.user.id, isDemo: true },
+        select: { id: true },
+    })
+    if (!profile) throw new Error('Solo el tablero demo puede guardar estas supresiones')
+
+    const cleanT = [
+        ...new Set(
+            templateLabels
+                .map((s) => String(s).trim().toLowerCase())
+                .filter(Boolean),
+        ),
+    ]
+    const cleanF = [
+        ...new Set(
+            folderItemKeys
+                .map((s) => String(s).trim().toLowerCase())
+                .filter((k) => k.includes('|')),
+        ),
+    ]
+
+    await prisma.profile.update({
+        where: { id: profileId },
+        data: {
+            demoSuppressedTemplateLabels: cleanT.length > 0 ? cleanT : Prisma.JsonNull,
+            demoSuppressedFolderItems: cleanF.length > 0 ? cleanF : Prisma.JsonNull,
+        },
+    })
 
     revalidatePath('/admin')
     revalidatePath('/tablero')

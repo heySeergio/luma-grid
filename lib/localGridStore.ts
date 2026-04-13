@@ -1,4 +1,8 @@
-import { DEFAULT_FOLDER_TILES, DEFAULT_SYMBOLS } from '@/lib/data/defaultSymbols'
+import {
+  DEFAULT_FOLDER_TILES,
+  DEFAULT_SYMBOLS,
+  withoutObsoleteDemoFolderSymbols,
+} from '@/lib/data/defaultSymbols'
 import type { Profile, Symbol } from '@/lib/supabase/types'
 
 const PROFILES_KEY = 'luma.local.profiles.v1'
@@ -70,7 +74,12 @@ export function saveLocalProfiles(profiles: Profile[]) {
 
 export function getLocalSymbols(): Symbol[] {
   initLocalGridStore()
-  return readJson<Symbol[]>(SYMBOLS_KEY) ?? buildDefaultSymbols()
+  const raw = readJson<Symbol[]>(SYMBOLS_KEY) ?? buildDefaultSymbols()
+  const cleaned = withoutObsoleteDemoFolderSymbols(raw)
+  if (cleaned.length !== raw.length) {
+    writeJson(SYMBOLS_KEY, cleaned)
+  }
+  return cleaned
 }
 
 export function saveLocalSymbols(symbols: Symbol[]) {

@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { findManySymbolsByProfileId } from '@/lib/prisma/symbolsForProfile'
 import { getDemoTemplatePositionMap } from '@/lib/data/defaultSymbols'
+import { Prisma } from '@prisma/client'
 
 /** Reasigna coordenadas de los símbolos del tablero demo a la plantilla MAIN_GRID_TEMPLATE y fija 14×8. */
 export async function resetDemoProfilePositionsToTemplate(profileId: string): Promise<{ realigned: number }> {
@@ -25,9 +26,18 @@ export async function resetDemoProfilePositionsToTemplate(profileId: string): Pr
   await prisma.$transaction(async (tx) => {
     await tx.profile.update({
       where: { id: profileId },
-      data: { gridRows: 8, gridCols: 14 },
+      data: {
+        gridRows: 8,
+        gridCols: 14,
+        demoSuppressedTemplateLabels: Prisma.JsonNull,
+      },
       select: { id: true },
     })
+    try {
+      await tx.$executeRaw`UPDATE profiles SET demo_suppressed_folder_items = NULL WHERE id = ${profileId}`
+    } catch {
+      /* columna ausente hasta migrar / DDL */
+    }
     for (const s of symbols) {
       const pos = posMap.get(s.label.trim().toLowerCase())
       if (!pos) continue

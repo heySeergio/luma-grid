@@ -18,7 +18,7 @@ export function effectiveSymbolGridId(s: SymbolLikeGridCell): string {
   return t.length > 0 ? t : 'main'
 }
 
-function parseGridCell(v: unknown): number {
+export function parseGridCell(v: unknown): number {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
   if (typeof v === 'string' && v.trim() !== '') {
     const n = Number.parseInt(v.trim(), 10)

@@ -10,6 +10,8 @@ import {
   defaultPhraseLabel,
   symbolHasVariantMenu,
 } from '@/lib/symbolWordVariants'
+import SymbolCellAutoFitLabel from '@/components/app/SymbolCellAutoFitLabel'
+import PictoEmoji from '@/components/ui/PictoEmoji'
 
 export type SymbolGridDensity = 'sparse' | 'comfortable' | 'dense'
 
@@ -29,6 +31,36 @@ interface Props {
 }
 
 const LONG_PRESS_MS = 480
+
+/**
+ * Tipografía: cqmin/cqw/cqh escalan con la celda; vmin refuerza legibilidad según pantalla.
+ */
+const CELL_LABEL: Record<SymbolGridDensity, string> = {
+  sparse:
+    'text-[clamp(0.78rem,calc(0.3rem+3.5cqmin+0.35vmin),1.12rem)]',
+  comfortable:
+    'text-[clamp(0.72rem,calc(0.26rem+3.2cqmin+0.32vmin),1.04rem)]',
+  dense:
+    'text-[clamp(0.65rem,calc(0.22rem+2.95cqmin+0.28vmin),0.98rem)]',
+}
+
+const CELL_LABEL_FULL: Record<SymbolGridDensity, string> = {
+  sparse:
+    'text-[clamp(0.82rem,calc(0.32rem+3.65cqmin+0.38vmin),1.18rem)]',
+  comfortable:
+    'text-[clamp(0.76rem,calc(0.28rem+3.35cqmin+0.34vmin),1.08rem)]',
+  dense:
+    'text-[clamp(0.68rem,calc(0.24rem+3.05cqmin+0.3vmin),1rem)]',
+}
+
+const CELL_EMOJI: Record<SymbolGridDensity, string> = {
+  sparse:
+    'text-[clamp(1.75rem,calc(0.55rem+11cqmin+0.4vmin),3.35rem)]',
+  comfortable:
+    'text-[clamp(1.55rem,calc(0.48rem+10cqmin+0.35vmin),2.9rem)]',
+  dense:
+    'text-[clamp(1.35rem,calc(0.44rem+9cqmin+0.32vmin),2.5rem)]',
+}
 
 export default function SymbolCell({
   symbol,
@@ -100,33 +132,6 @@ export default function SymbolCell({
     emitDefault()
   }
 
-  const emojiSizeFull: Record<SymbolGridDensity, string> = {
-    sparse: 'text-4xl sm:text-5xl md:text-6xl lg:text-7xl',
-    comfortable: 'text-3xl sm:text-4xl md:text-5xl',
-    dense: 'text-2xl md:text-3xl',
-  }
-
-  const labelSizeFull: Record<SymbolGridDensity, string> = {
-    sparse: 'text-sm sm:text-base md:text-lg',
-    comfortable: 'text-xs sm:text-sm md:text-base',
-    dense: 'text-xs md:text-sm',
-  }
-
-  const emojiSize: Record<string, string> = {
-    'h-16': 'text-2xl',
-    'h-24': 'text-4xl',
-    'h-32': 'text-5xl',
-    'h-full': emojiSizeFull[gridDensity],
-  }
-
-  const labelSize: Record<string, string> = {
-    'h-16': 'text-xs',
-    'h-24': 'text-sm',
-    'h-32': 'text-base',
-    'h-full': labelSizeFull[gridDensity],
-  }
-
-  const imageBoxPx = gridDensity === 'sparse' ? 120 : gridDensity === 'comfortable' ? 88 : 64
   const folderBadgeSize = gridDensity === 'sparse' ? 14 : gridDensity === 'comfortable' ? 12 : 10
   const cellPadding =
     gridDensity === 'sparse' ? 'p-2 sm:p-2.5 md:p-3' : gridDensity === 'comfortable' ? 'p-2 md:p-2' : 'p-1.5'
@@ -137,7 +142,7 @@ export default function SymbolCell({
 
   return (
     <div
-      className="relative h-full min-h-0 w-full"
+      className="symbol-cell-root relative h-full min-h-0 w-full min-w-0"
       data-symbol-id={symbol.id}
       data-scanner-y={symbol.positionY}
       data-scanner-x={symbol.positionX}
@@ -155,7 +160,7 @@ export default function SymbolCell({
         aria-expanded={undefined}
         className={`
         symbol-cell relative flex h-full min-h-0 w-full flex-col items-stretch rounded-[1.35rem] border
-        ${hasGlyph ? '' : 'justify-center'}
+        ${hasGlyph ? 'symbol-cell__btn--has-glyph' : 'justify-center'}
         ${sizeClass} ${cellPadding} select-none
         ${isPopping ? 'animate-pop' : ''}
         ${isPredicted && !isLocked
@@ -186,40 +191,47 @@ export default function SymbolCell({
           </span>
         )}
         {!hasGlyph ? (
-          <span
-            className={`flex min-h-0 w-full flex-1 items-center justify-center px-1 text-center font-semibold leading-tight ${labelSizeFull[gridDensity]} line-clamp-4`}
-            style={{ color: textColor }}
-          >
-            {symbol.label}
-          </span>
+          <div className="flex min-h-0 w-full flex-1 items-center justify-center px-1">
+            <SymbolCellAutoFitLabel
+              label={symbol.label}
+              textColor={textColor}
+              labelClassName={CELL_LABEL_FULL[gridDensity]}
+            />
+          </div>
         ) : (
-          <>
+          <div className="symbol-cell__inner flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-1 px-0.5 py-0.5">
+            {/* Bloque picto+texto centrado en H y V dentro de la celda */}
             <div
-              className="flex min-h-0 flex-1 flex-col items-center justify-center px-0.5 pt-0.5"
+              className="symbol-cell__glyph-zone flex min-h-0 w-full shrink-0 items-center justify-center overflow-hidden"
               style={{ color: textColor }}
             >
               {symbol.imageUrl ? (
-                <div className="flex h-full max-h-full w-full flex-1 items-center justify-center">
+                <div className="relative mx-auto aspect-square w-[min(100%,min(88cqmin,96cqw))] max-w-full max-h-[min(58cqh,92cqmin)] min-h-0 min-w-0">
                   <Image
                     src={symbol.imageUrl}
-                    alt={symbol.label}
-                    width={imageBoxPx}
-                    height={imageBoxPx}
-                    className="max-h-full max-w-full object-contain"
+                    alt=""
+                    fill
+                    className="object-contain p-0.5"
+                    sizes="(max-width: 480px) 20vw, (max-width: 900px) 12vw, (max-width: 1400px) 9vw, 120px"
                     unoptimized
                   />
                 </div>
               ) : (
-                <span className={`${emojiSize[sizeClass] || 'text-3xl'} leading-none`}>{symbol.emoji}</span>
+                <PictoEmoji
+                  emoji={symbol.emoji ?? ''}
+                  className={`${CELL_EMOJI[gridDensity]} flex max-h-[min(54cqh,88cqmin)] min-h-0 w-full items-center justify-center overflow-hidden leading-none`}
+                  aria-hidden
+                />
               )}
             </div>
-            <span
-              className={`${labelSize[sizeClass] || 'text-xs'} shrink-0 px-0.5 pb-0.5 text-center font-semibold leading-tight line-clamp-2`}
-              style={{ color: textColor }}
-            >
-              {symbol.label}
-            </span>
-          </>
+            <div className="relative z-[1] w-full min-w-0 shrink-0 px-0.5">
+              <SymbolCellAutoFitLabel
+                label={symbol.label}
+                textColor={textColor}
+                labelClassName={CELL_LABEL[gridDensity]}
+              />
+            </div>
+          </div>
         )}
       </button>
 

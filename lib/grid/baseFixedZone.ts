@@ -3,7 +3,7 @@ export const BASE_FIXED_LEFT_COLUMN_COUNT = 7
 
 /**
  * Zona fija global del tablero: las primeras 7 columnas (enteras) y la primera fila (entera).
- * La región variable es donde `x >= 7` y `y >= 1` (en un grid de al menos 8 columnas y 2 filas).
+ * La región variable es donde `x >= 7` y `y >= 1` (en un grid de 12×8, columnas 8–12 desde la fila 2).
  */
 export function isPositionInBaseFixedZone(
   x: number,

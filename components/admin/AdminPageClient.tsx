@@ -1,15 +1,7 @@
 'use client'
 
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useClientReady, useIsClient } from '@/lib/ui/useClientReady'
-import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { BookOpen, Check, ClipboardPaste, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
@@ -19,12 +11,22 @@ import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
-import { computeMainGrid, DEFAULT_FOLDER_CONTENTS, shouldShowFolderBadge } from '@/lib/data/defaultSymbols'
+import FixedZoneEditIntroModal, {
+  FIXED_ZONE_INTRO_STORAGE_KEY,
+} from '@/components/admin/FixedZoneEditIntroModal'
+import {
+  computeMainGrid,
+  DEFAULT_FOLDER_CONTENTS,
+  demoFolderSuppressionKey,
+  isDemoVirtualGridSymbolId,
+  parseDemoFolderItemId,
+  shouldShowFolderBadge,
+} from '@/lib/data/defaultSymbols'
 import {
   findCoveringSymbolAtCellPreferringFixedMain,
   mergeMainGridWithFolderView,
 } from '@/lib/grid/mergeMainGridWithFolderView'
-import { effectiveSymbolGridId } from '@/lib/grid/gridCellOverlap'
+import { effectiveSymbolGridId, parseGridCell } from '@/lib/grid/gridCellOverlap'
 import {
   buildDefaultFixedZoneKeySet,
   clampFixedZoneKeysToGrid,
@@ -36,6 +38,7 @@ import {
   duplicateProfile,
   getProfiles,
   resetProfileFixedZoneToDefault,
+  saveDemoBoardSuppressionsAction,
   updateProfileFixedZone,
   setDefaultOpeningProfile,
   updateProfile,
@@ -46,15 +49,16 @@ import {
 import { resetDemoProfilePositionsToTemplate } from '@/app/actions/demoRepair'
 import { exportProfileBoardJson } from '@/app/actions/profileExport'
 import { importProfileBoardFromLuma } from '@/app/actions/profileImport'
-import { getProfileSymbols, saveSymbols, deleteSymbolAction } from '@/app/actions/symbols'
+import { deleteSymbolAction, getProfileSymbols, saveSymbols } from '@/app/actions/symbols'
 import { setProfileGender } from '@/lib/profileGender'
 import { reloadPageWithTheme } from '@/lib/ui/themeReload'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { snapTopLeftToCursor } from '@/lib/dnd/snapTopLeftToCursor'
+import { applyAdminSymbolGridMove, ADMIN_GRID_DRAG_MIME } from '@/lib/admin/applyAdminSymbolGridMove'
 import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
+import PictoEmoji from '@/components/ui/PictoEmoji'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
 import BoardUsageEvaluation from '@/components/admin/BoardUsageEvaluation'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
@@ -165,6 +169,10 @@ type AdminProfile = {
   keyboardTheme?: KeyboardThemeColors | null
   /** Null = plantilla por defecto; [] = zona fija vacía explícita. */
   fixedZoneCellKeys?: string[] | null
+  /** Solo demo: etiquetas de plantilla que no deben reinyectarse tras borrar en BD. */
+  demoSuppressedTemplateLabels?: string[]
+  /** Solo demo: claves `carpeta|etiqueta` de pictos de carpeta no reinyectados. */
+  demoSuppressedFolderItems?: string[]
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -327,8 +335,8 @@ type LexemePreview = {
 
 function getSymbolPosition(symbol: Pick<AdminSymbol, 'positionX' | 'positionY' | 'position_x' | 'position_y'>) {
   return {
-    x: symbol.positionX ?? symbol.position_x ?? 0,
-    y: symbol.positionY ?? symbol.position_y ?? 0,
+    x: parseGridCell(symbol.positionX ?? symbol.position_x),
+    y: parseGridCell(symbol.positionY ?? symbol.position_y),
   }
 }
 
@@ -343,8 +351,9 @@ function symbolRectOverlapsAny(
   symbols: AdminSymbol[],
   excludeId?: string,
 ): boolean {
+  const ex = excludeId != null && excludeId !== '' ? String(excludeId) : null
   for (const s of symbols) {
-    if (excludeId && s.id === excludeId) continue
+    if (ex && String(s.id) === ex) continue
     if (symbolOccupiesCell(s, px, py)) return true
   }
   return false
@@ -383,12 +392,26 @@ function symbolImageDisplayUrl(symbol: Pick<AdminSymbol, 'imageUrl' | 'image_url
 }
 
 function isMovableSymbol(symbol: Pick<AdminSymbol, 'id'> | null | undefined) {
-  return Boolean(
-    symbol?.id &&
-    !String(symbol.id).startsWith('fixed-left') &&
-    !String(symbol.id).startsWith('template') &&
-    !String(symbol.id).startsWith('folder-item-')
-  )
+  if (!symbol?.id) return false
+  const id = String(symbol.id)
+  if (id.startsWith('fixed-left')) return false
+  if (id.startsWith('template')) return false
+  if (id.startsWith('folder-item-')) return false
+  // `default-*` de la zona variable (sin persistir) sigue sin ser arrastrable; la franja izquierda usa `default-left-*`.
+  if (id.startsWith('default-') && !id.startsWith('default-left-')) return false
+  return true
+}
+
+function canDeleteAdminGridSymbol(
+  symbol: Pick<AdminSymbol, 'id'> | null | undefined,
+  isDemoProfile: boolean,
+): boolean {
+  if (!symbol?.id) return false
+  if (isMovableSymbol(symbol)) return true
+  const id = String(symbol.id)
+  if (isDemoProfile && id.startsWith('folder-item-')) return true
+  if (isDemoProfile && isDemoVirtualGridSymbolId(id)) return true
+  return false
 }
 
 function updateSymbolCoordinates(symbol: AdminSymbol, x: number, y: number): AdminSymbol {
@@ -462,89 +485,32 @@ function sortSymbolsByPosition(a: AdminSymbol, b: AdminSymbol) {
   return aPos.x - bPos.x
 }
 
-function DroppableGridCell({
-  cellId,
+/** Contenedor de celda en la vista previa: soltar arrastres HTML5 del propio grid. */
+function AdminPreviewGridCell({
   className,
   style,
   children,
   adminCellX,
   adminCellY,
+  onDragOver,
+  onDrop,
 }: {
-  cellId: string
   className?: string
   style?: React.CSSProperties
   children: React.ReactNode
   adminCellX?: number
   adminCellY?: number
+  onDragOver?: React.DragEventHandler<HTMLDivElement>
+  onDrop?: React.DragEventHandler<HTMLDivElement>
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id: cellId })
-
   return (
     <div
-      ref={setNodeRef}
       style={style}
       data-admin-cell-x={adminCellX}
       data-admin-cell-y={adminCellY}
-      className={`${className ?? ''} ${isOver ? 'rounded-lg ring-2 ring-indigo-400 ring-offset-2 ring-offset-slate-50' : ''}`.trim()}
-    >
-      {children}
-    </div>
-  )
-}
-
-/** No activar @dnd-kit en controles con `data-no-dnd`. */
-function pointerTargetBlocksAdminDrag(target: EventTarget | null): boolean {
-  if (!target || !(target instanceof Element)) return false
-  return Boolean(target.closest('[data-no-dnd]'))
-}
-
-class AdminPointerSensor extends PointerSensor {
-  static activators = [
-    {
-      eventName: 'onPointerDown' as const,
-      handler: (
-        ...args: Parameters<NonNullable<(typeof PointerSensor.activators)[0]['handler']>>
-      ) => {
-        const [event] = args
-        const native = 'nativeEvent' in event ? event.nativeEvent : null
-        if (native && 'target' in native && pointerTargetBlocksAdminDrag(native.target as EventTarget)) {
-          return false
-        }
-        const base = PointerSensor.activators[0]?.handler
-        return base ? base(...args) : false
-      },
-    },
-  ] as (typeof PointerSensor)['activators']
-}
-
-function DraggableGridItem({
-  symbol,
-  children,
-  contextMenuBlocksDrag = false,
-}: {
-  symbol: AdminSymbol
-  children: React.ReactNode
-  /** Evita iniciar/soltar arrastres mientras el menú ⋯ del grid está abierto (corrige solapes con «Copiar», etc.). */
-  contextMenuBlocksDrag?: boolean
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: symbol.id,
-    disabled: !isMovableSymbol(symbol) || contextMenuBlocksDrag,
-  })
-
-  // No aplicar `transform` aquí: con <DragOverlay> el overlay sigue el puntero; sumar ambos
-  // desincroniza la posición (muy visible con overflow-x-auto en el grid).
-  const style = {
-    opacity: isDragging ? 0 : 1,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`flex min-h-0 min-w-0 h-full w-full ${isMovableSymbol(symbol) && !contextMenuBlocksDrag ? 'touch-none cursor-grab active:cursor-grabbing' : ''}`.trim()}
+      className={className}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       {children}
     </div>
@@ -594,6 +560,9 @@ export default function AdminPageClient() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
   /** Filas/columnas pendientes hasta pulsar «Guardar cambios» (no tablero demo). */
   const [pendingGridDimensions, setPendingGridDimensions] = useState<{ rows: number; cols: number } | null>(null)
+  /** Tablero demo: supresiones de plantilla / carpetas hasta «Guardar cambios». */
+  const [pendingDemoTemplateSuppressions, setPendingDemoTemplateSuppressions] = useState<string[]>([])
+  const [pendingDemoFolderSuppressions, setPendingDemoFolderSuppressions] = useState<string[]>([])
   const [editingSymbol, setEditingSymbol] = useState<AdminSymbol | null>(null)
   const symbolEditFingerprintRef = useRef<string | null>(null)
   const [lexemePreview, setLexemePreview] = useState<LexemePreview | null>(null)
@@ -639,6 +608,8 @@ export default function AdminPageClient() {
   const [splitEmptyCell, setSplitEmptyCell] = useState<{ x: number; y: number } | null>(null)
   /** Edición de base fija sobre la vista previa (sin modal). */
   const [fixedZoneEditMode, setFixedZoneEditMode] = useState(false)
+  /** Tutorial «modificar base fija» (solo primera vez; ver FIXED_ZONE_INTRO_STORAGE_KEY). */
+  const [showFixedZoneIntroModal, setShowFixedZoneIntroModal] = useState(false)
   const [fixedZoneDraftKeys, setFixedZoneDraftKeys] = useState<Set<string>>(() => new Set())
   const fixedZoneBrushRef = useRef<'add' | 'remove' | null>(null)
   /** Modal nativo: nombre de carpeta nueva (sustituye window.prompt) */
@@ -646,7 +617,6 @@ export default function AdminPageClient() {
   const [createFolderName, setCreateFolderName] = useState('')
   const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
-  const [activeDraggedSymbolId, setActiveDraggedSymbolId] = useState<string | null>(null)
   /** Portapapeles interno del grid (copiar / pegar en vista previa). */
   const [gridClipboard, setGridClipboard] = useState<AdminSymbol | null>(null)
   const [gridContextMenu, setGridContextMenu] = useState<{
@@ -700,14 +670,6 @@ export default function AdminPageClient() {
       voiceMonthlyLimit > 0 &&
       voiceCharsUsed > voiceMonthlyLimit,
     [voiceSubscriptionActive, voiceMonthlyLimit, voiceCharsUsed],
-  )
-
-  const sensors = useSensors(
-    useSensor(AdminPointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
   )
 
   const selectedProfileIdRef = useRef(selectedProfileId)
@@ -1125,6 +1087,8 @@ export default function AdminPageClient() {
   useEffect(() => {
     setGridClipboard(null)
     setGridContextMenu(null)
+    setPendingDemoTemplateSuppressions([])
+    setPendingDemoFolderSuppressions([])
   }, [selectedProfileId])
 
   useEffect(() => {
@@ -1202,7 +1166,6 @@ export default function AdminPageClient() {
   useEffect(() => {
     setActiveFolder(null)
     setEditingSymbol(null)
-    setActiveDraggedSymbolId(null)
     setSplitEmptyCell(null)
     setPendingGridDimensions(null)
   }, [selectedProfileId])
@@ -1461,7 +1424,10 @@ export default function AdminPageClient() {
         pendingGridDimensions.cols !== (selectedProfile.gridCols ?? 14))
     const symbolsDirty =
       symbolsBaselineJson !== '' && stableGridSnapshot(symbols) !== symbolsBaselineJson
-    if (!dimsDirty && !symbolsDirty) return
+    const demoSuppressionsDirty =
+      isSelectedDemoProfile &&
+      (pendingDemoTemplateSuppressions.length > 0 || pendingDemoFolderSuppressions.length > 0)
+    if (!dimsDirty && !symbolsDirty && !demoSuppressionsDirty) return
 
     setSavingSymbols(true)
     setGridSaveFeedback('saving')
@@ -1479,6 +1445,31 @@ export default function AdminPageClient() {
         const mappedFresh = freshSymbols.map(adminSymbolFromBoard)
         setSymbols(mappedFresh)
         setSymbolsBaselineJson(stableGridSnapshot(mappedFresh))
+        if (isSelectedDemoProfile) {
+          const data = await getProfiles()
+          setProfiles(data)
+        }
+      }
+      if (demoSuppressionsDirty) {
+        const baseT = selectedProfile.demoSuppressedTemplateLabels ?? []
+        const baseF = selectedProfile.demoSuppressedFolderItems ?? []
+        const mergedT = [
+          ...new Set([
+            ...baseT.map((s) => s.trim().toLowerCase()).filter(Boolean),
+            ...pendingDemoTemplateSuppressions.map((s) => s.trim().toLowerCase()).filter(Boolean),
+          ]),
+        ]
+        const mergedF = [
+          ...new Set([
+            ...baseF.map((s) => s.trim().toLowerCase()).filter(Boolean),
+            ...pendingDemoFolderSuppressions.map((s) => s.trim().toLowerCase()).filter(Boolean),
+          ]),
+        ]
+        await saveDemoBoardSuppressionsAction(selectedProfileId, mergedT, mergedF)
+        setPendingDemoTemplateSuppressions([])
+        setPendingDemoFolderSuppressions([])
+        const data = await getProfiles()
+        setProfiles(data)
       }
       setStatus(
         dimsDirty && symbolsDirty
@@ -1498,19 +1489,76 @@ export default function AdminPageClient() {
     }
   }
 
+  const isLocalOnlySymbolId = (id: string) =>
+    id.startsWith('new-') ||
+    id.startsWith('fixed-left') ||
+    id.startsWith('template') ||
+    id.startsWith('draft-') ||
+    (id.startsWith('default-') && !id.startsWith('default-left-')) ||
+    id.startsWith('local-symbol-') ||
+    id.startsWith('folder-local-') ||
+    id.startsWith('text-')
+
   const deleteSymbol = async (symbolId: string) => {
-    if (symbolId.startsWith('new-') || symbolId.startsWith('fixed-') || symbolId.startsWith('template-')) {
+    const sid = String(symbolId)
+    if (isSelectedDemoProfile && sid.startsWith('folder-item-')) {
+      if (!selectedProfileId?.trim()) {
+        setStatus('Selecciona un tablero antes de eliminar.')
+        return
+      }
+      const parsed = parseDemoFolderItemId(sid)
+      if (!parsed) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const folderLabels = DEFAULT_FOLDER_CONTENTS[parsed.folderKey]
+      if (!folderLabels || parsed.index < 0 || parsed.index >= folderLabels.length) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const folderLabel = folderLabels[parsed.index]
+      const key = demoFolderSuppressionKey(parsed.folderKey, folderLabel)
+      setPendingDemoFolderSuppressions((prev) => [...new Set([...prev, key])])
+      setStatus('Oculto en el editor. Pulsa «Guardar cambios» para aplicarlo en el tablero.')
+      return
+    }
+    if (isSelectedDemoProfile && isDemoVirtualGridSymbolId(sid)) {
+      if (!selectedProfileId?.trim()) {
+        setStatus('Selecciona un tablero antes de eliminar.')
+        return
+      }
+      const sym =
+        symbols.find((s) => s.id === sid) ?? mainGridSymbolsRef.current.find((s) => s.id === sid)
+      const label = typeof sym?.label === 'string' ? sym.label : ''
+      if (!label.trim()) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const key = label.trim().toLowerCase()
+      setPendingDemoTemplateSuppressions((prev) => [...new Set([...prev, key])])
+      setStatus('Oculto en el editor. Pulsa «Guardar cambios» para aplicarlo en el tablero.')
+      return
+    }
+    if (isLocalOnlySymbolId(symbolId)) {
       setSymbols((prev) => prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId))
+      return
+    }
+    if (!selectedProfileId?.trim()) {
+      setStatus('Selecciona un tablero antes de eliminar.')
       return
     }
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
-      setSymbols((prev) => {
-        const next = prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId)
-        setSymbolsBaselineJson(stableGridSnapshot(next))
-        return next
-      })
-      setStatus('Símbolo eliminado.')
+      const [freshSymbols, profilesList] = await Promise.all([
+        getProfileSymbols(selectedProfileId),
+        getProfiles(),
+      ])
+      setProfiles(profilesList)
+      const mappedFresh = freshSymbols.map(adminSymbolFromBoard)
+      setSymbols(mappedFresh)
+      setSymbolsBaselineJson(stableGridSnapshot(mappedFresh))
+      const stillThere = mappedFresh.some((s) => s.id === symbolId)
+      setStatus(stillThere ? 'No se pudo eliminar el símbolo.' : 'Símbolo eliminado.')
     } catch {
       setStatus('Error al eliminar símbolo.')
     }
@@ -1584,7 +1632,47 @@ export default function AdminPageClient() {
     const symbolId = String(editingSymbol.id ?? '')
     if (!symbolId) return
 
-    if (symbolId.startsWith('new-') || symbolId.startsWith('fixed-') || symbolId.startsWith('template-')) {
+    if (isSelectedDemoProfile && symbolId.startsWith('folder-item-')) {
+      if (!selectedProfileId?.trim()) {
+        setStatus('Selecciona un tablero antes de eliminar.')
+        return
+      }
+      const parsed = parseDemoFolderItemId(symbolId)
+      if (!parsed) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const folderLabels = DEFAULT_FOLDER_CONTENTS[parsed.folderKey]
+      if (!folderLabels || parsed.index < 0 || parsed.index >= folderLabels.length) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const folderLabel = folderLabels[parsed.index]
+      const key = demoFolderSuppressionKey(parsed.folderKey, folderLabel)
+      setPendingDemoFolderSuppressions((prev) => [...new Set([...prev, key])])
+      closeEditingSymbolModal()
+      setStatus('Oculto en el editor. Pulsa «Guardar cambios» para aplicarlo en el tablero.')
+      return
+    }
+
+    if (isSelectedDemoProfile && isDemoVirtualGridSymbolId(symbolId)) {
+      if (!selectedProfileId?.trim()) {
+        setStatus('Selecciona un tablero antes de eliminar.')
+        return
+      }
+      const label = typeof editingSymbol.label === 'string' ? editingSymbol.label : ''
+      if (!label.trim()) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
+      const key = label.trim().toLowerCase()
+      setPendingDemoTemplateSuppressions((prev) => [...new Set([...prev, key])])
+      closeEditingSymbolModal()
+      setStatus('Oculto en el editor. Pulsa «Guardar cambios» para aplicarlo en el tablero.')
+      return
+    }
+
+    if (isLocalOnlySymbolId(symbolId)) {
       setSymbols((prev) =>
         prev.filter((s) => s.id !== editingSymbol.id && s.gridId !== editingSymbol.id),
       )
@@ -1593,13 +1681,26 @@ export default function AdminPageClient() {
       return
     }
 
+    if (!selectedProfileId?.trim()) {
+      setStatus('Selecciona un tablero antes de eliminar.')
+      return
+    }
+
     try {
       await deleteSymbolAction(selectedProfileId, symbolId)
-      setSymbols((prev) => {
-        const next = prev.filter((s) => s.id !== symbolId && s.gridId !== symbolId)
-        setSymbolsBaselineJson(stableGridSnapshot(next))
-        return next
-      })
+      const [freshSymbols, profilesList] = await Promise.all([
+        getProfileSymbols(selectedProfileId),
+        getProfiles(),
+      ])
+      setProfiles(profilesList)
+      const mappedFresh = freshSymbols.map(adminSymbolFromBoard)
+      setSymbols(mappedFresh)
+      setSymbolsBaselineJson(stableGridSnapshot(mappedFresh))
+      const stillThere = mappedFresh.some((s) => s.id === symbolId)
+      if (stillThere) {
+        setStatus('No se pudo eliminar el símbolo.')
+        return
+      }
       closeEditingSymbolModal()
       setStatus('Símbolo eliminado.')
     } catch (error) {
@@ -1888,25 +1989,124 @@ export default function AdminPageClient() {
     [previewGridCols, previewGridRows, adminFixedZoneSet, fixedZoneEditMode, fixedZoneDraftKeys],
   )
 
+  const demoSuppressedTemplateLabelSet = useMemo(() => {
+    const raw = selectedProfile?.demoSuppressedTemplateLabels
+    const base = raw?.length ? raw.map((s) => s.trim().toLowerCase()).filter(Boolean) : []
+    const pend = pendingDemoTemplateSuppressions.map((s) => s.trim().toLowerCase()).filter(Boolean)
+    const merged = [...new Set([...base, ...pend])]
+    if (merged.length === 0) return null
+    return new Set(merged)
+  }, [selectedProfile?.demoSuppressedTemplateLabels, pendingDemoTemplateSuppressions])
+
+  const demoSuppressedFolderItemSet = useMemo(() => {
+    const raw = selectedProfile?.demoSuppressedFolderItems
+    const base = raw?.length ? raw.map((s) => s.trim().toLowerCase()).filter(Boolean) : []
+    const pend = pendingDemoFolderSuppressions.map((s) => s.trim().toLowerCase()).filter(Boolean)
+    const merged = [...new Set([...base, ...pend])]
+    if (merged.length === 0) return null
+    return new Set(merged)
+  }, [selectedProfile?.demoSuppressedFolderItems, pendingDemoFolderSuppressions])
+
   const mainGridSymbols = useMemo(() => {
     if (shouldUseDefaultGridTemplate) {
-      return computeMainGrid(symbols as unknown as BoardSymbol[], activeFolder) as AdminSymbol[]
+      return computeMainGrid(
+        symbols as unknown as BoardSymbol[],
+        activeFolder,
+        demoSuppressedTemplateLabelSet,
+        demoSuppressedFolderItemSet,
+      ) as AdminSymbol[]
     }
-    return mergeMainGridWithFolderView(
-      symbols,
-      activeFolder,
-      previewGridCols,
-      previewGridRows,
-      adminFixedZoneSet,
-    ) as AdminSymbol[]
+    // Misma regla que /tablero: base fija canónica (7 col + 1.ª fila), sin depender de `fixed_zone_cells`.
+    return mergeMainGridWithFolderView(symbols, activeFolder, previewGridCols, previewGridRows, null) as AdminSymbol[]
   }, [
     shouldUseDefaultGridTemplate,
     symbols,
     activeFolder,
     previewGridCols,
     previewGridRows,
-    adminFixedZoneSet,
+    demoSuppressedTemplateLabelSet,
+    demoSuppressedFolderItemSet,
   ])
+
+  const mainGridSymbolsRef = useRef(mainGridSymbols)
+  mainGridSymbolsRef.current = mainGridSymbols
+
+  /** HTML5 drag del grid: id en vuelo + celda bajo cursor (highlight). */
+  const [gridDragSymbolId, setGridDragSymbolId] = useState<string | null>(null)
+  const [gridDropHover, setGridDropHover] = useState<{ x: number; y: number } | null>(null)
+  const gridDragIdRef = useRef<string | null>(null)
+  /** Tras soltar, evita abrir el modal de edición por el clic fantasma. */
+  const suppressNextGridSymbolClickRef = useRef(false)
+
+  const handleAdminGridSymbolDragStart = useCallback(
+    (e: React.DragEvent, symbolId: string) => {
+      if (fixedZoneEditMode || gridContextMenu) {
+        e.preventDefault()
+        return
+      }
+      gridDragIdRef.current = symbolId
+      setGridDragSymbolId(symbolId)
+      e.dataTransfer.setData(ADMIN_GRID_DRAG_MIME, symbolId)
+      e.dataTransfer.setData('text/plain', symbolId)
+      e.dataTransfer.effectAllowed = 'move'
+    },
+    [fixedZoneEditMode, gridContextMenu],
+  )
+
+  const handleAdminGridSymbolDragEnd = useCallback(() => {
+    gridDragIdRef.current = null
+    setGridDragSymbolId(null)
+    setGridDropHover(null)
+    suppressNextGridSymbolClickRef.current = true
+    window.setTimeout(() => {
+      suppressNextGridSymbolClickRef.current = false
+    }, 220)
+  }, [])
+
+  const handleAdminGridCellDragOverAt = useCallback((e: React.DragEvent, cx: number, cy: number) => {
+    if (!gridDragIdRef.current) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setGridDropHover({ x: cx, y: cy })
+  }, [])
+
+  const handleAdminGridCellDropAt = useCallback(
+    (e: React.DragEvent, cx: number, cy: number) => {
+      e.preventDefault()
+      // En Chrome/React, getData a menudo viene vacío en `drop` para MIME custom; la ref de dragStart es fiable.
+      const fromRef = gridDragIdRef.current?.trim() ?? ''
+      const dt = e.dataTransfer ?? (e.nativeEvent as DragEvent).dataTransfer
+      const fromMime = dt?.getData(ADMIN_GRID_DRAG_MIME)?.trim() ?? ''
+      const fromText = dt?.getData('text/plain')?.trim() ?? ''
+      const dragId = fromRef || fromMime || fromText
+      gridDragIdRef.current = null
+      setGridDragSymbolId(null)
+      setGridDropHover(null)
+      if (!dragId) return
+
+      setSymbols((prev) => {
+        if (!prev.some((s) => String(s.id) === dragId)) return prev
+        const result = applyAdminSymbolGridMove({
+          symbols: prev,
+          gridCols: previewGridCols,
+          gridRows: previewGridRows,
+          dragId,
+          targetX: cx,
+          targetY: cy,
+        })
+        return result.ok ? result.nextSymbols : prev
+      })
+    },
+    [previewGridCols, previewGridRows],
+  )
+
+  useEffect(() => {
+    if (fixedZoneEditMode || gridContextMenu) {
+      gridDragIdRef.current = null
+      setGridDragSymbolId(null)
+      setGridDropHover(null)
+    }
+  }, [fixedZoneEditMode, gridContextMenu])
 
   const targetPasteGridId = useMemo(
     () => (!shouldUseDefaultGridTemplate && activeFolder ? String(activeFolder) : 'main'),
@@ -1991,8 +2191,8 @@ export default function AdminPageClient() {
       !sid.startsWith('folder-item-')
     if (isMovableSymbol(symbol)) {
       items.push({
-        key: 'copy',
-        label: 'Copiar',
+        key: 'move',
+        label: 'Mover',
         onSelect: () => handleGridContextCopy(symbol),
       })
     }
@@ -2003,7 +2203,7 @@ export default function AdminPageClient() {
         onSelect: () => handleGridEditFolderContent(symbol),
       })
     }
-    if (isMovableSymbol(symbol)) {
+    if (canDeleteAdminGridSymbol(symbol, isSelectedDemoProfile)) {
       items.push({
         key: 'delete',
         label: 'Eliminar',
@@ -2014,12 +2214,8 @@ export default function AdminPageClient() {
       })
     }
     return items
-  }, [gridContextMenu, handleGridContextCopy, handleGridEditFolderContent])
+  }, [gridContextMenu, handleGridContextCopy, handleGridEditFolderContent, isSelectedDemoProfile])
 
-  const draggableSymbolsById = useMemo(() => {
-    return new Map(mainGridSymbols.filter((symbol) => isMovableSymbol(symbol)).map((symbol) => [symbol.id, symbol]))
-  }, [mainGridSymbols])
-  const activeDraggedSymbol = activeDraggedSymbolId ? draggableSymbolsById.get(activeDraggedSymbolId) ?? null : null
   const listSymbols = useMemo(() => {
     const normalizedQuery = listSearch.trim().toLowerCase()
 
@@ -2116,6 +2312,35 @@ export default function AdminPageClient() {
     setFixedZoneEditMode(true)
   }, [selectedProfileId, selectedProfile, previewGridCols, previewGridRows])
 
+  const requestEnterFixedZoneEdit = useCallback(() => {
+    if (!selectedProfileId || !selectedProfile) return
+    let introDismissed = false
+    try {
+      introDismissed = typeof window !== 'undefined' && window.localStorage.getItem(FIXED_ZONE_INTRO_STORAGE_KEY) === '1'
+    } catch {
+      introDismissed = false
+    }
+    if (introDismissed) {
+      enterFixedZoneEdit()
+      return
+    }
+    setShowFixedZoneIntroModal(true)
+  }, [selectedProfileId, selectedProfile, enterFixedZoneEdit])
+
+  const confirmFixedZoneIntro = useCallback(() => {
+    try {
+      window.localStorage.setItem(FIXED_ZONE_INTRO_STORAGE_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+    setShowFixedZoneIntroModal(false)
+    enterFixedZoneEdit()
+  }, [enterFixedZoneEdit])
+
+  const cancelFixedZoneIntro = useCallback(() => {
+    setShowFixedZoneIntroModal(false)
+  }, [])
+
   const exitFixedZoneEdit = useCallback(() => {
     fixedZoneBrushRef.current = null
     setFixedZoneEditMode(false)
@@ -2180,91 +2405,6 @@ export default function AdminPageClient() {
       setStatus('❌ No se pudo guardar la base fija.')
     }
   }, [selectedProfileId, selectedProfile, previewGridCols, previewGridRows, fixedZoneDraftKeys, loadData])
-
-  const handleDragStart = (event: DragStartEvent) => {
-    // Solo bloquear en modo pincel de zona fija; con carpeta activa sí se debe poder mover la base fija (main).
-    if (fixedZoneEditMode) return
-    if (gridContextMenu) return
-    setActiveDraggedSymbolId(String(event.active.id))
-  }
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveDraggedSymbolId(null)
-    if (fixedZoneEditMode) return
-    // Mientras el menú contextual está abierto, no aplicar soltar (evita «Copiar»/clic que dispara un drop fantasma).
-    if (gridContextMenu) return
-
-    const overRaw = event.over?.id
-    if (overRaw === undefined || overRaw === null) return
-    const overId = String(overRaw)
-
-    const draggedSymbol = draggableSymbolsById.get(String(event.active.id))
-    if (!draggedSymbol || !isMovableSymbol(draggedSymbol)) return
-
-    let x: number
-    let y: number
-
-    if (overId.startsWith('cell-')) {
-      const [, targetX, targetY] = overId.split('-')
-      x = Number(targetX)
-      y = Number(targetY)
-    } else {
-      // Soltar encima de otro símbolo: `over` suele ser el id del draggable, no el de la celda.
-      const droppedOn = mainGridSymbols.find((s) => String(s.id) === overId)
-      if (!droppedOn) return
-      const pos = getSymbolPosition(droppedOn)
-      x = pos.x
-      y = pos.y
-    }
-
-    if (Number.isNaN(x) || Number.isNaN(y)) return
-
-    const sourcePosition = getSymbolPosition(draggedSymbol)
-    if (sourcePosition.x === x && sourcePosition.y === y) return
-
-    const gridCols = previewGridCols
-    const gridRows = previewGridRows
-    const dragGid = draggedSymbol.gridId ?? draggedSymbol.grid_id ?? 'main'
-    const peers = adminSymbolsSameGridInBounds(symbols, dragGid, gridCols, gridRows)
-
-    if (canPlaceCellAdmin(x, y, gridCols, gridRows, peers, draggedSymbol.id)) {
-      setSymbols((prev) =>
-        prev.map((symbol) =>
-          symbol.id === draggedSymbol.id ? updateSymbolCoordinates(symbol, x, y) : symbol,
-        ),
-      )
-      return
-    }
-
-    const targetSymbol = peers.find((symbol) => {
-      if (!isMovableSymbol(symbol) || symbol.id === draggedSymbol.id) return false
-      const position = getSymbolPosition(symbol)
-      return position.x === x && position.y === y
-    })
-    if (
-      targetSymbol &&
-      canPlaceCellAdmin(
-        sourcePosition.x,
-        sourcePosition.y,
-        gridCols,
-        gridRows,
-        peers,
-        targetSymbol.id,
-      )
-    ) {
-      setSymbols((prev) =>
-        prev.map((symbol) => {
-          if (symbol.id === draggedSymbol.id) {
-            return updateSymbolCoordinates(symbol, x, y)
-          }
-          if (symbol.id === targetSymbol.id) {
-            return updateSymbolCoordinates(symbol, sourcePosition.x, sourcePosition.y)
-          }
-          return symbol
-        }),
-      )
-    }
-  }
 
   const handleCreateSymbolFromList = () => {
     const nextPosition = findNextEmptyGridPosition()
@@ -2341,8 +2481,20 @@ export default function AdminPageClient() {
         pendingGridDimensions.cols !== (selectedProfile.gridCols ?? 14))
     const symbolsDirty =
       symbolsBaselineJson !== '' && stableGridSnapshot(symbols) !== symbolsBaselineJson
-    return dimsDirty || symbolsDirty
-  }, [symbols, symbolsBaselineJson, selectedProfileId, selectedProfile, isSelectedDemoProfile, pendingGridDimensions])
+    const demoSuppressionsDirty =
+      isSelectedDemoProfile &&
+      (pendingDemoTemplateSuppressions.length > 0 || pendingDemoFolderSuppressions.length > 0)
+    return dimsDirty || symbolsDirty || demoSuppressionsDirty
+  }, [
+    symbols,
+    symbolsBaselineJson,
+    selectedProfileId,
+    selectedProfile,
+    isSelectedDemoProfile,
+    pendingGridDimensions,
+    pendingDemoTemplateSuppressions,
+    pendingDemoFolderSuppressions,
+  ])
 
   useEffect(() => {
     if (gridSaveFeedback !== 'saved') return
@@ -2472,7 +2624,7 @@ export default function AdminPageClient() {
                   !selectedProfileId
                     ? 'Selecciona un tablero'
                     : !hasUnsavedGridChanges
-                      ? 'No hay cambios (símbolos o tamaño del grid) en el tablero seleccionado'
+                      ? 'No hay cambios pendientes (símbolos, grid o borrados en el tablero demo)'
                       : undefined
                 }
                 className={[
@@ -3783,7 +3935,7 @@ export default function AdminPageClient() {
                           ) : null}
                           <button
                             type="button"
-                            onClick={enterFixedZoneEdit}
+                            onClick={requestEnterFixedZoneEdit}
                             suppressHydrationWarning
                             disabled={fixedZoneToolbarActionsDisabled}
                             className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-300/90 bg-gradient-to-b from-violet-50 to-violet-100/90 px-4 py-2.5 text-sm font-semibold text-violet-950 shadow-sm transition hover:border-violet-400 hover:from-violet-100 hover:to-violet-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto dark:border-violet-500/45 dark:from-violet-950/90 dark:to-violet-900/55 dark:text-violet-50 dark:hover:border-violet-400/70 dark:hover:from-violet-900/80 dark:hover:to-violet-950/70"
@@ -3798,7 +3950,7 @@ export default function AdminPageClient() {
                     {!symbolsLoadPending && fixedZoneEditMode ? (
                       <div className="flex flex-col gap-3 rounded-2xl border border-violet-300/60 bg-gradient-to-br from-violet-50/95 to-white/80 px-4 py-3 shadow-sm dark:border-violet-500/35 dark:from-violet-950/50 dark:to-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <p className="min-w-0 text-sm leading-snug text-violet-950 dark:text-violet-100">
-                          <span className="font-semibold">Editando base fija.</span> Clic o arrastra: las celdas fijas se
+                          <span className="font-semibold">Editando base fija.</span> Clic: las celdas fijas se
                           resaltan en violeta; el resto aparece atenuado.{' '}
                           <kbd className="rounded border border-violet-300/70 bg-white/80 px-1.5 py-0.5 font-mono text-[11px] text-violet-900 dark:border-violet-600/50 dark:bg-violet-950/60 dark:text-violet-200">
                             Esc
@@ -3836,12 +3988,6 @@ export default function AdminPageClient() {
                   </div>
 
                   <div className="rounded-b-[1.25rem]">
-                  <DndContext
-                    sensors={sensors}
-                    modifiers={[snapTopLeftToCursor]}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                  >
                     <div
                       className={`grid w-full max-w-full grid-cols-1 gap-2 ${adminPreviewChromeOuterClass}`}
                     >
@@ -3866,6 +4012,14 @@ export default function AdminPageClient() {
                           ? 'opacity-[0.22] saturate-50'
                           : ''
 
+                        const gridDropHighlightClass =
+                          gridDragSymbolId &&
+                          gridDropHover?.x === x &&
+                          gridDropHover?.y === y &&
+                          !fixedZoneEditMode
+                            ? 'rounded-xl ring-2 ring-indigo-500/85 ring-offset-2 ring-offset-white dark:ring-indigo-400/80 dark:ring-offset-slate-900'
+                            : ''
+
                         if (symbolsLoadPending) {
                           return (
                             <div
@@ -3883,7 +4037,7 @@ export default function AdminPageClient() {
                           y,
                           previewGridCols,
                           previewGridRows,
-                          adminFixedZoneSet,
+                          null,
                         )
                         const isAnchor =
                           Boolean(cover) &&
@@ -3892,9 +4046,8 @@ export default function AdminPageClient() {
 
                         if (cover && !isAnchor) {
                           return (
-                            <DroppableGridCell
+                            <AdminPreviewGridCell
                               key={`cell-${x}-${y}`}
-                              cellId={`cell-${x}-${y}`}
                               adminCellX={x}
                               adminCellY={y}
                               className="pointer-events-none relative z-0 flex min-h-0 min-w-0 w-full"
@@ -3920,7 +4073,7 @@ export default function AdminPageClient() {
                                   />
                                 ) : null}
                               </div>
-                            </DroppableGridCell>
+                            </AdminPreviewGridCell>
                           )
                         }
 
@@ -3943,13 +4096,24 @@ export default function AdminPageClient() {
                           const showFixedZoneEditHighlight =
                             fixedZoneEditMode && isFixedCellAtPreview(x, y)
                           const baseCellBg = resolveSymbolColor(symbol.color)
+                          const canDragThisSymbol =
+                            !fixedZoneEditMode && !gridContextMenu && isMovableSymbol(symbol)
                           return (
-                            <DroppableGridCell
+                            <AdminPreviewGridCell
                               key={`cell-${x}-${y}`}
-                              cellId={`cell-${x}-${y}`}
                               adminCellX={x}
                               adminCellY={y}
-                              className="relative z-[2] flex min-h-0 min-w-0 w-full"
+                              onDragOver={
+                                fixedZoneEditMode
+                                  ? undefined
+                                  : (e) => handleAdminGridCellDragOverAt(e, x, y)
+                              }
+                              onDrop={
+                                fixedZoneEditMode
+                                  ? undefined
+                                  : (e) => handleAdminGridCellDropAt(e, x, y)
+                              }
+                              className={`relative z-[2] flex min-h-0 min-w-0 w-full ${gridDropHighlightClass}`}
                               style={{
                                 gridColumn: `${x + 1} / span 1`,
                                 gridRow: `${y + 1} / span 1`,
@@ -3961,12 +4125,20 @@ export default function AdminPageClient() {
                                 whileTap={fixedZoneEditMode ? undefined : { scale: 0.95 }}
                                 className={`group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${shapeClass} ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button.symbol-cell]:pointer-events-none' : ''}`}
                               >
-                                <DraggableGridItem
-                                  symbol={symbol}
-                                  contextMenuBlocksDrag={Boolean(gridContextMenu)}
-                                >
+                                <div className="flex min-h-0 min-w-0 h-full w-full">
                                   <button
-                                    onClick={() =>
+                                    draggable={canDragThisSymbol}
+                                    onDragOver={
+                                      fixedZoneEditMode
+                                        ? undefined
+                                        : (ev) => handleAdminGridCellDragOverAt(ev, x, y)
+                                    }
+                                    onDragStart={(e) =>
+                                      handleAdminGridSymbolDragStart(e, String(symbol.id))
+                                    }
+                                    onDragEnd={handleAdminGridSymbolDragEnd}
+                                    onClick={() => {
+                                      if (suppressNextGridSymbolClickRef.current) return
                                       setEditingSymbol({
                                         ...symbol,
                                         color: normalizeSymbolColor(symbol.color),
@@ -3974,9 +4146,14 @@ export default function AdminPageClient() {
                                         positionY: y,
                                         state: symbol.state || 'visible',
                                       })
-                                    }
+                                    }}
                                     type="button"
-                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''}`}
+                                    title={
+                                      canDragThisSymbol
+                                        ? 'Clic para editar · Arrastra para mover o intercambiar'
+                                        : undefined
+                                    }
+                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''} ${gridDragSymbolId === String(symbol.id) ? 'opacity-45' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                     style={{
                                       backgroundColor: showFixedZoneEditHighlight
                                         ? `color-mix(in srgb, ${baseCellBg} 58%, rgb(167 139 250) 42%)`
@@ -4006,7 +4183,7 @@ export default function AdminPageClient() {
                                           onContextMenu={(e) => e.preventDefault()}
                                         />
                                       ) : (
-                                        symbol.emoji || '❓'
+                                        <PictoEmoji emoji={symbol.emoji || '❓'} aria-hidden />
                                       )}
                                     </div>
                                     <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
@@ -4023,7 +4200,7 @@ export default function AdminPageClient() {
                                       </span>
                                     )}
                                   </button>
-                                </DraggableGridItem>
+                                </div>
                                 {!fixedZoneEditMode &&
                                   (() => {
                                     const sid = String(symbol.id ?? '')
@@ -4031,16 +4208,18 @@ export default function AdminPageClient() {
                                       symbol.category === 'Carpetas' &&
                                       !sid.startsWith('template-') &&
                                       !sid.startsWith('folder-item-')
-                                    if (!isMovableSymbol(symbol) && !canEditFolder) return null
+                                    const canFolderItemDelete =
+                                      isSelectedDemoProfile && sid.startsWith('folder-item-')
+                                    if (!isMovableSymbol(symbol) && !canEditFolder && !canFolderItemDelete)
+                                      return null
                                     return (
                                       <button
                                         type="button"
-                                        data-no-dnd
                                         aria-label="Más acciones del símbolo"
                                         aria-haspopup="menu"
                                         onClick={(e) => openGridSymbolActionsMenu(e, symbol, x, y)}
                                         onPointerDown={(e) => e.stopPropagation()}
-                                        className="absolute right-1 top-1 z-30 grid h-6 w-6 place-items-center rounded-full border border-slate-200/90 bg-white/95 text-slate-700 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 focus-visible:opacity-100 group-hover:opacity-100 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+                                        className="absolute right-1 top-1 z-30 grid h-6 w-6 place-items-center rounded-full border border-slate-200/90 bg-white/95 text-slate-700 opacity-100 shadow-sm transition-opacity [@media(any-hover:hover)]:opacity-0 [@media(any-hover:hover)]:hover:bg-slate-100 [@media(any-hover:hover)]:focus-visible:opacity-100 [@media(any-hover:hover)]:group-hover:opacity-100 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 dark:[@media(any-hover:hover)]:hover:bg-slate-800"
                                       >
                                         <Menu size={14} strokeWidth={2.25} aria-hidden />
                                       </button>
@@ -4062,19 +4241,28 @@ export default function AdminPageClient() {
                                 />
                               ) : null}
                               </div>
-                            </DroppableGridCell>
+                            </AdminPreviewGridCell>
                           )
                         }
 
                         const isSplitHere = splitEmptyCell?.x === x && splitEmptyCell?.y === y
 
                         return (
-                          <DroppableGridCell
+                          <AdminPreviewGridCell
                             key={`cell-${x}-${y}`}
-                            cellId={`cell-${x}-${y}`}
                             adminCellX={x}
                             adminCellY={y}
-                            className="flex min-h-0 min-w-0 w-full"
+                            onDragOver={
+                              fixedZoneEditMode
+                                ? undefined
+                                : (e) => handleAdminGridCellDragOverAt(e, x, y)
+                            }
+                            onDrop={
+                              fixedZoneEditMode
+                                ? undefined
+                                : (e) => handleAdminGridCellDropAt(e, x, y)
+                            }
+                            className={`flex min-h-0 min-w-0 w-full ${gridDropHighlightClass}`}
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
                             <div className="group/emptycel relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -4085,12 +4273,12 @@ export default function AdminPageClient() {
                                 aria-label={
                                   gridClipboard
                                     ? 'Pegar símbolo copiado en esta celda'
-                                    : 'Nada copiado; usa Copiar en el menú de otra celda'
+                                    : 'Nada copiado; usa Mover en el menú de otra celda'
                                 }
                                 title={
                                   gridClipboard
                                     ? 'Pegar en esta celda'
-                                    : 'Copia un símbolo con el menú (⋯) de otra celda'
+                                    : 'Usa Mover en el menú (⋯) de otra celda'
                                 }
                                 onClick={(e) => {
                                   e.preventDefault()
@@ -4175,7 +4363,7 @@ export default function AdminPageClient() {
                               />
                             ) : null}
                             </div>
-                          </DroppableGridCell>
+                          </AdminPreviewGridCell>
                         )
                       })}
                       </div>
@@ -4223,36 +4411,6 @@ export default function AdminPageClient() {
                         </button>
                       ) : null}
                     </div>
-
-                    <DragOverlay>
-                      {activeDraggedSymbol
-                        ? (() => {
-                            const sym = activeDraggedSymbol
-                            const dragImgSrc = symbolImageDisplayUrl(sym)
-                            return (
-                              <div
-                                className="ui-floating-panel flex h-20 w-20 flex-col items-center justify-center rounded-[1.35rem] p-1"
-                                style={{
-                                  backgroundColor: resolveSymbolColor(sym.color),
-                                  color: getSymbolTextColor(sym.color),
-                                }}
-                              >
-                                <div className="text-xl mb-1">
-                                  {dragImgSrc ? (
-                                    <img src={dragImgSrc} alt={sym.label} className="h-8 w-8 object-contain" />
-                                  ) : (
-                                    sym.emoji || '❓'
-                                  )}
-                                </div>
-                                <span className="text-center text-[10px] font-bold leading-tight line-clamp-1">
-                                  {sym.label}
-                                </span>
-                              </div>
-                            )
-                          })()
-                        : null}
-                    </DragOverlay>
-                  </DndContext>
                   </div>
                 </div>
               ) : (
@@ -4354,7 +4512,10 @@ export default function AdminPageClient() {
                                       className="ui-floating-panel grid h-11 w-11 place-items-center rounded-2xl text-lg"
                                       style={{ backgroundColor: resolveSymbolColor(symbol.color) }}
                                     >
-                                      {symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
+                                      <PictoEmoji
+                                        emoji={symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
+                                        aria-hidden
+                                      />
                                     </div>
                                     <div>
                                       <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
@@ -4390,7 +4551,7 @@ export default function AdminPageClient() {
                                     >
                                       Editar
                                     </button>
-                                    {isMovableSymbol(symbol) && (
+                                    {canDeleteAdminGridSymbol(symbol, isSelectedDemoProfile) && (
                                       <button
                                         type="button"
                                         onClick={() => deleteSymbol(symbol.id)}
@@ -4773,7 +4934,7 @@ export default function AdminPageClient() {
                             }`}
                             aria-label={`Seleccionar emoji ${emoji}`}
                           >
-                            {emoji}
+                            <PictoEmoji emoji={emoji} aria-hidden />
                           </button>
                         ))}
                       </div>
@@ -4850,7 +5011,7 @@ export default function AdminPageClient() {
               </div>
 
               <div className="flex shrink-0 flex-col gap-2 border-t border-slate-100 bg-[var(--app-surface-muted)] p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 sm:p-6 dark:border-slate-800">
-                {editingSymbol.id && !String(editingSymbol.id).startsWith('folder-item-') && (
+                {editingSymbol.id && (
                   <button
                     onClick={handleDeleteEditingSymbol}
                     type="button"
@@ -5367,6 +5528,16 @@ export default function AdminPageClient() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showFixedZoneIntroModal ? (
+          <FixedZoneEditIntroModal
+            key="fixed-zone-intro"
+            onConfirm={confirmFixedZoneIntro}
+            onCancel={cancelFixedZoneIntro}
+          />
+        ) : null}
       </AnimatePresence>
 
       <AnimatePresence>

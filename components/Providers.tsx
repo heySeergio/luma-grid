@@ -3,6 +3,7 @@
 import type { Session } from 'next-auth'
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from 'next-themes'
+import { ForceLandscapeOnSmallScreens } from '@/components/ForceLandscapeOnSmallScreens'
 import { ThemeSync } from '@/components/ThemeSync'
 
 type Props = {
@@ -20,6 +21,7 @@ export function Providers({ children, session }: Props) {
         >
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange storageKey="luma-theme">
                 <ThemeSync />
+                <ForceLandscapeOnSmallScreens />
                 {children}
             </ThemeProvider>
         </SessionProvider>

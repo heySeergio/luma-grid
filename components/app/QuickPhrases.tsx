@@ -26,7 +26,7 @@ export default function QuickPhrases({ phrases, onSpeak, title = 'Rápidas' }: P
           <button
             key={phrase.id}
             onClick={() => handleSpeak(phrase)}
-            className="ui-chip flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:text-slate-950 dark:text-slate-200 dark:hover:text-white"
+            className="ui-chip flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[var(--app-border)] px-3 py-1.5 text-sm font-medium text-[var(--app-foreground)] transition hover:bg-[color-mix(in_srgb,var(--app-surface-elevated)_90%,var(--app-hover))] dark:border-slate-500/50"
           >
             <Volume2 size={12} />
             {phrase.text}

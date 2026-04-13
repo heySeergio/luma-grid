@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getSemanticLayerPredictionBoost } from '@/lib/lexicon/semanticLayer'
 import { getQuestionCandidateScore, type QuestionType } from '@/lib/lexicon/questions'
-import { normalizeTextForLexicon } from '@/lib/lexicon/normalize'
+import { normalizeLooseTextForSearch, normalizeTextForLexicon } from '@/lib/lexicon/normalize'
 import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { isMissingLexemeColumnError } from '@/lib/prisma/lexemeColumnErrors'
 import { EXTENDED_TIER_PREDICTION_FACTOR } from '@/lib/lexicon/lexemeTier'
@@ -441,6 +441,105 @@ async function getHistoricalSequenceScores(
       }]
     }),
   )
+}
+
+/** Prioriza inicios de frase típicos en AAC (pronombres, partículas, verbos frecuentes). */
+function coldStartHeuristicScore(candidate: PredictionSymbolInput): number {
+  const loose = normalizeLooseTextForSearch(candidate.label)
+  let s = 0.42
+  if (candidate.posType === 'pronoun') s = 1
+  else if (candidate.posType === 'verb') s = 0.86
+  else if (candidate.posType === 'noun') s = 0.56
+  else if (candidate.posType === 'adj') s = 0.48
+  else if (candidate.posType === 'prep') s = 0.52
+  if (
+    loose === 'y' ||
+    loose === 'a' ||
+    loose === 'no' ||
+    loose === 'yo' ||
+    loose === 'tu' ||
+    loose === 'el' ||
+    loose === 'la' ||
+    loose === 'los' ||
+    loose === 'las' ||
+    loose === 'un' ||
+    loose === 'una'
+  ) {
+    s = Math.max(s, 0.94)
+  }
+  return s
+}
+
+/**
+ * Predicciones con frase vacía: mismos candidatos que el grid, ordenados sin símbolo «actual».
+ * Debe ejecutarse al cargar el tablero para que celdas y «Siguiente» no aparezcan solo tras la 1.ª pulsación.
+ */
+export async function getInitialPredictionCandidates(
+  profileId: string,
+  candidateSymbols: PredictionSymbolInput[],
+): Promise<string[]> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return []
+
+  const profile = await prisma.profile.findUnique({
+    where: { id: profileId, userId: session.user.id },
+    select: { id: true },
+  })
+  if (!profile) return []
+
+  const filteredCandidates = candidateSymbols.filter((candidate) => {
+    if (!candidate?.id) return false
+    if (candidate.state === 'hidden') return false
+    return true
+  })
+  if (filteredCandidates.length === 0) return []
+
+  if (!hasLexiconPrismaModels()) {
+    return filteredCandidates
+      .map((candidate) => ({
+        id: candidate.id,
+        score: coldStartHeuristicScore(candidate),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_PREDICTIONS)
+      .map((row) => row.id)
+  }
+
+  const candidateLexemeIds = filteredCandidates
+    .map((c) => c.lexemeId)
+    .filter((value): value is string => Boolean(value))
+
+  const lexemeRows = await fetchLexemeRowsForPrediction(candidateLexemeIds)
+  const lexemeById = new Map(lexemeRows.map((row) => [row.id, row]))
+
+  const ranked = filteredCandidates.map((candidate) => {
+    const lexeme = candidate.lexemeId ? lexemeById.get(candidate.lexemeId) : undefined
+    const tierFactor = lexeme?.lexemeTier === 'extended' ? EXTENDED_TIER_PREDICTION_FACTOR : 1
+    const base = coldStartHeuristicScore(candidate)
+    const frequencyScore = lexeme?.frequencyScore ?? 0.35
+    const aacPriorityScore =
+      (lexeme?.aacPriority ? Math.min(1, lexeme.aacPriority / 100) : 0.26) * tierFactor
+    const semanticLayerScore = getSemanticLayerPredictionBoost(
+      lexeme?.semanticLayer ?? null,
+      null,
+      null,
+    )
+    const score =
+      base * 0.38 +
+      frequencyScore * 0.22 +
+      aacPriorityScore * 0.24 +
+      semanticLayerScore * 0.16
+
+    return {
+      id: candidate.id,
+      score,
+    }
+  })
+
+  return ranked
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_PREDICTIONS)
+    .map((row) => row.id)
 }
 
 export async function getPredictionCandidates({

@@ -21,12 +21,23 @@ import {
     parseWordVariantsForClient,
     wordVariantsCanonical,
 } from '@/lib/symbolWordVariants'
+import { OBSOLETE_DEMO_FOLDER_LABELS_LOWER } from '@/lib/data/defaultSymbols'
 import type { PosType, Symbol as AppSymbol } from '@/lib/supabase/types'
 import {
     effectiveSymbolGridId,
     findCellOverlaps,
     resolveCellOverlapsBeforeSave,
 } from '@/lib/grid/gridCellOverlap'
+import {
+    clearDemoSuppressedKeysRestoredBySymbols,
+    DEFAULT_BOARD_WORD_VARIANTS_BY_LABEL,
+    DEFAULT_FOLDER_CONTENTS,
+    demoFolderSuppressionKey,
+    parseDemoFolderItemId,
+    parseDemoSuppressedFolderItemsJson,
+    parseDemoSuppressedTemplateLabelsJson,
+    shouldRecordDemoTemplateSuppressionOnDelete,
+} from '@/lib/data/defaultSymbols'
 
 /** Prisma interactive tx default timeout is 5s; large grids exceed it and fail with "Transaction not found". */
 const SYMBOL_PERSIST_TX = { maxWait: 15_000, timeout: 60_000 } as const
@@ -77,7 +88,11 @@ function mapPrismaSymbolToClient(
         hidden: s.hidden,
         state: s.state,
         opensKeyboard: Boolean(s.opensKeyboard),
-        wordVariants: parseWordVariantsForClient(s.wordVariants),
+        wordVariants: (() => {
+            const parsed = parseWordVariantsForClient(s.wordVariants)
+            if (parsed) return parsed
+            return DEFAULT_BOARD_WORD_VARIANTS_BY_LABEL[s.label.trim()]
+        })(),
         fixedCell: Boolean(s.fixedCell),
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
@@ -622,12 +637,24 @@ export async function getProfileSymbols(profileId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
 
-    const profile = await readProfileGridDimensionsForOwner(profileId, session.user.id)
+    const profile = await readProfileGridAndDemoForOwner(profileId, session.user.id)
     if (!profile) return []
 
     const { cols, rows } = effectiveGridDimensions(profile)
 
-    const symbols = await findManySymbolsByProfileId(profileId)
+    let symbols = await findManySymbolsByProfileId(profileId)
+
+    if (profile.isDemo) {
+        const obsoleteIds = symbols
+            .filter((s) => OBSOLETE_DEMO_FOLDER_LABELS_LOWER.has(s.label.trim().toLowerCase()))
+            .map((s) => s.id)
+        if (obsoleteIds.length > 0) {
+            await prisma.symbol.deleteMany({ where: { profileId, id: { in: obsoleteIds } } })
+            symbols = symbols.filter(
+                (s) => !OBSOLETE_DEMO_FOLDER_LABELS_LOWER.has(s.label.trim().toLowerCase()),
+            )
+        }
+    }
 
     const userId = session.user.id
     after(() => {
@@ -802,6 +829,26 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         }
     }
 
+    if (profile.isDemo) {
+        const prof = await prisma.profile.findFirst({
+            where: { id: profileId },
+            select: { demoSuppressedTemplateLabels: true },
+        })
+        const prev = parseDemoSuppressedTemplateLabelsJson(prof?.demoSuppressedTemplateLabels)
+        const next = clearDemoSuppressedKeysRestoredBySymbols(symbolsInBounds, prev)
+        const same =
+            prev.length === next.length && prev.every((v, i) => v === next[i])
+        if (!same) {
+            await prisma.profile.update({
+                where: { id: profileId },
+                data: {
+                    demoSuppressedTemplateLabels:
+                        next.length > 0 ? next : Prisma.JsonNull,
+                },
+            })
+        }
+    }
+
     revalidatePath('/admin')
     revalidatePath('/tablero')
 }
@@ -810,25 +857,136 @@ export async function deleteSymbolAction(profileId: string, symbolId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
-    const owner = { userId: session.user.id }
+    const trimmedId = typeof symbolId === 'string' ? symbolId.trim() : ''
+    if (!trimmedId) throw new Error('Símbolo no válido')
 
+    const profileRow = await prisma.profile.findFirst({
+        where: { id: profileId, userId: session.user.id },
+        select: { id: true, isDemo: true, demoSuppressedTemplateLabels: true },
+    })
+    if (!profileRow) throw new Error('Tablero no encontrado')
+
+    const symbolBefore = await prisma.symbol.findFirst({
+        where: { profileId, id: trimmedId },
+        select: { label: true, positionX: true, positionY: true, gridId: true },
+    })
+
+    // Primero: contenido de carpeta cuyo gridId es este símbolo. Luego la fila del símbolo.
+    // Nota: el borrado va solo por `profileId` tras comprobar propiedad; el filtro anidado
+    // `profile: { userId }` en deleteMany puede no aplicarse como se espera en algunos despliegues.
     await prisma.symbol.deleteMany({
         where: {
             profileId,
-            gridId: symbolId,
-            profile: owner,
+            gridId: trimmedId,
         },
     })
 
-    const deleted = await prisma.symbol.deleteMany({
+    await prisma.symbol.deleteMany({
         where: {
-            id: symbolId,
+            id: trimmedId,
             profileId,
-            profile: owner,
         },
     })
 
-    if (deleted.count === 0) throw new Error('Símbolo no encontrado')
+    if (
+        profileRow.isDemo &&
+        symbolBefore &&
+        shouldRecordDemoTemplateSuppressionOnDelete(symbolBefore)
+    ) {
+        const key = symbolBefore.label.trim().toLowerCase()
+        const prev = parseDemoSuppressedTemplateLabelsJson(
+            profileRow.demoSuppressedTemplateLabels,
+        )
+        if (!prev.includes(key)) {
+            await prisma.profile.update({
+                where: { id: profileId },
+                data: {
+                    demoSuppressedTemplateLabels: [...prev, key],
+                },
+            })
+        }
+    }
+
+    // Idempotente: doble clic o estado ya sincronizado no deben fallar con «no encontrado».
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+}
+
+/**
+ * Oculta una celda de la plantilla demo virtual (`template-*`, `default-*`, `fixed-left-*`, …)
+ * guardando la etiqueta en `demoSuppressedTemplateLabels`.
+ */
+export async function suppressDemoVirtualGridSymbolAction(profileId: string, templateLabel: string) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    const key = typeof templateLabel === 'string' ? templateLabel.trim().toLowerCase() : ''
+    if (!key) throw new Error('Etiqueta no válida')
+
+    const profileRow = await prisma.profile.findFirst({
+        where: { id: profileId, userId: session.user.id },
+        select: { id: true, isDemo: true, demoSuppressedTemplateLabels: true },
+    })
+    if (!profileRow) throw new Error('Tablero no encontrado')
+    if (!profileRow.isDemo) throw new Error('Solo disponible en el tablero demo')
+
+    const prev = parseDemoSuppressedTemplateLabelsJson(profileRow.demoSuppressedTemplateLabels)
+    if (!prev.includes(key)) {
+        await prisma.profile.update({
+            where: { id: profileId },
+            data: {
+                demoSuppressedTemplateLabels: [...prev, key],
+            },
+        })
+    }
+
+    revalidatePath('/admin')
+    revalidatePath('/tablero')
+}
+
+/** Oculta un picto del contenido demo de una carpeta (ids `folder-item-*`); persiste en el perfil demo. */
+export async function suppressDemoFolderItemAction(profileId: string, symbolId: string) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    const trimmedId = typeof symbolId === 'string' ? symbolId.trim() : ''
+    if (!trimmedId) throw new Error('Símbolo no válido')
+
+    const parsed = parseDemoFolderItemId(trimmedId)
+    if (!parsed) throw new Error('Símbolo no válido')
+
+    const folderLabels = DEFAULT_FOLDER_CONTENTS[parsed.folderKey]
+    if (!folderLabels || parsed.index < 0 || parsed.index >= folderLabels.length) {
+        throw new Error('Carpeta no válida')
+    }
+    const label = folderLabels[parsed.index]
+    const key = demoFolderSuppressionKey(parsed.folderKey, label)
+
+    const profileRows = await prisma.$queryRaw<
+        Array<{ id: string; is_demo: boolean; demo_suppressed_folder_items: unknown }>
+    >`
+      SELECT id, is_demo, demo_suppressed_folder_items
+      FROM profiles
+      WHERE id = ${profileId} AND user_id = ${session.user.id}
+      LIMIT 1
+    `
+    const profileRow = profileRows[0]
+    if (!profileRow) throw new Error('Tablero no encontrado')
+    if (!profileRow.is_demo) throw new Error('Solo disponible en el tablero demo')
+
+    const prev = parseDemoSuppressedFolderItemsJson(profileRow.demo_suppressed_folder_items)
+    if (prev.includes(key)) {
+        revalidatePath('/admin')
+        revalidatePath('/tablero')
+        return
+    }
+
+    const nextJson = JSON.stringify([...prev, key])
+    await prisma.$executeRawUnsafe(
+        'UPDATE profiles SET demo_suppressed_folder_items = $1::jsonb WHERE id = $2',
+        nextJson,
+        profileId,
+    )
 
     revalidatePath('/admin')
     revalidatePath('/tablero')

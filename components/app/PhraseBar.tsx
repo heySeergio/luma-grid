@@ -9,6 +9,7 @@ import { stopAllTtsPlayback } from '@/lib/voice/speakClient'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Phrase, Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
 import { useClientReady } from '@/lib/ui/useClientReady'
+import PictoEmoji from '@/components/ui/PictoEmoji'
 
 type LocalProfile = Profile & {
   communication_gender?: 'male' | 'female'
@@ -209,13 +210,13 @@ export default function PhraseBar({
           <House className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9" />
         </button>
 
-        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-slate-200/90 bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-700/80 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-slate-200/90 bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-500/55 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           {symbols.length > 0 ? (
             <div className="flex items-center gap-2 overflow-hidden flex-wrap">
               {symbols.map((symbol, i) => (
                 <div
                   key={`preview-${symbol.id}-${i}`}
-                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-slate-200/80 bg-slate-100/95 px-3 py-2 shadow-sm dark:border-transparent dark:bg-[var(--app-toolbar-inner)] dark:shadow-none"
+                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-slate-200/80 bg-slate-100/95 px-3 py-2 shadow-sm dark:border-[color-mix(in_srgb,var(--app-border)_90%,transparent)] dark:bg-[color-mix(in_srgb,var(--app-surface-elevated)_78%,var(--app-border))] dark:shadow-none"
                 >
                   {onRemoveSymbol ? (
                     <button
@@ -239,7 +240,11 @@ export default function PhraseBar({
                       />
                     </span>
                   ) : (
-                    <span className="text-2xl leading-none text-slate-900 dark:text-white sm:text-3xl">{symbol.emoji || '📝'}</span>
+                    <PictoEmoji
+                      emoji={symbol.emoji || '📝'}
+                      className="text-2xl leading-none text-slate-900 dark:text-white sm:text-3xl"
+                      aria-hidden
+                    />
                   )}
                   <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-slate-900 dark:text-white sm:text-xs">
                     {symbol.label}
@@ -248,7 +253,7 @@ export default function PhraseBar({
               ))}
             </div>
           ) : (
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-300 sm:text-base">
+            <p className="text-sm font-semibold text-[var(--app-muted-foreground)] sm:text-base">
               Toca los símbolos para construir una frase...
             </p>
           )}

@@ -51,6 +51,10 @@ type LocalProfile = Profile & {
   keyboardTheme?: KeyboardThemeColors | null
   /** Null = plantilla por defecto (7 col + fila 0). */
   fixedZoneCellKeys?: string[] | null
+  /** Solo demo: celdas de plantilla no reinyectadas tras borrado. */
+  demoSuppressedTemplateLabels?: string[]
+  /** Solo demo: pictos de contenido de carpeta no reinyectados (`carpeta|etiqueta`). */
+  demoSuppressedFolderItems?: string[]
 }
 
 type PredictionInputSymbol = {
@@ -60,6 +64,34 @@ type PredictionInputSymbol = {
   lexemeId?: string | null
   category?: string | null
   state?: string
+}
+
+// Mapeo masculino → femenino para sentimientos con género gramatical variable
+const FEELING_FEMININE: Record<string, string> = {
+  'confundido': 'confundida',
+  'enfermo': 'enferma',
+  'nervioso': 'nerviosa',
+  'distraído': 'distraída',
+  'enamorado': 'enamorada',
+  'preocupado': 'preocupada',
+  'enfadado': 'enfadada',
+  'sorprendido': 'sorprendida',
+  'asqueado': 'asqueada',
+  'desanimado': 'desanimada',
+  'mareado': 'mareada',
+  'incómodo': 'incómoda',
+  'cansado': 'cansada',
+}
+
+// Mapa inverso: femenino → masculino (generado automáticamente desde FEELING_FEMININE)
+const FEELING_MASCULINE: Record<string, string> = Object.fromEntries(
+  Object.entries(FEELING_FEMININE).map(([m, f]) => [f, m])
+)
+
+// Pronombres con género explícito; Yo/Tú se resuelven con communication_gender del perfil
+const PRONOUN_GENDER: Record<string, 'male' | 'female'> = {
+  'él': 'male', 'ellos': 'male', 'nosotros': 'male', 'vosotros': 'male',
+  'ella': 'female', 'ellas': 'female', 'nosotras': 'female', 'vosotras': 'female',
 }
 
 
@@ -96,16 +128,32 @@ export default function AppInterface({
   const profileId = profile?.id ?? ''
 
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
+  const demoSuppressedTemplateLabelSet = useMemo(() => {
+    const raw = profile?.demoSuppressedTemplateLabels
+    if (!raw?.length) return null
+    return new Set(raw.map((s) => s.trim().toLowerCase()).filter(Boolean))
+  }, [profile?.demoSuppressedTemplateLabels])
+
+  const demoSuppressedFolderItemSet = useMemo(() => {
+    const raw = profile?.demoSuppressedFolderItems
+    if (!raw?.length) return null
+    return new Set(raw.map((s) => s.trim().toLowerCase()).filter(Boolean))
+  }, [profile?.demoSuppressedFolderItems])
+
+  /** Zona fija personalizada del perfil. `null` = usar plantilla geométrica por defecto (7 col + fila 0). */
   const fixedZoneKeySet = useMemo(() => {
-    if (profile?.fixedZoneCellKeys === undefined || profile?.fixedZoneCellKeys === null) {
-      return null
-    }
+    if (!profile?.fixedZoneCellKeys?.length) return null
     return new Set(profile.fixedZoneCellKeys)
   }, [profile?.fixedZoneCellKeys])
 
   const mainOrderedSymbols = useMemo(() => {
     if (shouldUseDefaultGridTemplate) {
-      return computeMainGrid(symbols, activeFolder)
+      return computeMainGrid(
+        symbols,
+        activeFolder,
+        demoSuppressedTemplateLabelSet,
+        demoSuppressedFolderItemSet,
+      )
     }
     const cols = Math.max(1, profile?.gridCols ?? 14)
     const rows = Math.max(1, profile?.gridRows ?? 8)
@@ -116,8 +164,23 @@ export default function AppInterface({
     activeFolder,
     profile?.gridCols,
     profile?.gridRows,
+    demoSuppressedTemplateLabelSet,
+    demoSuppressedFolderItemSet,
     fixedZoneKeySet,
   ])
+
+  // Muestra la forma femenina en las celdas cuando el género de comunicación es femenino
+  const displayedSymbols = useMemo(() => {
+    if (profile?.communication_gender !== 'female') return mainOrderedSymbols
+    return mainOrderedSymbols.map(sym => {
+      const feminine = FEELING_FEMININE[sym.label.toLowerCase()]
+      if (!feminine) return sym
+      const displayLabel = sym.label[0] === sym.label[0].toUpperCase()
+        ? feminine[0].toUpperCase() + feminine.slice(1)
+        : feminine
+      return { ...sym, label: displayLabel }
+    })
+  }, [mainOrderedSymbols, profile?.communication_gender])
 
   const speakSelectedWord = useCallback((text: string) => {
     if (!text.trim()) return
@@ -350,6 +413,24 @@ export default function AppInterface({
         setPredictedIds([])
         return
       }
+      if (activeFolder === 'Más verbos · página 2' && normalizedLabel === 'más') {
+        setFolderHistory(prev => [...(prev ?? []), 'Más verbos · página 2'])
+        setActiveFolder('Más verbos · página 3')
+        setPredictedIds([])
+        return
+      }
+      if (activeFolder === 'Alimentos' && normalizedLabel === 'más') {
+        setFolderHistory(prev => [...(prev ?? []), 'Alimentos'])
+        setActiveFolder('Alimentos · página 2')
+        setPredictedIds([])
+        return
+      }
+      if (activeFolder === 'Animales' && normalizedLabel === 'más') {
+        setFolderHistory(prev => [...(prev ?? []), 'Animales'])
+        setActiveFolder('Animales · página 2')
+        setPredictedIds([])
+        return
+      }
       if (DEFAULT_FOLDER_CONTENTS[symbol.label] && symbol.label !== activeFolder) {
         setFolderHistory(prev => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
         setActiveFolder(symbol.label)
@@ -379,7 +460,27 @@ export default function AppInterface({
       return
     }
 
-    const rawPhraseLabel = choice?.phraseLabel ?? symbol.label
+    // Normalizar al masculino canónico (la celda puede mostrar ya la forma femenina)
+    const canonicalMasc = FEELING_MASCULINE[symbol.label.toLowerCase()]
+    const canonicalLabel = canonicalMasc
+      ? (symbol.label[0] === symbol.label[0].toUpperCase()
+        ? canonicalMasc[0].toUpperCase() + canonicalMasc.slice(1)
+        : canonicalMasc)
+      : symbol.label
+    const feminineForm = FEELING_FEMININE[canonicalLabel.toLowerCase()]
+    const rawPhraseLabel = (() => {
+      if (!feminineForm) return choice?.phraseLabel ?? symbol.label
+      const lastPronoun = [...selectedSymbols].reverse().find(s => s.posType === 'pronoun')
+      const genderFromPronoun = lastPronoun
+        ? (PRONOUN_GENDER[lastPronoun.label.toLowerCase()] ?? null)
+        : null
+      const gender = genderFromPronoun ?? (profile?.communication_gender ?? 'male')
+      if (gender !== 'female') return canonicalLabel
+      // Preservar capitalización del label original
+      return canonicalLabel[0] === canonicalLabel[0].toUpperCase()
+        ? feminineForm[0].toUpperCase() + feminineForm.slice(1)
+        : feminineForm
+    })()
     const normalizedTokenLabel =
       rawPhraseLabel === 'Y' ? 'y' : rawPhraseLabel === 'A' ? 'a' : rawPhraseLabel
     const currentPhraseSymbols = [...selectedSymbols, {
@@ -504,24 +605,14 @@ export default function AppInterface({
   ])
 
   useEffect(() => {
-    if (!showPhraseCompletionSection) {
+    if (!profile) {
       setCompletionChips((prev) => {
         const safe = prev ?? []
         return safe.length === 0 ? safe : []
       })
       return
     }
-    if (!profile || selectedSymbols.length === 0) {
-      // Evitar setState con [] en cada render: nuevo [] dispara re-render y bucle infinito en el efecto.
-      setCompletionChips((prev) => {
-        const safe = prev ?? []
-        return safe.length === 0 ? safe : []
-      })
-      return
-    }
-    const inputs = selectedSymbols.map((s) =>
-      toPredictionFromPhraseSelection(s as Symbol & { sourceSymbolId?: string }),
-    )
+
     const candidates = mainOrderedSymbols.map((c) => ({
       id: c.id,
       label: c.label,
@@ -530,6 +621,32 @@ export default function AppInterface({
       category: c.category ?? null,
       state: c.state,
     }))
+
+    /** Frase vacía: sin iluminar celdas por predicción hasta la primera pulsación en el tablero; «Siguiente» vacío hasta que haya al menos un símbolo. */
+    if (selectedSymbols.length === 0) {
+      if (showPhraseCompletionSection) {
+        setCompletionChips([])
+      } else {
+        setCompletionChips((prev) => {
+          const safe = prev ?? []
+          return safe.length === 0 ? safe : []
+        })
+      }
+      setPredictedIds([])
+      return
+    }
+
+    if (!showPhraseCompletionSection) {
+      setCompletionChips((prev) => {
+        const safe = prev ?? []
+        return safe.length === 0 ? safe : []
+      })
+      return
+    }
+
+    const inputs = selectedSymbols.map((s) =>
+      toPredictionFromPhraseSelection(s as Symbol & { sourceSymbolId?: string }),
+    )
     let cancelled = false
     void getPhraseCompletionSuggestions(profile.id, inputs, candidates).then((chips) => {
       if (!cancelled) setCompletionChips(chips)
@@ -710,7 +827,7 @@ export default function AppInterface({
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
         {activeTab === 'grid' ? (
           <SymbolGrid
-            symbols={mainOrderedSymbols}
+            symbols={displayedSymbols}
             predictedIds={showGridCellPredictions ? predictedIds : []}
             cellSize={cellSize}
             onSymbolSelect={handleSymbolSelect}
@@ -812,7 +929,7 @@ export default function AppInterface({
         {/* Scanner overlay */}
         {showScanner && (
           <ScannerOverlay
-            symbols={mainOrderedSymbols}
+            symbols={displayedSymbols}
             pattern={scannerPattern}
             speed={scannerSpeed}
             scanKey={accessConfig?.scan_key || 'Space'}

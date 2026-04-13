@@ -17,7 +17,7 @@ export default async function TableroLayout({
   const initialGate = await getSubscriptionGateState()
   return (
     <TableroForceLight>
-      <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
+      <div className="flex h-screen flex-col overflow-hidden bg-[var(--app-bg)]">
         <SessionWelcomeLoader sessionKey="luma-session-welcome-tablero-v1">
           <PlanGateClient initialGate={initialGate}>
             <TableroQuickTips />

@@ -32,8 +32,13 @@ export function serializeFixedZoneJson(keys: Set<string>): FixedZoneJson {
 /** `null` en BD o valor inválido → usar plantilla por defecto en el merge. */
 export function parseProfileFixedZoneJson(raw: unknown): Set<string> | null {
   if (raw === null || raw === undefined) return null
-  if (typeof raw !== 'object' || Array.isArray(raw)) return null
-  const o = raw as Record<string, unknown>
+  // Algunos drivers devuelven JSONB como string; intentar parsear.
+  let val: unknown = raw
+  if (typeof val === 'string') {
+    try { val = JSON.parse(val) } catch { return null }
+  }
+  if (typeof val !== 'object' || Array.isArray(val) || val === null) return null
+  const o = val as Record<string, unknown>
   if (o.v !== FIXED_ZONE_JSON_VERSION || !Array.isArray(o.keys)) return null
   const set = new Set<string>()
   for (const k of o.keys) {
