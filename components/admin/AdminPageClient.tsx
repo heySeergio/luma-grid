@@ -53,7 +53,25 @@ import { deleteSymbolAction, getProfileSymbols, saveSymbols } from '@/app/action
 import { setProfileGender } from '@/lib/profileGender'
 import { reloadPageWithTheme } from '@/lib/ui/themeReload'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { applyAdminSymbolGridMove, ADMIN_GRID_DRAG_MIME } from '@/lib/admin/applyAdminSymbolGridMove'
+import { applyAdminSymbolGridMove } from '@/lib/admin/applyAdminSymbolGridMove'
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import Link from 'next/link'
 import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
@@ -216,6 +234,23 @@ type AdminSymbol = {
   updated_at?: string
 }
 
+type ArasaacSearchResult = {
+  id: number
+  label: string
+  imageUrl: string
+}
+
+type ImageInputTab = 'upload' | 'url' | 'arasaac'
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 function stripAdminSymbolClientFields(symbol: AdminSymbol): AdminSymbol {
   const { advancedUnlockedForEdit: _u, ...rest } = symbol
   return rest
@@ -370,12 +405,24 @@ function symbolImageDisplayUrl(symbol: Pick<AdminSymbol, 'imageUrl' | 'image_url
 function isMovableSymbol(symbol: Pick<AdminSymbol, 'id'> | null | undefined) {
   if (!symbol?.id) return false
   const id = String(symbol.id)
-  if (id.startsWith('fixed-left')) return false
-  if (id.startsWith('template')) return false
   if (id.startsWith('folder-item-')) return false
-  // `default-*` de la zona variable (sin persistir) sigue sin ser arrastrable; la franja izquierda usa `default-left-*`.
-  if (id.startsWith('default-') && !id.startsWith('default-left-')) return false
   return true
+}
+
+/**
+ * Símbolos del demo que son "virtuales" (sin fila en BD): se generan en `computeMainGrid`.
+ * Para arrastrarlos en el editor hay que materializarlos como `new-...` con `gridId: 'main'`.
+ */
+function isMaterializableVirtualMainId(id: string): boolean {
+  if (!id) return false
+  if (id.startsWith('template-')) return true
+  if (id.startsWith('default-')) return true
+  if (id.startsWith('fixed-left-')) return true
+  return false
+}
+
+function makeNewLocalSymbolId(suffix: string): string {
+  return `new-${Date.now()}-${suffix}-${Math.random().toString(36).slice(2, 7)}`
 }
 
 function canDeleteAdminGridSymbol(
@@ -461,35 +508,81 @@ function sortSymbolsByPosition(a: AdminSymbol, b: AdminSymbol) {
   return aPos.x - bPos.x
 }
 
-/** Contenedor de celda en la vista previa: soltar arrastres HTML5 del propio grid. */
+/** Contenedor de celda en la vista previa: zona droppable de @dnd-kit para el grid del admin. */
 function AdminPreviewGridCell({
   className,
   style,
   children,
   adminCellX,
   adminCellY,
-  onDragOver,
-  onDrop,
+  droppableDisabled,
 }: {
   className?: string
   style?: React.CSSProperties
   children: React.ReactNode
-  adminCellX?: number
-  adminCellY?: number
-  onDragOver?: React.DragEventHandler<HTMLDivElement>
-  onDrop?: React.DragEventHandler<HTMLDivElement>
+  adminCellX: number
+  adminCellY: number
+  droppableDisabled?: boolean
 }) {
+  const { setNodeRef } = useDroppable({
+    id: `cell-${adminCellX}-${adminCellY}`,
+    data: { x: adminCellX, y: adminCellY },
+    disabled: droppableDisabled,
+  })
   return (
     <div
+      ref={setNodeRef}
       style={style}
       data-admin-cell-x={adminCellX}
       data-admin-cell-y={adminCellY}
       className={className}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
     >
       {children}
     </div>
+  )
+}
+
+/** Botón draggable de un símbolo del grid del admin (pointer events, mouse + touch). */
+type AdminGridSymbolButtonProps = {
+  symbolId: string
+  draggableDisabled: boolean
+  className: string
+  style?: React.CSSProperties
+  title?: string
+  onClick?: React.MouseEventHandler<HTMLButtonElement>
+  children: React.ReactNode
+}
+
+function AdminGridSymbolButton({
+  symbolId,
+  draggableDisabled,
+  className,
+  style,
+  title,
+  onClick,
+  children,
+}: AdminGridSymbolButtonProps) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: symbolId,
+    disabled: draggableDisabled,
+  })
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={className}
+      style={{
+        ...style,
+        touchAction: draggableDisabled ? undefined : 'none',
+        opacity: isDragging ? 0.45 : style?.opacity,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -540,6 +633,13 @@ export default function AdminPageClient() {
   const [pendingDemoTemplateSuppressions, setPendingDemoTemplateSuppressions] = useState<string[]>([])
   const [pendingDemoFolderSuppressions, setPendingDemoFolderSuppressions] = useState<string[]>([])
   const [editingSymbol, setEditingSymbol] = useState<AdminSymbol | null>(null)
+  const [imageInputTab, setImageInputTab] = useState<ImageInputTab>('upload')
+  const [customImageUrlInput, setCustomImageUrlInput] = useState('')
+  const [customImageUrlError, setCustomImageUrlError] = useState('')
+  const [arasaacQuery, setArasaacQuery] = useState('')
+  const [arasaacLoading, setArasaacLoading] = useState(false)
+  const [arasaacError, setArasaacError] = useState('')
+  const [arasaacResults, setArasaacResults] = useState<ArasaacSearchResult[]>([])
   const symbolEditFingerprintRef = useRef<string | null>(null)
   const [lexemePreview, setLexemePreview] = useState<LexemePreview | null>(null)
   const [detectingLexeme, setDetectingLexeme] = useState(false)
@@ -1560,6 +1660,22 @@ export default function AdminPageClient() {
     }
   }, [editingSymbol])
 
+  const editingSymbolId = editingSymbol?.id ?? null
+  const editingSymbolImageUrl = editingSymbol?.imageUrl ?? ''
+
+  useEffect(() => {
+    if (!editingSymbolId) return
+    setImageInputTab('upload')
+    setCustomImageUrlInput(
+      editingSymbolImageUrl && isHttpUrl(editingSymbolImageUrl) ? editingSymbolImageUrl : '',
+    )
+    setCustomImageUrlError('')
+    setArasaacQuery('')
+    setArasaacLoading(false)
+    setArasaacError('')
+    setArasaacResults([])
+  }, [editingSymbolId, editingSymbolImageUrl])
+
   const handleEditSave = () => {
     if (!editingSymbol) return
     const cleaned = stripAdminSymbolClientFields(editingSymbol)
@@ -1694,6 +1810,62 @@ export default function AdminPageClient() {
     }
     reader.readAsDataURL(file)
   }
+
+  const applyImageFromUrlInput = useCallback(() => {
+    if (!editingSymbol) return
+    const nextUrl = customImageUrlInput.trim()
+    if (!nextUrl) {
+      setCustomImageUrlError('Pega una URL de imagen.')
+      return
+    }
+    if (!isHttpUrl(nextUrl)) {
+      setCustomImageUrlError('La URL debe empezar por http:// o https://')
+      return
+    }
+    setEditingSymbol({ ...editingSymbol, imageUrl: nextUrl, emoji: null })
+    setCustomImageUrlInput(nextUrl)
+    setCustomImageUrlError('')
+  }, [customImageUrlInput, editingSymbol])
+
+  const handleSearchArasaac = useCallback(async () => {
+    const q = arasaacQuery.trim()
+    if (!q) {
+      setArasaacResults([])
+      setArasaacError('Escribe un término para buscar.')
+      return
+    }
+    setArasaacLoading(true)
+    setArasaacError('')
+    try {
+      const res = await fetch(`/api/arasaac?q=${encodeURIComponent(q)}&locale=es`, {
+        cache: 'no-store',
+      })
+      if (!res.ok) throw new Error('Arasaac request failed')
+      const data = (await res.json()) as { pictograms?: ArasaacSearchResult[] }
+      const list = Array.isArray(data.pictograms)
+        ? data.pictograms.filter((p) => typeof p.imageUrl === 'string' && p.imageUrl.trim() !== '')
+        : []
+      setArasaacResults(list)
+      if (list.length === 0) {
+        setArasaacError('No se encontraron pictogramas para esa búsqueda.')
+      }
+    } catch (error) {
+      console.error(error)
+      setArasaacResults([])
+      setArasaacError('No se pudo consultar ARASAAC. Inténtalo de nuevo.')
+    } finally {
+      setArasaacLoading(false)
+    }
+  }, [arasaacQuery])
+
+  const handlePickArasaacImage = useCallback((result: ArasaacSearchResult) => {
+    setEditingSymbol((prev) => {
+      if (!prev) return prev
+      return { ...prev, imageUrl: result.imageUrl, emoji: null }
+    })
+    setCustomImageUrlInput(result.imageUrl)
+    setCustomImageUrlError('')
+  }, [])
 
   const handleVariantImageSlot = (slot: 0 | 1 | 2 | 3, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -2012,70 +2184,127 @@ export default function AdminPageClient() {
   const mainGridSymbolsRef = useRef(mainGridSymbols)
   mainGridSymbolsRef.current = mainGridSymbols
 
-  /** HTML5 drag del grid: id en vuelo + celda bajo cursor (highlight). */
+  /** Drag del grid (pointer events, mouse + touch + keyboard) vía @dnd-kit. */
   const [gridDragSymbolId, setGridDragSymbolId] = useState<string | null>(null)
   const [gridDropHover, setGridDropHover] = useState<{ x: number; y: number } | null>(null)
-  const gridDragIdRef = useRef<string | null>(null)
-  /** Tras soltar, evita abrir el modal de edición por el clic fantasma. */
-  const suppressNextGridSymbolClickRef = useRef(false)
 
-  const handleAdminGridSymbolDragStart = useCallback(
-    (e: React.DragEvent, symbolId: string) => {
-      if (fixedZoneEditMode || gridContextMenu) {
-        e.preventDefault()
-        return
-      }
-      gridDragIdRef.current = symbolId
-      setGridDragSymbolId(symbolId)
-      e.dataTransfer.setData(ADMIN_GRID_DRAG_MIME, symbolId)
-      e.dataTransfer.setData('text/plain', symbolId)
-      e.dataTransfer.effectAllowed = 'move'
-    },
-    [fixedZoneEditMode, gridContextMenu],
+  const adminGridSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
   )
 
-  const handleAdminGridSymbolDragEnd = useCallback(() => {
-    gridDragIdRef.current = null
+  const adminGridCollisionDetection = useCallback<CollisionDetection>((args) => {
+    // Evita "saltos" cuando el cursor cae en el hueco entre dos celdas:
+    // con puntero, solo acepta colisión real bajo el cursor.
+    if (args.pointerCoordinates) {
+      return pointerWithin(args)
+    }
+    // Fallback para teclado (sin coordenadas de puntero).
+    return closestCenter(args)
+  }, [])
+
+  const handleAdminGridDragStart = useCallback((event: DragStartEvent) => {
+    setGridDragSymbolId(String(event.active.id))
+    setGridDropHover(null)
+  }, [])
+
+  const handleAdminGridDragOver = useCallback((event: DragOverEvent) => {
+    const data = event.over?.data.current as { x: number; y: number } | undefined
+    setGridDropHover(data ? { x: data.x, y: data.y } : null)
+  }, [])
+
+  const handleAdminGridDragCancel = useCallback(() => {
     setGridDragSymbolId(null)
     setGridDropHover(null)
-    suppressNextGridSymbolClickRef.current = true
-    window.setTimeout(() => {
-      suppressNextGridSymbolClickRef.current = false
-    }, 220)
   }, [])
 
-  const handleAdminGridCellDragOverAt = useCallback((e: React.DragEvent, cx: number, cy: number) => {
-    if (!gridDragIdRef.current) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setGridDropHover({ x: cx, y: cy })
-  }, [])
-
-  const handleAdminGridCellDropAt = useCallback(
-    (e: React.DragEvent, cx: number, cy: number) => {
-      e.preventDefault()
-      // En Chrome/React, getData a menudo viene vacío en `drop` para MIME custom; la ref de dragStart es fiable.
-      const fromRef = gridDragIdRef.current?.trim() ?? ''
-      const dt = e.dataTransfer ?? (e.nativeEvent as DragEvent).dataTransfer
-      const fromMime = dt?.getData(ADMIN_GRID_DRAG_MIME)?.trim() ?? ''
-      const fromText = dt?.getData('text/plain')?.trim() ?? ''
-      const dragId = fromRef || fromMime || fromText
-      gridDragIdRef.current = null
+  const handleAdminGridDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const dragId = String(event.active.id)
+      const target = event.over?.data.current as { x: number; y: number } | undefined
       setGridDragSymbolId(null)
       setGridDropHover(null)
-      if (!dragId) return
+      if (!target) return
 
       setSymbols((prev) => {
-        if (!prev.some((s) => String(s.id) === dragId)) return prev
+        let workingSymbols: AdminSymbol[] = prev
+        let workingDragId = dragId
+
+        const realDragged = prev.find((s) => String(s.id) === dragId)
+        if (!realDragged) {
+          /**
+           * Símbolo virtual del demo (no persistido aún). Lo materializamos como `new-…` con
+           * `gridId: 'main'` para que `applyAdminSymbolGridMove` pueda operar y se guarde en BD.
+           */
+          if (!isMaterializableVirtualMainId(dragId)) return prev
+          const virtual = mainGridSymbolsRef.current.find((s) => String(s.id) === dragId)
+          if (!virtual || !isMovableSymbol(virtual)) return prev
+          const sourcePos = getSymbolPosition(virtual)
+          if (sourcePos.x === target.x && sourcePos.y === target.y) return prev
+
+          const newDragId = makeNewLocalSymbolId('drag')
+          const materializedDrag: AdminSymbol = {
+            ...(virtual as AdminSymbol),
+            id: newDragId,
+            gridId: 'main',
+            grid_id: 'main',
+            positionX: sourcePos.x,
+            positionY: sourcePos.y,
+            position_x: sourcePos.x,
+            position_y: sourcePos.y,
+          }
+          workingSymbols = [...prev, materializedDrag]
+          workingDragId = newDragId
+        }
+
+        /**
+         * Si la celda destino la cubre otro símbolo virtual del demo, también lo materializamos para
+         * permitir el swap (mover Yo a la celda de Tú, p. ej.). Si es real, ya está en `workingSymbols`.
+         */
+        const targetCovering = mainGridSymbolsRef.current.find((s) => {
+          if (String(s.id) === dragId) return false
+          const p = getSymbolPosition(s)
+          return p.x === target.x && p.y === target.y
+        })
+        if (
+          targetCovering &&
+          !workingSymbols.some((s) => String(s.id) === String(targetCovering.id)) &&
+          isMaterializableVirtualMainId(String(targetCovering.id)) &&
+          isMovableSymbol(targetCovering)
+        ) {
+          const targetPos = getSymbolPosition(targetCovering)
+          const newTargetId = makeNewLocalSymbolId('target')
+          const materializedTarget: AdminSymbol = {
+            ...(targetCovering as AdminSymbol),
+            id: newTargetId,
+            gridId: 'main',
+            grid_id: 'main',
+            positionX: targetPos.x,
+            positionY: targetPos.y,
+            position_x: targetPos.x,
+            position_y: targetPos.y,
+          }
+          workingSymbols = [...workingSymbols, materializedTarget]
+        }
+
         const result = applyAdminSymbolGridMove({
-          symbols: prev,
+          symbols: workingSymbols,
           gridCols: previewGridCols,
           gridRows: previewGridRows,
-          dragId,
-          targetX: cx,
-          targetY: cy,
+          dragId: workingDragId,
+          targetX: target.x,
+          targetY: target.y,
         })
-        return result.ok ? result.nextSymbols : prev
+        if (!result.ok) {
+          if (result.reason === 'blocked_or_immovable_target') {
+            setStatus('No puedes soltar aquí: la celda destino está bloqueada o no es intercambiable.')
+          } else if (result.reason === 'not_movable') {
+            setStatus('Este símbolo no se puede mover.')
+          }
+          return prev
+        }
+        return result.nextSymbols
       })
     },
     [previewGridCols, previewGridRows],
@@ -2083,11 +2312,15 @@ export default function AdminPageClient() {
 
   useEffect(() => {
     if (fixedZoneEditMode || gridContextMenu) {
-      gridDragIdRef.current = null
       setGridDragSymbolId(null)
       setGridDropHover(null)
     }
   }, [fixedZoneEditMode, gridContextMenu])
+
+  const adminGridDraggedSymbol = useMemo(() => {
+    if (!gridDragSymbolId) return null
+    return mainGridSymbols.find((s) => String(s.id) === gridDragSymbolId) ?? null
+  }, [gridDragSymbolId, mainGridSymbols])
 
   const closeGridContextMenu = useCallback(() => setGridContextMenu(null), [])
 
@@ -3938,6 +4171,14 @@ export default function AdminPageClient() {
                       className={`grid w-full max-w-full grid-cols-1 gap-2 ${adminPreviewChromeOuterClass}`}
                     >
                       <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
+                      <DndContext
+                        sensors={adminGridSensors}
+                        collisionDetection={adminGridCollisionDetection}
+                        onDragStart={handleAdminGridDragStart}
+                        onDragOver={handleAdminGridDragOver}
+                        onDragEnd={handleAdminGridDragEnd}
+                        onDragCancel={handleAdminGridDragCancel}
+                      >
                       <div
                         className={`aac-grid-surface grid w-max max-w-none content-start gap-4 rounded-[1.25rem] p-4 transition-shadow duration-300 sm:p-6 ${symbolsLoadPending ? 'pointer-events-none' : ''} ${
                           fixedZoneEditMode && !symbolsLoadPending
@@ -3996,6 +4237,7 @@ export default function AdminPageClient() {
                               key={`cell-${x}-${y}`}
                               adminCellX={x}
                               adminCellY={y}
+                              droppableDisabled
                               className="pointer-events-none relative z-0 flex min-h-0 min-w-0 w-full"
                               style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                             >
@@ -4046,22 +4288,13 @@ export default function AdminPageClient() {
                             fixedZoneEditMode && isFixedCellAtPreview(x, y)
                           const baseCellBg = resolveSymbolColor(symbol.color)
                           const canDragThisSymbol =
-                            !fixedZoneEditMode && !gridContextMenu && isMovableSymbol(symbol)
+                            !gridContextMenu && isMovableSymbol(symbol)
                           return (
                             <AdminPreviewGridCell
                               key={`cell-${x}-${y}`}
                               adminCellX={x}
                               adminCellY={y}
-                              onDragOver={
-                                fixedZoneEditMode
-                                  ? undefined
-                                  : (e) => handleAdminGridCellDragOverAt(e, x, y)
-                              }
-                              onDrop={
-                                fixedZoneEditMode
-                                  ? undefined
-                                  : (e) => handleAdminGridCellDropAt(e, x, y)
-                              }
+                              droppableDisabled={Boolean(gridContextMenu)}
                               className={`relative z-[2] flex min-h-0 min-w-0 w-full ${gridDropHighlightClass}`}
                               style={{
                                 gridColumn: `${x + 1} / span 1`,
@@ -4070,24 +4303,14 @@ export default function AdminPageClient() {
                             >
                               <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
                               <motion.div
-                                whileHover={fixedZoneEditMode ? undefined : { scale: 1.05 }}
-                                whileTap={fixedZoneEditMode ? undefined : { scale: 0.95 }}
-                                className={`group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${shapeClass} ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button.symbol-cell]:pointer-events-none' : ''}`}
+                                whileHover={canDragThisSymbol ? undefined : { scale: 1.05 }}
+                                className={`group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-visible transition-[opacity,filter] duration-300 ease-out ${shapeClass} ${fadeVariableCellClass}`}
                               >
                                 <div className="flex min-h-0 min-w-0 h-full w-full">
-                                  <button
-                                    draggable={canDragThisSymbol}
-                                    onDragOver={
-                                      fixedZoneEditMode
-                                        ? undefined
-                                        : (ev) => handleAdminGridCellDragOverAt(ev, x, y)
-                                    }
-                                    onDragStart={(e) =>
-                                      handleAdminGridSymbolDragStart(e, String(symbol.id))
-                                    }
-                                    onDragEnd={handleAdminGridSymbolDragEnd}
+                                  <AdminGridSymbolButton
+                                    symbolId={String(symbol.id)}
+                                    draggableDisabled={!canDragThisSymbol}
                                     onClick={() => {
-                                      if (suppressNextGridSymbolClickRef.current) return
                                       setEditingSymbol({
                                         ...symbol,
                                         color: normalizeSymbolColor(symbol.color),
@@ -4096,13 +4319,12 @@ export default function AdminPageClient() {
                                         state: symbol.state || 'visible',
                                       })
                                     }}
-                                    type="button"
                                     title={
                                       canDragThisSymbol
                                         ? 'Clic para editar · Arrastra para mover o intercambiar'
                                         : undefined
                                     }
-                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''} ${gridDragSymbolId === String(symbol.id) ? 'opacity-45' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                     style={{
                                       backgroundColor: showFixedZoneEditHighlight
                                         ? `color-mix(in srgb, ${baseCellBg} 58%, rgb(167 139 250) 42%)`
@@ -4124,6 +4346,7 @@ export default function AdminPageClient() {
                                     ) : null}
                                     <div className="text-xl mb-1">
                                       {gridCellImageSrc ? (
+                                        /* eslint-disable-next-line @next/next/no-img-element */
                                         <img
                                           src={gridCellImageSrc}
                                           alt={symbol.label}
@@ -4149,7 +4372,7 @@ export default function AdminPageClient() {
                                         <Layers size={12} strokeWidth={2} />
                                       </span>
                                     ) : null}
-                                  </button>
+                                  </AdminGridSymbolButton>
                                 </div>
                                 {!fixedZoneEditMode &&
                                   (() => {
@@ -4176,7 +4399,7 @@ export default function AdminPageClient() {
                                     )
                                   })()}
                               </motion.div>
-                              {fixedZoneEditMode ? (
+                              {fixedZoneEditMode && !canDragThisSymbol ? (
                                 <button
                                   type="button"
                                   tabIndex={-1}
@@ -4202,16 +4425,7 @@ export default function AdminPageClient() {
                             key={`cell-${x}-${y}`}
                             adminCellX={x}
                             adminCellY={y}
-                            onDragOver={
-                              fixedZoneEditMode
-                                ? undefined
-                                : (e) => handleAdminGridCellDragOverAt(e, x, y)
-                            }
-                            onDrop={
-                              fixedZoneEditMode
-                                ? undefined
-                                : (e) => handleAdminGridCellDropAt(e, x, y)
-                            }
+                            droppableDisabled={Boolean(gridContextMenu)}
                             className={`flex min-h-0 min-w-0 w-full ${gridDropHighlightClass}`}
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
@@ -4241,7 +4455,7 @@ export default function AdminPageClient() {
                                     <Plus size={14} strokeWidth={2.5} className="text-white dark:text-white" aria-hidden />
                                   </span>
                                   <span className="text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-white/95 sm:text-[9px]">
-                                    CREAR BOTÓN
+                                    CREAR SÍMBOLO
                                   </span>
                                 </button>
                                 <button
@@ -4288,6 +4502,37 @@ export default function AdminPageClient() {
                         )
                       })}
                       </div>
+                      <DragOverlay modifiers={[snapCenterToCursor]} dropAnimation={null}>
+                        {adminGridDraggedSymbol ? (
+                          <div
+                            className="pointer-events-none flex aspect-video w-[var(--aac-cell-width,8.5rem)] flex-col items-center justify-center rounded-xl border border-solid p-1.5 shadow-2xl ring-2 ring-indigo-500/70"
+                            style={{
+                              width: ADMIN_PREVIEW_CELL_COL_WIDTH,
+                              backgroundColor: resolveSymbolColor(adminGridDraggedSymbol.color),
+                              borderColor: 'var(--app-border)',
+                              color: getSymbolTextColor(adminGridDraggedSymbol.color),
+                            }}
+                          >
+                            <div className="text-xl mb-1">
+                              {symbolImageDisplayUrl(adminGridDraggedSymbol) ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={symbolImageDisplayUrl(adminGridDraggedSymbol)}
+                                  alt={adminGridDraggedSymbol.label ?? ''}
+                                  className="h-8 w-8 object-contain"
+                                  draggable={false}
+                                />
+                              ) : (
+                                <PictoEmoji emoji={adminGridDraggedSymbol.emoji || '❓'} aria-hidden />
+                              )}
+                            </div>
+                            <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
+                              {adminGridDraggedSymbol.label}
+                            </span>
+                          </div>
+                        ) : null}
+                      </DragOverlay>
+                      </DndContext>
                       </div>
 
                       {showAdminAddColumnChrome ? (
@@ -4863,18 +5108,149 @@ export default function AdminPageClient() {
 
                     <div>
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Imagen Personalizada</label>
-                      <div className="ui-floating-panel flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-4 transition hover:border-indigo-400">
+                      <div className="ui-floating-panel flex flex-col gap-3 rounded-2xl border-2 border-dashed p-4 transition hover:border-indigo-400">
                         {editingSymbol.imageUrl ? (
-                          <img src={editingSymbol.imageUrl} alt="Preview" className="h-16 w-16 object-contain" />
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={editingSymbol.imageUrl} alt="Preview" className="mx-auto h-16 w-16 object-contain" />
                         ) : (
-                          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                             <Plus size={24} />
                           </div>
                         )}
-                        <label className="ui-secondary-button cursor-pointer rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-600 shadow-sm dark:text-indigo-300">
-                          Subir imagen
-                          <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                        </label>
+                        <div className="mx-auto flex w-full max-w-[14rem] flex-col gap-2">
+                          <label className={`cursor-pointer rounded-xl px-3 py-1.5 text-center text-xs font-semibold transition ${
+                            imageInputTab === 'upload'
+                              ? 'bg-indigo-600 text-white'
+                              : 'ui-secondary-button text-indigo-600 dark:text-indigo-300'
+                          }`}>
+                            Subir imagen
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                setImageInputTab('upload')
+                                handleImageUpload(e)
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setImageInputTab('url')}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                              imageInputTab === 'url'
+                                ? 'bg-indigo-600 text-white'
+                                : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            URL
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setImageInputTab('arasaac')}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                              imageInputTab === 'arasaac'
+                                ? 'bg-indigo-600 text-white'
+                                : 'ui-secondary-button text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            ARASAAC
+                          </button>
+                        </div>
+
+                        {imageInputTab === 'url' && (
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <input
+                                type="url"
+                                value={customImageUrlInput}
+                                onChange={(e) => {
+                                  setCustomImageUrlInput(e.target.value)
+                                  if (customImageUrlError) setCustomImageUrlError('')
+                                }}
+                                placeholder="https://..."
+                                className="app-input w-full rounded-xl px-3 py-2 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={applyImageFromUrlInput}
+                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-300"
+                              >
+                                Usar
+                              </button>
+                            </div>
+                            {customImageUrlError && (
+                              <p className="text-xs font-medium text-rose-600 dark:text-rose-300">{customImageUrlError}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {imageInputTab === 'arasaac' && (
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={arasaacQuery}
+                                onChange={(e) => setArasaacQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    void handleSearchArasaac()
+                                  }
+                                }}
+                                placeholder="Buscar pictograma..."
+                                className="app-input w-full rounded-xl px-3 py-2 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void handleSearchArasaac()}
+                                disabled={arasaacLoading}
+                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-300"
+                              >
+                                {arasaacLoading ? 'Buscando...' : 'Buscar'}
+                              </button>
+                            </div>
+                            {arasaacError && (
+                              <p className="text-xs font-medium text-rose-600 dark:text-rose-300">{arasaacError}</p>
+                            )}
+                            {arasaacResults.length > 0 && (
+                              <div className="grid max-h-44 grid-cols-4 gap-2 overflow-y-auto rounded-xl border border-slate-200/80 p-2 dark:border-slate-700">
+                                {arasaacResults.map((picto) => {
+                                  const selected = editingSymbol.imageUrl === picto.imageUrl
+                                  return (
+                                    <button
+                                      key={picto.id}
+                                      type="button"
+                                      onClick={() => handlePickArasaacImage(picto)}
+                                      title={picto.label}
+                                      className={`rounded-lg border p-1 transition ${
+                                        selected
+                                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20'
+                                          : 'border-slate-200 hover:border-indigo-300 dark:border-slate-700'
+                                      }`}
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={picto.imageUrl} alt={picto.label} className="h-12 w-full object-contain" />
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {editingSymbol.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSymbol({ ...editingSymbol, imageUrl: '' })
+                              setCustomImageUrlInput('')
+                            }}
+                            className="text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                          >
+                            Quitar imagen
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5071,6 +5447,7 @@ export default function AdminPageClient() {
                                       placeholder={`Variante ${slot + 1}`}
                                     />
                                     {vImg ? (
+                                      /* eslint-disable-next-line @next/next/no-img-element */
                                       <img src={vImg} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 object-contain dark:border-slate-600" />
                                     ) : null}
                                     <label className="shrink-0 cursor-pointer rounded-lg border border-dashed border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
