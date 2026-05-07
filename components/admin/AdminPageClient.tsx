@@ -2,7 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useClientReady, useIsClient } from '@/lib/ui/useClientReady'
-import { BookOpen, Check, ClipboardPaste, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BookOpen, Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
@@ -219,30 +219,6 @@ type AdminSymbol = {
 function stripAdminSymbolClientFields(symbol: AdminSymbol): AdminSymbol {
   const { advancedUnlockedForEdit: _u, ...rest } = symbol
   return rest
-}
-
-function cloneSymbolForPaste(
-  source: AdminSymbol,
-  positionX: number,
-  positionY: number,
-  gridId: string,
-): AdminSymbol {
-  const base = JSON.parse(JSON.stringify(stripAdminSymbolClientFields(source))) as AdminSymbol
-  const newId = `new-${
-    typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
-      ? globalThis.crypto.randomUUID()
-      : `${Date.now()}`
-  }`
-  return {
-    ...base,
-    id: newId,
-    positionX,
-    positionY,
-    position_x: positionX,
-    position_y: positionY,
-    gridId,
-    grid_id: gridId,
-  }
 }
 
 const STATE_OPTIONS = [
@@ -617,8 +593,6 @@ export default function AdminPageClient() {
   const [createFolderName, setCreateFolderName] = useState('')
   const [profilePendingDeletion, setProfilePendingDeletion] = useState<AdminProfile | null>(null)
   const [deleteProfileNameConfirmation, setDeleteProfileNameConfirmation] = useState('')
-  /** Portapapeles interno del grid (copiar / pegar en vista previa). */
-  const [gridClipboard, setGridClipboard] = useState<AdminSymbol | null>(null)
   const [gridContextMenu, setGridContextMenu] = useState<{
     x: number
     y: number
@@ -1085,7 +1059,6 @@ export default function AdminPageClient() {
   }, [loadData])
 
   useEffect(() => {
-    setGridClipboard(null)
     setGridContextMenu(null)
     setPendingDemoTemplateSuppressions([])
     setPendingDemoFolderSuppressions([])
@@ -2014,10 +1987,17 @@ export default function AdminPageClient() {
         activeFolder,
         demoSuppressedTemplateLabelSet,
         demoSuppressedFolderItemSet,
+        adminFixedZoneSet,
       ) as AdminSymbol[]
     }
-    // Misma regla que /tablero: base fija canónica (7 col + 1.ª fila), sin depender de `fixed_zone_cells`.
-    return mergeMainGridWithFolderView(symbols, activeFolder, previewGridCols, previewGridRows, null) as AdminSymbol[]
+    // Respeta la zona fija personalizada del perfil (`fixed_zone_cells`); si es `null`, usa la canónica (7 col + 1.ª fila).
+    return mergeMainGridWithFolderView(
+      symbols,
+      activeFolder,
+      previewGridCols,
+      previewGridRows,
+      adminFixedZoneSet,
+    ) as AdminSymbol[]
   }, [
     shouldUseDefaultGridTemplate,
     symbols,
@@ -2026,6 +2006,7 @@ export default function AdminPageClient() {
     previewGridRows,
     demoSuppressedTemplateLabelSet,
     demoSuppressedFolderItemSet,
+    adminFixedZoneSet,
   ])
 
   const mainGridSymbolsRef = useRef(mainGridSymbols)
@@ -2108,11 +2089,6 @@ export default function AdminPageClient() {
     }
   }, [fixedZoneEditMode, gridContextMenu])
 
-  const targetPasteGridId = useMemo(
-    () => (!shouldUseDefaultGridTemplate && activeFolder ? String(activeFolder) : 'main'),
-    [shouldUseDefaultGridTemplate, activeFolder],
-  )
-
   const closeGridContextMenu = useCallback(() => setGridContextMenu(null), [])
 
   const openGridSymbolActionsMenu = useCallback(
@@ -2129,29 +2105,6 @@ export default function AdminPageClient() {
       })
     },
     [],
-  )
-
-  const handleGridContextCopy = useCallback((symbol: AdminSymbol) => {
-    const cleaned = stripAdminSymbolClientFields({ ...symbol })
-    setGridClipboard(JSON.parse(JSON.stringify(cleaned)) as AdminSymbol)
-    setStatus('Copiado al portapapeles del editor. Pégalo en una celda vacía.')
-  }, [])
-
-  const handleGridContextPaste = useCallback(
-    (cellX: number, cellY: number) => {
-      if (!gridClipboard) return
-      const gridCols = previewGridCols
-      const gridRows = previewGridRows
-      const peers = adminSymbolsSameGridInBounds(symbols, targetPasteGridId, gridCols, gridRows)
-      if (!canPlaceCellAdmin(cellX, cellY, gridCols, gridRows, peers)) {
-        setStatus('Pega en una celda vacía.')
-        return
-      }
-      const pasted = cloneSymbolForPaste(gridClipboard, cellX, cellY, targetPasteGridId)
-      setSymbols((prev) => [...prev, pasted])
-      setStatus('Símbolo pegado. Pulsa «Guardar cambios» para persistir.')
-    },
-    [gridClipboard, symbols, targetPasteGridId, previewGridCols, previewGridRows],
   )
 
   const handleGridEditFolderContent = useCallback(
@@ -2189,13 +2142,6 @@ export default function AdminPageClient() {
       symbol.category === 'Carpetas' &&
       !sid.startsWith('template-') &&
       !sid.startsWith('folder-item-')
-    if (isMovableSymbol(symbol)) {
-      items.push({
-        key: 'move',
-        label: 'Mover',
-        onSelect: () => handleGridContextCopy(symbol),
-      })
-    }
     if (canEditFolder) {
       items.push({
         key: 'edit-folder',
@@ -2214,7 +2160,7 @@ export default function AdminPageClient() {
       })
     }
     return items
-  }, [gridContextMenu, handleGridContextCopy, handleGridEditFolderContent, isSelectedDemoProfile])
+  }, [gridContextMenu, handleGridEditFolderContent, isSelectedDemoProfile])
 
   const listSymbols = useMemo(() => {
     const normalizedQuery = listSearch.trim().toLowerCase()
@@ -4037,7 +3983,7 @@ export default function AdminPageClient() {
                           y,
                           previewGridCols,
                           previewGridRows,
-                          null,
+                          adminFixedZoneSet,
                         )
                         const isAnchor =
                           Boolean(cover) &&
@@ -4081,6 +4027,9 @@ export default function AdminPageClient() {
 
                         if (symbol) {
                           const gridCellImageSrc = symbolImageDisplayUrl(symbol)
+                          const hasRenderableCellContent = Boolean(
+                            gridCellImageSrc || symbol.emoji?.trim() || symbol.label?.trim(),
+                          )
                           const pos = getSymbolPosition(symbol)
                           const shapeClass = 'aspect-video'
                           const showFixedHighlight =
@@ -4189,7 +4138,8 @@ export default function AdminPageClient() {
                                     <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
                                       {symbol.label}
                                     </span>
-                                    {symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) && (
+                                    {hasRenderableCellContent &&
+                                    symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) ? (
                                       <span
                                         className="ui-chip pointer-events-none absolute left-1.5 top-1.5 z-[1] rounded-lg p-1"
                                         style={{ color: getSymbolTextColor(symbol.color) }}
@@ -4198,7 +4148,7 @@ export default function AdminPageClient() {
                                       >
                                         <Layers size={12} strokeWidth={2} />
                                       </span>
-                                    )}
+                                    ) : null}
                                   </button>
                                 </div>
                                 {!fixedZoneEditMode &&
@@ -4210,7 +4160,7 @@ export default function AdminPageClient() {
                                       !sid.startsWith('folder-item-')
                                     const canFolderItemDelete =
                                       isSelectedDemoProfile && sid.startsWith('folder-item-')
-                                    if (!isMovableSymbol(symbol) && !canEditFolder && !canFolderItemDelete)
+                                    if (!canEditFolder && !canFolderItemDelete)
                                       return null
                                     return (
                                       <button
@@ -4266,35 +4216,6 @@ export default function AdminPageClient() {
                             style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
                           >
                             <div className="group/emptycel relative flex min-h-0 min-w-0 flex-1 flex-col">
-                            {!fixedZoneEditMode ? (
-                              <button
-                                type="button"
-                                disabled={!gridClipboard}
-                                aria-label={
-                                  gridClipboard
-                                    ? 'Pegar símbolo copiado en esta celda'
-                                    : 'Nada copiado; usa Mover en el menú de otra celda'
-                                }
-                                title={
-                                  gridClipboard
-                                    ? 'Pegar en esta celda'
-                                    : 'Usa Mover en el menú (⋯) de otra celda'
-                                }
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  if (gridClipboard) handleGridContextPaste(x, y)
-                                }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                className={`pointer-events-none absolute right-1 top-1 z-30 grid h-6 w-6 place-items-center rounded-full border shadow-sm opacity-0 transition-[opacity,colors] duration-150 group-hover/emptycel:pointer-events-auto group-hover/emptycel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 ${
-                                  gridClipboard
-                                    ? 'cursor-pointer border-indigo-300/90 bg-white/95 text-indigo-600 hover:bg-indigo-50 focus-visible:outline-indigo-500 dark:border-indigo-500/55 dark:bg-slate-900/95 dark:text-indigo-300 dark:hover:bg-indigo-950/45'
-                                    : 'cursor-not-allowed border-slate-200/90 bg-white/95 text-slate-400 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-500'
-                                }`}
-                              >
-                                <ClipboardPaste size={14} strokeWidth={2.25} aria-hidden />
-                              </button>
-                            ) : null}
                             {isSplitHere ? (
                               <div
                                 className={`flex aspect-video w-full min-w-0 overflow-hidden rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter] duration-300 ease-out dark:border-slate-500/60 dark:bg-slate-950/45 ${fadeVariableCellClass} ${fixedZoneEditMode ? '[&_button]:pointer-events-none' : ''}`}

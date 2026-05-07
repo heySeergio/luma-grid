@@ -140,10 +140,11 @@ export default function AppInterface({
     return new Set(raw.map((s) => s.trim().toLowerCase()).filter(Boolean))
   }, [profile?.demoSuppressedFolderItems])
 
-  /** Zona fija personalizada del perfil. `null` = usar plantilla geométrica por defecto (7 col + fila 0). */
+  /** Zona fija personalizada del perfil. `null`/`undefined` = usar plantilla geométrica por defecto (7 col + fila 0); `[]` = zona fija vacía explícita. */
   const fixedZoneKeySet = useMemo(() => {
-    if (!profile?.fixedZoneCellKeys?.length) return null
-    return new Set(profile.fixedZoneCellKeys)
+    const k = profile?.fixedZoneCellKeys
+    if (k === null || k === undefined) return null
+    return new Set(k)
   }, [profile?.fixedZoneCellKeys])
 
   const mainOrderedSymbols = useMemo(() => {
@@ -153,6 +154,7 @@ export default function AppInterface({
         activeFolder,
         demoSuppressedTemplateLabelSet,
         demoSuppressedFolderItemSet,
+        fixedZoneKeySet,
       )
     }
     const cols = Math.max(1, profile?.gridCols ?? 14)

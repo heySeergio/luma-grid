@@ -1,6 +1,7 @@
 import type { WordVariantsConfig } from '@/lib/symbolWordVariants'
 import type { PosType, Symbol } from '@/lib/supabase/types'
 import { BASE_FIXED_LEFT_COLUMN_COUNT } from '@/lib/grid/baseFixedZone'
+import { isFixedZonePosition } from '@/lib/grid/fixedZoneStorage'
 import { effectiveSymbolGridId } from '@/lib/grid/gridCellOverlap'
 import {
   DEFAULT_FIXED_CELL_COLOR,
@@ -2105,6 +2106,7 @@ export function computeMainGrid(
   activeFolder: string | null,
   suppressedTemplateLabels: ReadonlySet<string> | null = null,
   suppressedFolderItems: ReadonlySet<string> | null = null,
+  fixedZoneKeys: Set<string> | null = null,
 ): Symbol[] {
   symbols = withoutObsoleteDemoFolderSymbols(symbols)
   const byLabel = new Map(symbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
@@ -2314,7 +2316,26 @@ export function computeMainGrid(
     MAIN_GRID_TEMPLATE[0].forEach((_, x) => {
       addRightTemplateCell(x, 0, fixedTopRowRest)
     })
-    return [...fixedLeftPanel, ...fixedTopRowRest, ...folderSymbols]
+
+    /**
+     * Pictogramas `main` (custom o en posición default) cuya celda final cae en la zona fija.
+     * Sin esto, mover un picto dentro de la base fija lo hace desaparecer al abrir una carpeta:
+     * `fixedLeftPanel`/`fixedTopRowRest` solo recorren `MAIN_GRID_TEMPLATE` y descartan al verlo en posición custom.
+     */
+    const cellInFixedZone = (x: number, y: number) =>
+      isFixedZonePosition(x, y, TOTAL_COLUMNS, mainGridRowCount, fixedZoneKeys)
+    const fixedZoneIds = new Set<string>()
+    const fixedZoneExtras: Symbol[] = []
+    for (const sym of [...customSymbols, ...defaultPositionMainSymbols]) {
+      const px = Number(sym.positionX ?? 0)
+      const py = Number(sym.positionY ?? 0)
+      if (!cellInFixedZone(px, py)) continue
+      if (fixedZoneIds.has(sym.id)) continue
+      fixedZoneIds.add(sym.id)
+      fixedZoneExtras.push(sym)
+    }
+    /** Las celdas ocupadas por estos extras ya no las pinta el template (occupiedCells incluye custom). */
+    return [...fixedLeftPanel, ...fixedTopRowRest, ...fixedZoneExtras, ...folderSymbols]
   }
 
   const rightPanelFromTemplate: Symbol[] = []
