@@ -14,6 +14,7 @@ import {
 import { PricingEntrance } from "@/components/landing/PricingEntrance";
 import { HeroDraggableDecors } from "@/components/landing/HeroDraggableDecors";
 import { HeroHeadline } from "@/components/landing/HeroHeadline";
+import { useWaitlistModal } from "@/components/landing/WaitlistModalProvider";
 
 const moverSvgOn = false;
 
@@ -79,7 +80,13 @@ const heroFeatureIcons = {
   ),
 } as const;
 
-function Hero({ comingSoon }: { comingSoon: boolean }) {
+function Hero({
+  comingSoon,
+  onOpenWaitlist,
+}: {
+  comingSoon: boolean
+  onOpenWaitlist: () => void
+}) {
   return (
     <AnimatedSection
       id="inicio"
@@ -100,12 +107,14 @@ con el mundo.`}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-4 sm:gap-4">
               {comingSoon ? (
-                <Link
-                  href="/#recursos"
+                <button
+                  type="button"
+                  onClick={onOpenWaitlist}
                   className="inline-flex rounded-full border border-black/10 bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                  aria-haspopup="dialog"
                 >
                   Avísame cuando esté disponible
-                </Link>
+                </button>
               ) : (
                 <Link
                   href="/tablero"
@@ -150,7 +159,7 @@ con el mundo.`}
                 <span className="min-w-0 leading-tight">100% personalizable</span>
               </li>
               <li className="flex min-w-0 items-center gap-2.5">
-                <span className="shrink-0 text-[#042D22]" aria-hidden>
+                <span className="shrink-0 text-[#FE6B45]" aria-hidden>
                   {heroFeatureIcons.shield}
                 </span>
                 <span className="min-w-0 leading-tight">Seguro y privado</span>
@@ -279,10 +288,11 @@ type LandingPageProps = {
 }
 
 export function LandingPage({ comingSoon = true }: LandingPageProps) {
+  const { openWaitlist } = useWaitlistModal()
   return (
     <>
       <main className="pt-36 sm:pt-32">
-        <Hero comingSoon={comingSoon} />
+        <Hero comingSoon={comingSoon} onOpenWaitlist={openWaitlist} />
         <Audience />
         <Features />
         <Pricing />

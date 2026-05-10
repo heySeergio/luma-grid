@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
-import { WaitlistModal } from '@/components/landing/WaitlistModal'
+import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 
 const nav = [
   { href: '#inicio', label: 'Inicio' },
@@ -28,14 +28,8 @@ type SiteHeaderProps = {
 }
 
 export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
-  const [waitlistOpen, setWaitlistOpen] = useState(false)
-  const [waitlistKey, setWaitlistKey] = useState(0)
+  const { openWaitlist, waitlistOpen } = useWaitlistModal()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-
-  const openWaitlist = () => {
-    setWaitlistKey(k => k + 1)
-    setWaitlistOpen(true)
-  }
 
   const closeMobileNav = () => setMobileNavOpen(false)
 
@@ -59,7 +53,7 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
           <div className="flex items-center justify-between gap-3 sm:contents">
             <Link
               href="/#inicio"
-              className="flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-neutral-950 sm:shrink-0 sm:text-lg"
+              className="flex min-w-0 items-center gap-2.5 font-bricolage-heading text-base font-extrabold tracking-tight text-neutral-950 sm:shrink-0 sm:text-lg"
             >
               <Image
                 src="/logo-luma-grid.png"
@@ -186,9 +180,6 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
           </>
         ) : null}
       </div>
-      {comingSoon ? (
-        <WaitlistModal key={waitlistKey} open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />
-      ) : null}
     </AnimatedHeader>
   )
 }

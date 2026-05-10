@@ -92,7 +92,8 @@
   /** CTA / acentos marketing — mismo valor que `cta-yellow` en tailwind.config */
   --luma-marketing-cta-yellow: #ffec5c;
   /* Adobe Typekit kit `dwn6mnv` — debe coincidir con el @font-face del enlace en layout */
-  --luma-marketing-font: 'bricolage-grotesque-36', sans-serif;
+  --luma-marketing-font: "bricolage-grotesque-extralig", sans-serif;
+  --luma-marketing-font-heading: "bricolage-grotesque-36", sans-serif;
 }
 
 .dark {
@@ -679,6 +680,24 @@ html:not(.dark) .luma-product-shell {
   --floating-shadow: 0 18px 50px -28px rgb(28 43 36 / 0.22), 0 20px 35px -25px rgb(28 43 36 / 0.12);
 }
 
+/**
+ * Tablero, panel y auth sobre canvas: cuerpo Bricolage extralig 400; titulares siguen en grotesque-36.
+ */
+.luma-product-shell {
+  font-family: var(--luma-marketing-font);
+  font-weight: 400;
+  font-style: normal;
+}
+
+.luma-product-shell h1,
+.luma-product-shell h2,
+.luma-product-shell h3,
+.luma-product-shell h4,
+.luma-product-shell h5,
+.luma-product-shell h6 {
+  font-family: var(--luma-marketing-font-heading);
+}
+
 /* Marketing landing (Bricolage + estilos del proyecto «Luma Grid Landing») */
 /**
  * Alinear html/body con el canvas de la landing: el resto de la app usa `--app-bg` (azulado claro u oscuro).
@@ -695,14 +714,31 @@ html:has(.luma-marketing-site) body {
 }
 
 /**
- * Tipografía Bricolage: no basta `font-bricolage` si el body fuerza Inter (`var(--font-app-sans)`).
- * La clase `tk-bricolage-grotesque-36` viene en el CSS de Typekit; la variable asegura el stack en cascada.
+ * Bricolage en marketing: cuerpo = extralig 400 (Typekit); titulares = `bricolage-grotesque-36` (h1–h6).
+ * Usar `tk-bricolage-grotesque-extralig` en el contenedor raíz alinea la clase Typekit con el cuerpo.
  */
 .luma-marketing-site,
 .luma-marketing-portal {
   font-family: var(--luma-marketing-font);
+  font-weight: 400;
+  font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.luma-marketing-site h1,
+.luma-marketing-site h2,
+.luma-marketing-site h3,
+.luma-marketing-site h4,
+.luma-marketing-site h5,
+.luma-marketing-site h6,
+.luma-marketing-portal h1,
+.luma-marketing-portal h2,
+.luma-marketing-portal h3,
+.luma-marketing-portal h4,
+.luma-marketing-portal h5,
+.luma-marketing-portal h6 {
+  font-family: var(--luma-marketing-font-heading);
 }
 
 .luma-marketing-portal {

@@ -55,7 +55,7 @@ export function PricingEntrance() {
           }
         >
           Elige el plan que mejor se adapta{" "}
-          <span className="text-forest underline decoration-forest underline-offset-[0.2em] decoration-2">
+          <span className="text-[#35AA63] underline decoration-[#35AA63] underline-offset-[0.2em] decoration-2">
             a ti.
           </span>
         </motion.span>

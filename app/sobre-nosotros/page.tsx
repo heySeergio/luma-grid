@@ -163,6 +163,16 @@ Si quieres contarnos algo, escríbenos: en Casa Numa leemos los mensajes
 con calma.`}
             </p>
 
+            <p className="mt-6 text-sm font-semibold text-white/90 sm:text-base">
+              ¿Tienes dudas? Escríbenos a{' '}
+              <a
+                href="mailto:lumagrid@casanuma.biz"
+                className="font-extrabold text-[#FCE855] underline-offset-4 transition hover:underline hover:brightness-110"
+              >
+                lumagrid@casanuma.biz
+              </a>
+            </p>
+
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <FeedbackOpinionCta />
               <Link

@@ -11,7 +11,7 @@ export function MarketingFooter() {
         <div>
           <Link
             href="/#inicio"
-            className="inline-flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-forest"
+            className="inline-flex items-center gap-2.5 font-bricolage-heading text-lg font-extrabold tracking-tight text-forest"
           >
             <Image
               src="/logo-luma-grid.png"
@@ -54,6 +54,15 @@ export function MarketingFooter() {
               />
             </Link>
           </div>
+          <p className="mt-6 max-w-sm text-sm font-medium leading-relaxed text-forest/75">
+            ¿Tienes dudas? Escríbenos a{' '}
+            <a
+              href="mailto:lumagrid@casanuma.biz"
+              className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+            >
+              lumagrid@casanuma.biz
+            </a>
+          </p>
         </div>
         <nav
           aria-label="Enlaces legales"

@@ -2,7 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useClientReady, useIsClient } from '@/lib/ui/useClientReady'
-import { BookOpen, Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BookOpen, Check, Columns2, Download, Eye, FlaskConical, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
@@ -79,6 +79,7 @@ import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
 import PictoEmoji from '@/components/ui/PictoEmoji'
 import AdminArasaacCellIcon from '@/components/admin/AdminArasaacCellIcon'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
+import { FeedbackModal } from '@/components/sobre-nosotros/FeedbackModal'
 import BoardUsageEvaluation from '@/components/admin/BoardUsageEvaluation'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
 import { VoiceCloneLiveWaveform, VoiceCloneSamplePreview } from '@/components/admin/VoiceCloneAudioStrip'
@@ -716,6 +717,8 @@ export default function AdminPageClient() {
   const [showFreePlanUpsell, setShowFreePlanUpsell] = useState(false)
   const [showVoicePlanRequiredModal, setShowVoicePlanRequiredModal] = useState(false)
   const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
+  const [adminFeedbackOpen, setAdminFeedbackOpen] = useState(false)
+  const [adminFeedbackKey, setAdminFeedbackKey] = useState(0)
   const [subscriptionPortalBusy, setSubscriptionPortalBusy] = useState(false)
   const [complimentaryUnlimited, setComplimentaryUnlimited] = useState(false)
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
@@ -2848,10 +2851,10 @@ export default function AdminPageClient() {
         <div className="flex min-h-min flex-col lg:flex-row lg:items-stretch">
             {/* Sidebar */}
             <aside
-              className="w-full min-w-0 shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)] lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
+              className="flex w-full min-w-0 shrink-0 flex-col border-b border-slate-200/80 bg-[var(--app-bg)] lg:min-h-0 lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
               aria-label="Panel lateral de administración"
             >
-            <div className="flex w-full min-w-0 flex-col gap-4 py-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 py-4 px-4 sm:px-6 lg:px-8">
               <div className="app-panel w-full min-w-0 rounded-2xl p-5">
                 <div className="mb-4 flex w-full min-w-0 items-center justify-between gap-3">
                   <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -3125,6 +3128,38 @@ export default function AdminPageClient() {
                   >
                     <List size={16} className="shrink-0" aria-hidden /> Lista
                   </button>
+                </div>
+              </div>
+
+              <div className="app-panel mt-auto w-full min-w-0 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-5 dark:border-amber-900/50 dark:bg-amber-950/35">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-200/90 text-amber-950 dark:bg-amber-500/25 dark:text-amber-100"
+                    aria-hidden
+                  >
+                    <FlaskConical className="size-[1.15rem]" strokeWidth={2.25} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900/90 dark:text-amber-200/95">
+                      Versión experimental
+                    </h2>
+                    <p className="mt-2 text-sm font-medium leading-relaxed text-amber-950/90 dark:text-amber-100/90">
+                      Luma Grid está en fase beta: puede haber errores o cambios. Siempre puedes
+                      enviarnos sugerencias o avisarnos si algo falla.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminFeedbackKey((k) => k + 1)
+                        setAdminFeedbackOpen(true)
+                      }}
+                      className="mt-4 w-full rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-bold text-amber-50 shadow-sm transition hover:brightness-110 dark:bg-amber-400 dark:text-amber-950 dark:hover:brightness-95"
+                      aria-haspopup="dialog"
+                      aria-expanded={adminFeedbackOpen}
+                    >
+                      Enviar sugerencia
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -6070,6 +6105,13 @@ export default function AdminPageClient() {
           setShowPlanPickerModal(false)
           void loadData()
         }}
+      />
+
+      <FeedbackModal
+        key={adminFeedbackKey}
+        open={adminFeedbackOpen}
+        onClose={() => setAdminFeedbackOpen(false)}
+        lockedNotifyEmail={accountEmail.trim() ? accountEmail.trim() : null}
       />
 
       <KeyboardThemeModal

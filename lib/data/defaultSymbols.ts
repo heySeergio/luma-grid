@@ -1,5 +1,6 @@
 import type { WordVariantsConfig } from '@/lib/symbolWordVariants'
 import type { PosType, Symbol } from '@/lib/supabase/types'
+import { BASE_GRID_ARASAAC_IMAGE_BY_LABEL } from '@/lib/data/baseGridArasaacLocal'
 import { BASE_FIXED_LEFT_COLUMN_COUNT } from '@/lib/grid/baseFixedZone'
 import { isFixedZonePosition } from '@/lib/grid/fixedZoneStorage'
 import { effectiveSymbolGridId } from '@/lib/grid/gridCellOverlap'
@@ -2093,8 +2094,9 @@ function isCustomPosition(symbol: Symbol) {
 /** Rellena imagen/emoji de la plantilla DEMO cuando la fila en BD no los tiene (p. ej. Yo / Tú). */
 function mergeDefaultVisualsForLabel(label: string, existing: Symbol) {
   const def = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+  const localArasaac = BASE_GRID_ARASAAC_IMAGE_BY_LABEL[label.toLowerCase()]
   return {
-    imageUrl: existing.imageUrl || def?.imageUrl,
+    imageUrl: existing.imageUrl || def?.imageUrl || localArasaac,
     emoji: existing.emoji ?? def?.emoji,
   }
 }

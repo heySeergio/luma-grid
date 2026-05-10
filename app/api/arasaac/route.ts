@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
   try {
     const response = await fetch(
       `https://api.arasaac.org/v1/pictograms/${locale}/search/${encodeURIComponent(query)}`,
-      { next: { revalidate: 86400 } }
+      // Respuestas de búsqueda pueden superar el límite de 2MB del data cache de Next.js.
+      { cache: 'no-store' }
     )
 
     if (!response.ok) throw new Error('ARASAAC API error')
