@@ -5,9 +5,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readFixedZoneCellsForProfile } from '@/lib/prisma/profileFixedZoneSql'
 import { findManySymbolsByProfileId } from '@/lib/prisma/symbolsForProfile'
-import { parseKeyboardTheme } from '@/lib/keyboard/theme'
+import { isKeyboardThemeEmpty, parseKeyboardTheme } from '@/lib/keyboard/theme'
 
-const LUMA_BOARD_EXPORT_VERSION = 2 as const
+const LUMA_BOARD_EXPORT_VERSION = 3 as const
 
 /**
  * Exporta el tablero como archivo .luma (JSON).
@@ -29,7 +29,6 @@ export async function exportProfileBoardJson(profileId: string): Promise<
       gender: true,
       gridRows: true,
       gridCols: true,
-      isDemo: true,
       keyboardTheme: true,
     },
   })
@@ -59,42 +58,46 @@ export async function exportProfileBoardJson(profileId: string): Promise<
 
   const keyboardTheme = parseKeyboardTheme(profile.keyboardTheme)
 
+  const compactSymbols = symbolsOrdered.map((s) => {
+    const compact: Record<string, unknown> = {
+      id: s.id,
+      label: s.label,
+      x: s.positionX,
+      y: s.positionY,
+    }
+    if (s.gridId && s.gridId !== 'main') compact.g = s.gridId
+    if (s.emoji) compact.e = s.emoji
+    if (s.imageUrl) compact.img = s.imageUrl
+    if (s.category && s.category !== 'other') compact.cat = s.category
+    if (s.posType && s.posType !== 'other') compact.pos = s.posType
+    if (typeof s.posConfidence === 'number') compact.posConf = s.posConfidence
+    if (s.manualGrammarOverride) compact.mgo = true
+    if (s.color && s.color !== '#6366f1') compact.c = s.color
+    if (s.hidden) compact.h = true
+    if (s.state && s.state !== 'visible') compact.st = s.state
+    if (s.opensKeyboard) compact.k = true
+    if ((s as { fixedCell?: boolean }).fixedCell) compact.f = true
+    if (s.wordVariants !== null) compact.wv = s.wordVariants
+    return compact
+  })
+
+  const compactProfile: Record<string, unknown> = {
+    name: profile.name,
+    gender: profile.gender,
+    gridRows: profile.gridRows,
+    gridCols: profile.gridCols,
+  }
+  if (keyboardTheme && !isKeyboardThemeEmpty(keyboardTheme)) {
+    compactProfile.keyboardTheme = keyboardTheme
+  }
+  if (fixedZoneCells !== null) {
+    compactProfile.fixedZoneCells = fixedZoneCells
+  }
+
   const payload = {
     version: LUMA_BOARD_EXPORT_VERSION,
-    exportedAt: new Date().toISOString(),
-    profile: {
-      id: profile.id,
-      name: profile.name,
-      gender: profile.gender,
-      gridRows: profile.gridRows,
-      gridCols: profile.gridCols,
-      isDemo: profile.isDemo,
-      keyboardTheme,
-      fixedZoneCells: fixedZoneCells ?? null,
-    },
-    symbols: symbolsOrdered.map((s) => ({
-      id: s.id,
-      gridId: s.gridId,
-      label: s.label,
-      normalizedLabel: s.normalizedLabel,
-      emoji: s.emoji,
-      imageUrl: s.imageUrl,
-      category: s.category,
-      posType: s.posType,
-      posConfidence: s.posConfidence,
-      manualGrammarOverride: s.manualGrammarOverride,
-      lexemeId: s.lexemeId,
-      positionX: s.positionX,
-      positionY: s.positionY,
-      color: s.color,
-      hidden: s.hidden,
-      state: s.state,
-      opensKeyboard: s.opensKeyboard,
-      wordVariants: s.wordVariants,
-      fixedCell: Boolean((s as { fixedCell?: boolean }).fixedCell),
-      createdAt: s.createdAt.toISOString(),
-      updatedAt: s.updatedAt.toISOString(),
-    })),
+    profile: compactProfile,
+    symbols: compactSymbols,
     phrases: phraseRows.map((p) => {
       let symbolsUsed: Array<{ id: string; label: string }> = []
       try {
@@ -110,7 +113,7 @@ export async function exportProfileBoardJson(profileId: string): Promise<
       }
       return {
         text: p.text,
-        symbolsUsed,
+        symbolIds: symbolsUsed.map((entry) => entry.id),
         isPinned: p.isPinned,
         useCount: p.useCount,
       }

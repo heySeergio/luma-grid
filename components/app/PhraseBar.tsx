@@ -210,13 +210,13 @@ export default function PhraseBar({
           <House className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9" />
         </button>
 
-        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-slate-200/90 bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-500/55 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+        <div className="min-h-[92px] min-w-0 flex-1 rounded-[1.75rem] border border-black/[0.08] bg-[var(--phrase-inner)] px-4 py-3 shadow-[inset_0_1px_0_rgba(28,43,36,0.06)] dark:border-slate-500/55 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           {symbols.length > 0 ? (
             <div className="flex items-center gap-2 overflow-hidden flex-wrap">
               {symbols.map((symbol, i) => (
                 <div
                   key={`preview-${symbol.id}-${i}`}
-                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-slate-200/80 bg-slate-100/95 px-3 py-2 shadow-sm dark:border-[color-mix(in_srgb,var(--app-border)_90%,transparent)] dark:bg-[color-mix(in_srgb,var(--app-surface-elevated)_78%,var(--app-border))] dark:shadow-none"
+                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-black/[0.08] bg-white/90 px-3 py-2 shadow-sm dark:border-[color-mix(in_srgb,var(--app-border)_90%,transparent)] dark:bg-[color-mix(in_srgb,var(--app-surface-elevated)_78%,var(--app-border))] dark:shadow-none"
                 >
                   {onRemoveSymbol ? (
                     <button
@@ -242,11 +242,11 @@ export default function PhraseBar({
                   ) : (
                     <PictoEmoji
                       emoji={symbol.emoji || '📝'}
-                      className="text-2xl leading-none text-slate-900 dark:text-white sm:text-3xl"
+                      className="text-2xl leading-none text-forest dark:text-white sm:text-3xl"
                       aria-hidden
                     />
                   )}
-                  <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-slate-900 dark:text-white sm:text-xs">
+                  <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-forest dark:text-white sm:text-xs">
                     {symbol.label}
                   </span>
                 </div>
@@ -258,7 +258,7 @@ export default function PhraseBar({
             </p>
           )}
           {conjugated && (
-            <p className="mt-2 truncate text-[11px] text-indigo-800 dark:text-indigo-100/90 sm:text-xs">
+            <p className="mt-2 truncate text-[11px] text-accent-blue dark:text-sky-200/90 sm:text-xs">
               Frase: {previewText}
             </p>
           )}

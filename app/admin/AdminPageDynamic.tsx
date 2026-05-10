@@ -11,7 +11,7 @@ const AdminPageClient = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="theme-page-shell flex min-h-dvh items-center justify-center bg-[var(--app-bg)] px-4 text-center text-sm text-slate-600 dark:text-slate-400">
+      <div className="luma-product-shell font-bricolage theme-page-shell flex min-h-dvh items-center justify-center px-4 text-center text-sm text-[var(--app-muted-foreground)] antialiased">
         Cargando panel de administración…
       </div>
     ),

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { Folder, Layers } from 'lucide-react'
 import type { Symbol } from '@/lib/supabase/types'
@@ -12,6 +12,7 @@ import {
 } from '@/lib/symbolWordVariants'
 import SymbolCellAutoFitLabel from '@/components/app/SymbolCellAutoFitLabel'
 import PictoEmoji from '@/components/ui/PictoEmoji'
+import { shouldAutoloadArasaacForSymbol, fetchFirstArasaacImage } from '@/lib/arasaac'
 
 export type SymbolGridDensity = 'sparse' | 'comfortable' | 'dense'
 
@@ -31,6 +32,10 @@ interface Props {
 }
 
 const LONG_PRESS_MS = 480
+
+function shouldAutoloadArasaac(symbol: Symbol): boolean {
+  return shouldAutoloadArasaacForSymbol(symbol)
+}
 
 /**
  * Tipografía: cqmin/cqw/cqh escalan con la celda; vmin refuerza legibilidad según pantalla.
@@ -72,6 +77,7 @@ export default function SymbolCell({
   onVariantRadialOpen,
 }: Props) {
   const [isPopping, setIsPopping] = useState(false)
+  const [arasaacImageUrl, setArasaacImageUrl] = useState<string | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
 
@@ -136,9 +142,21 @@ export default function SymbolCell({
   const cellPadding =
     gridDensity === 'sparse' ? 'p-2 sm:p-2.5 md:p-3' : gridDensity === 'comfortable' ? 'p-2 md:p-2' : 'p-1.5'
 
-  const hasGlyph =
-    Boolean(typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) ||
-    Boolean(typeof symbol.emoji === 'string' && symbol.emoji.trim())
+  useEffect(() => {
+    let cancelled = false
+    setArasaacImageUrl(null)
+    if (!shouldAutoloadArasaac(symbol)) return
+    void fetchFirstArasaacImage(symbol.label).then((url) => {
+      if (!cancelled) setArasaacImageUrl(url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [symbol.id, symbol.gridId, symbol.imageUrl, symbol.label])
+
+  const resolvedImageUrl =
+    (typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) || arasaacImageUrl || ''
+  const hasGlyph = Boolean(resolvedImageUrl) || Boolean(typeof symbol.emoji === 'string' && symbol.emoji.trim())
 
   return (
     <div
@@ -205,10 +223,10 @@ export default function SymbolCell({
               className="symbol-cell__glyph-zone flex min-h-0 w-full shrink-0 items-center justify-center overflow-hidden"
               style={{ color: textColor }}
             >
-              {symbol.imageUrl ? (
+              {resolvedImageUrl ? (
                 <div className="relative mx-auto aspect-square w-[min(100%,min(88cqmin,96cqw))] max-w-full max-h-[min(58cqh,92cqmin)] min-h-0 min-w-0">
                   <Image
-                    src={symbol.imageUrl}
+                    src={resolvedImageUrl}
                     alt=""
                     fill
                     className="object-contain p-0.5"

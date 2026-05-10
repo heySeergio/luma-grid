@@ -14,11 +14,12 @@ import {
 import { effectiveSubscriptionPlan, getMaxProfiles } from '@/lib/subscription/plans'
 import { revalidatePath } from 'next/cache'
 
-const LUMA_EXPORT_VERSION = 2 as const
+const LUMA_EXPORT_VERSION = 3 as const
 
 type LumaPhraseIn = {
   text: string
   symbolsUsed: unknown
+  symbolIds?: unknown
   isPinned?: boolean
   useCount?: number
 }
@@ -53,6 +54,11 @@ function remapPhraseSymbolsUsed(
     .filter((x): x is { id: string; label: string } => x !== null)
 }
 
+function parseSymbolIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is string => typeof item === 'string' && item.length > 0)
+}
+
 /** Importa un tablero desde JSON (.luma). No aplica voz ni preferencias de cuenta. */
 export async function importProfileBoardFromLuma(
   jsonText: string,
@@ -73,7 +79,7 @@ export async function importProfileBoardFromLuma(
 
   const root = parsed as Record<string, unknown>
   const version = root.version
-  if (version !== 1 && version !== LUMA_EXPORT_VERSION) {
+  if (version !== 1 && version !== 2 && version !== LUMA_EXPORT_VERSION) {
     return { ok: false, error: 'Versión de archivo no compatible.' }
   }
 
@@ -135,6 +141,7 @@ export async function importProfileBoardFromLuma(
       phrasesIn.push({
         text: o.text.trim(),
         symbolsUsed: o.symbolsUsed,
+        symbolIds: o.symbolIds,
         isPinned: typeof o.isPinned === 'boolean' ? o.isPinned : false,
         useCount: typeof o.useCount === 'number' && Number.isFinite(o.useCount) ? Math.max(0, Math.floor(o.useCount)) : 0,
       })
@@ -142,41 +149,80 @@ export async function importProfileBoardFromLuma(
   }
 
   const idMap = new Map<string, string>()
+  const oldSymbolLabelById = new Map<string, string>()
   const symbolRows: Prisma.SymbolCreateManyInput[] = []
 
   for (const item of symbolsRaw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const s = item as Record<string, unknown>
-    const oldId = typeof s.id === 'string' ? s.id : ''
+    const oldId =
+      typeof s.id === 'string'
+        ? s.id
+        : typeof s.i === 'string'
+          ? s.i
+          : ''
     const newId = randomUUID()
     if (oldId) idMap.set(oldId, newId)
 
-    const gridId = typeof s.gridId === 'string' && s.gridId ? s.gridId : 'main'
-    const label = typeof s.label === 'string' ? s.label : ''
+    const gridId =
+      typeof s.gridId === 'string' && s.gridId
+        ? s.gridId
+        : typeof s.g === 'string' && s.g
+          ? s.g
+          : 'main'
+    const label = typeof s.label === 'string' ? s.label : typeof s.l === 'string' ? s.l : ''
     if (!label.trim()) continue
+    if (oldId) oldSymbolLabelById.set(oldId, label)
 
     const normalizedLabel =
       typeof s.normalizedLabel === 'string' ? s.normalizedLabel : label.trim().toLowerCase()
-    const category = typeof s.category === 'string' ? s.category : 'other'
-    const posType = typeof s.posType === 'string' ? s.posType : 'other'
+    const category =
+      typeof s.category === 'string' ? s.category : typeof s.cat === 'string' ? s.cat : 'other'
+    const posType =
+      typeof s.posType === 'string' ? s.posType : typeof s.pos === 'string' ? s.pos : 'other'
     const posConfidence =
-      typeof s.posConfidence === 'number' && Number.isFinite(s.posConfidence) ? s.posConfidence : null
-    const manualGrammarOverride = Boolean(s.manualGrammarOverride)
-    const positionX = Number(s.positionX)
-    const positionY = Number(s.positionY)
+      typeof s.posConfidence === 'number' && Number.isFinite(s.posConfidence)
+        ? s.posConfidence
+        : typeof s.posConf === 'number' && Number.isFinite(s.posConf)
+          ? s.posConf
+          : null
+    const manualGrammarOverride = Boolean(s.manualGrammarOverride ?? s.mgo)
+    const positionX = Number(s.positionX ?? s.x)
+    const positionY = Number(s.positionY ?? s.y)
     if (!Number.isFinite(positionX) || !Number.isFinite(positionY)) continue
-    const color = typeof s.color === 'string' && s.color ? s.color : '#6366f1'
-    const hidden = Boolean(s.hidden)
+    const color =
+      typeof s.color === 'string' && s.color
+        ? s.color
+        : typeof s.c === 'string' && s.c
+          ? s.c
+          : '#6366f1'
+    const hidden = Boolean(s.hidden ?? s.h)
     const state =
-      s.state === 'visible' || s.state === 'locked' || s.state === 'hidden' ? s.state : 'visible'
-    const opensKeyboard = Boolean(s.opensKeyboard)
-    const fixedCell = Boolean(s.fixedCell)
-    const emoji = s.emoji === null || typeof s.emoji === 'string' ? s.emoji : null
-    const imageUrl = s.imageUrl === null || typeof s.imageUrl === 'string' ? s.imageUrl : null
+      s.state === 'visible' || s.state === 'locked' || s.state === 'hidden'
+        ? s.state
+        : s.st === 'visible' || s.st === 'locked' || s.st === 'hidden'
+          ? s.st
+          : 'visible'
+    const opensKeyboard = Boolean(s.opensKeyboard ?? s.k)
+    const fixedCell = Boolean(s.fixedCell ?? s.f)
+    const emoji =
+      s.emoji === null || typeof s.emoji === 'string'
+        ? s.emoji
+        : s.e === null || typeof s.e === 'string'
+          ? s.e
+          : null
+    const imageUrl =
+      s.imageUrl === null || typeof s.imageUrl === 'string'
+        ? s.imageUrl
+        : s.img === null || typeof s.img === 'string'
+          ? s.img
+          : null
 
     let wordVariants: Prisma.InputJsonValue | typeof Prisma.JsonNull = Prisma.JsonNull
     if (s.wordVariants !== undefined && s.wordVariants !== null) {
       wordVariants = s.wordVariants as Prisma.InputJsonValue
+    } else if (s.wv !== undefined && s.wv !== null) {
+      wordVariants = s.wv as Prisma.InputJsonValue
     }
 
     symbolRows.push({
@@ -236,7 +282,12 @@ export async function importProfileBoardFromLuma(
       if (phrasesIn.length > 0) {
         const phraseData = phrasesIn.map((ph) => {
           const used = parseSymbolsUsed(ph.symbolsUsed)
-          const remapped = remapPhraseSymbolsUsed(used, idMap)
+          const fromIds = parseSymbolIds(ph.symbolIds).map((id) => ({
+            id,
+            label: oldSymbolLabelById.get(id) ?? '',
+          }))
+          const mergedUsed = used.length > 0 ? used : fromIds.filter((entry) => entry.label)
+          const remapped = remapPhraseSymbolsUsed(mergedUsed, idMap)
           return {
             profileId: profile.id,
             text: ph.text.slice(0, 2000),

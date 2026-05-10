@@ -1,4 +1,15 @@
+import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
+import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { isLandingComingSoon } from '@/lib/site/comingSoon'
+
+export const metadata: Metadata = {
+  title: 'Política de privacidad',
+  description:
+    'Política de privacidad de Luma Grid: tratamiento de datos de cuenta, tableros y comunicador AAC, aprendizaje de predicción opcional, voz y pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo.',
+  alternates: { canonical: '/privacidad' },
+  robots: { index: true, follow: true },
+}
 
 const sections = [
   {
@@ -190,11 +201,14 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <LegalPage
-      eyebrow="Privacidad"
-      title="Política de privacidad"
-      intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz y límites de plan, pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo."
-      sections={sections}
-    />
+    <MarketingSiteShell comingSoon={isLandingComingSoon()}>
+      <LegalPage
+        variant="marketing"
+        eyebrow="Privacidad"
+        title="Política de privacidad"
+        intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz y límites de plan, pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo."
+        sections={sections}
+      />
+    </MarketingSiteShell>
   )
 }

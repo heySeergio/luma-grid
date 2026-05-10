@@ -776,7 +776,7 @@ export default function AppInterface({
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
-    <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
+    <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
       <PendingSyncStatus isOnline={isOnline} shareUsageForPredictions={shareUsageForPredictions} />
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (

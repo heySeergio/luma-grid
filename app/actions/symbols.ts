@@ -142,7 +142,20 @@ function normalizeGridIdForPersist(sym: SymbolInput): string {
     const raw = sym.gridId ?? sym.grid_id
     if (raw == null) return 'main'
     const t = String(raw).trim()
-    return t.length > 0 ? t : 'main'
+    if (t.length === 0) return 'main'
+    // IDs de grid "virtuales" del editor demo nunca deben persistirse como grid real.
+    if (
+        t === 'template' ||
+        t === 'template-left' ||
+        t === 'default' ||
+        t === 'default-left' ||
+        t.startsWith('template-') ||
+        t.startsWith('default-') ||
+        t.startsWith('fixed-left')
+    ) {
+        return 'main'
+    }
+    return t
 }
 
 /** Coacciona enteros de rejilla (el cliente a veces envía strings por inputs). */
@@ -155,20 +168,50 @@ function parseGridInt(v: unknown, fallback: number): number {
     return fallback
 }
 
+function stableSymbolInputFingerprint(sym: SymbolInput): string {
+    return JSON.stringify({
+        label: typeof sym.label === 'string' ? sym.label.trim() : '',
+        emoji: sym.emoji ?? null,
+        imageUrl: (sym.imageUrl ?? sym.image_url) ?? null,
+        category: sym.category ?? 'General',
+        posType: sym.posType ?? sym.pos_type ?? null,
+        posConfidence: sym.posConfidence ?? sym.pos_confidence ?? null,
+        manualGrammarOverride: Boolean(sym.manualGrammarOverride ?? sym.manual_grammar_override),
+        lexemeId: sym.lexemeId ?? sym.lexeme_id ?? null,
+        positionX: parseGridInt(sym.positionX ?? sym.position_x, 0),
+        positionY: parseGridInt(sym.positionY ?? sym.position_y, 0),
+        color: normalizeSymbolColor(sym.color ?? DEFAULT_SYMBOL_COLOR),
+        state: sym.state ?? 'visible',
+        gridId: normalizeGridIdForPersist(sym),
+        opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
+        wordVariants: wordVariantsCanonical(sym.wordVariants ?? sym.word_variants),
+        fixedCell: Boolean(sym.fixedCell ?? sym.fixed_cell),
+    })
+}
+
 /**
- * El cliente puede enviar el mismo símbolo duplicado por id (doble envío, estado); solo debe contar una fila por id.
- * Las filas sin id (creaciones nuevas) se mantienen todas.
+ * El cliente puede reenviar filas duplicadas por id.
+ * Si son idénticas, conservamos una sola; si difieren, abortamos para evitar corrupción silenciosa.
  */
-function dedupeSymbolInputsLastWins(symbols: SymbolInput[]): SymbolInput[] {
+function dedupeSymbolInputsStrict(symbols: SymbolInput[]): SymbolInput[] {
     const byId = new Map<string, SymbolInput>()
+    const byIdFingerprint = new Map<string, string>()
     const withoutId: SymbolInput[] = []
     for (const s of symbols) {
         const id = typeof s.id === 'string' && s.id.trim().length > 0 ? s.id.trim() : null
-        if (id) {
-            byId.set(id, s)
-        } else {
+        if (!id) {
             withoutId.push(s)
+            continue
         }
+        const fingerprint = stableSymbolInputFingerprint(s)
+        const prevFingerprint = byIdFingerprint.get(id)
+        if (prevFingerprint && prevFingerprint !== fingerprint) {
+            throw new Error(
+                `Conflicto al guardar: el símbolo con id «${id}» llega duplicado con datos distintos. Vuelve a cargar el tablero y reintenta.`,
+            )
+        }
+        byId.set(id, s)
+        byIdFingerprint.set(id, fingerprint)
     }
     return [...withoutId, ...byId.values()]
 }
@@ -717,7 +760,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
     }
 
     let symbolsInBounds = filterSymbolInputsToGridBounds(symbols, cols, rows)
-    symbolsInBounds = dedupeSymbolInputsLastWins(symbolsInBounds)
+    symbolsInBounds = dedupeSymbolInputsStrict(symbolsInBounds)
     /** Antes de resolver solapes: mismo criterio que `enrichSymbolInput` (evita «main» vs cadena vacía). */
     symbolsInBounds = symbolsInBounds.map((s) => ({
         ...s,

@@ -83,8 +83,9 @@ export default async function RootLayout({
   const dyslexiaFontEnabled = Boolean(session?.user?.preferredDyslexiaFont)
 
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className="scroll-pt-40 sm:scroll-pt-32" suppressHydrationWarning>
       <head>
+        <link rel="stylesheet" href="https://use.typekit.net/dwn6mnv.css" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body

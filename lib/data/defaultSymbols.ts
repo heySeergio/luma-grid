@@ -35,7 +35,6 @@ export const DEFAULT_SYMBOLS: PartialSymbol[] = [
   // Pronombres
   {
     label: 'Yo',
-    imageUrl: demoIconsAssetUrl('Yo.png'),
     category: 'Yo/Tú',
     posType: 'pronoun',
     positionX: 0,
@@ -45,7 +44,6 @@ export const DEFAULT_SYMBOLS: PartialSymbol[] = [
   },
   {
     label: 'Tú',
-    imageUrl: demoIconsAssetUrl('Tú.png'),
     category: 'Yo/Tú',
     posType: 'pronoun',
     positionX: 1,
@@ -2109,8 +2107,22 @@ export function computeMainGrid(
   fixedZoneKeys: Set<string> | null = null,
 ): Symbol[] {
   symbols = withoutObsoleteDemoFolderSymbols(symbols)
-  const byLabel = new Map(symbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
-  const customSymbols = symbols
+  /**
+   * Compat: durante un bug previo se pudieron persistir símbolos base con gridIds "virtuales".
+   * Para no romper edición/movimiento, en demo los tratamos como `main`.
+   */
+  const isMainLikeGridId = (gid: string) =>
+    gid === 'main' ||
+    gid === 'default' ||
+    gid === 'default-left' ||
+    gid === 'template' ||
+    gid === 'template-left'
+  const mainSymbols = symbols.filter((symbol) => {
+    const gid = effectiveSymbolGridId(symbol)
+    return isMainLikeGridId(gid)
+  })
+  const byLabel = new Map(mainSymbols.map(symbol => [symbol.label.toLowerCase(), symbol]))
+  const customSymbols = mainSymbols
     .filter((symbol) => isCustomPosition(symbol))
     .map((symbol) => {
       const storedPosition = getStoredPosition(symbol)
@@ -2125,16 +2137,15 @@ export function computeMainGrid(
   const mainGridRowCount = MAIN_GRID_TEMPLATE.length
 
   const occupiedCells = new Set<string>()
-  for (const symbol of symbols) {
-    if (effectiveSymbolGridId(symbol) !== 'main') continue
+  for (const symbol of mainSymbols) {
     const px = Number(symbol.positionX ?? 0)
     const py = Number(symbol.positionY ?? 0)
     if (px < 0 || py < 0 || px >= TOTAL_COLUMNS || py >= mainGridRowCount) continue
     occupiedCells.add(`${px}:${py}`)
   }
 
-  const defaultPositionMainSymbols: Symbol[] = symbols
-    .filter((symbol) => effectiveSymbolGridId(symbol) === 'main' && !isCustomPosition(symbol))
+  const defaultPositionMainSymbols: Symbol[] = mainSymbols
+    .filter((symbol) => !isCustomPosition(symbol))
     .filter((symbol) => {
       const px = Number(symbol.positionX ?? 0)
       const py = Number(symbol.positionY ?? 0)

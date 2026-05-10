@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect } from 'react'
-import { AlertCircle, RefreshCcw } from 'lucide-react'
+import { Home, RefreshCcw, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import BrandLockup from '@/components/site/BrandLockup'
 
 export default function Error({
     error,
@@ -16,38 +17,60 @@ export default function Error({
     }, [error])
 
     return (
-        <div className="flex min-h-[400px] w-full flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
-            <div className="rounded-full bg-red-100 p-4 mb-4 text-red-600">
-                <AlertCircle size={48} />
-            </div>
-            <h2 className="mb-2 text-2xl font-bold text-slate-800">¡Ups! Algo salió mal</h2>
-            <p className="mb-6 max-w-md text-slate-600">
-                Ha ocurrido un error inesperado en la aplicación. No te preocupes, puedes intentar recargar la página o volver al inicio.
-            </p>
+        <main className="luma-marketing-site tk-bricolage-grotesque-36 relative flex min-h-screen items-center overflow-hidden bg-canvas px-4 py-12 font-bricolage text-forest antialiased sm:px-6 lg:px-8">
+            <div className="pointer-events-none absolute -left-20 bottom-10 h-56 w-56 rounded-full bg-[#FFB3C8]/60 blur-3xl" aria-hidden />
+            <div className="pointer-events-none absolute right-[-4rem] top-[-4rem] h-64 w-64 rounded-full bg-cta-yellow/70 blur-3xl" aria-hidden />
+            <div className="pointer-events-none absolute left-1/2 top-1/4 h-56 w-56 -translate-x-1/2 rounded-full bg-accent-blue/15 blur-3xl" aria-hidden />
 
-            {/* Caja de detalle técnico del error para visibilidad (solo en dev/beta, pero dejar visible según solicitud) */}
-            <div className="mb-8 w-full max-w-2xl rounded-xl bg-slate-900 p-4 text-left shadow-inner overflow-auto max-h-48 border border-red-500/30">
-                <p className="font-mono text-sm text-red-400 mb-2 font-semibold">Detalle del error técnico:</p>
-                <code className="text-xs text-slate-300 block whitespace-pre-wrap font-mono">
-                    {error.message || 'Error desconocido'}
-                    {error.digest && <span className="block mt-2 text-slate-500">Digest: {error.digest}</span>}
-                </code>
-            </div>
+            <section className="relative z-10 mx-auto w-full max-w-4xl rounded-[2rem] border border-black/[0.06] bg-white/78 p-6 text-center shadow-[0_22px_70px_rgba(28,43,36,0.12)] backdrop-blur sm:p-10">
+                <div className="flex justify-center">
+                    <BrandLockup href="/#inicio" variant="marketing" priority />
+                </div>
 
-            <div className="flex gap-4">
-                <button
-                    onClick={() => reset()}
-                    className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 font-semibold text-white shadow-sm transition hover:bg-indigo-500"
-                >
-                    <RefreshCcw size={18} /> Reintentar
-                </button>
-                <Link
-                    href="/"
-                    className="flex items-center gap-2 rounded-xl bg-slate-200 px-6 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-300"
-                >
-                    Volver al inicio
-                </Link>
-            </div>
-        </div>
+                <div className="mx-auto mt-10 flex h-20 w-20 items-center justify-center rounded-[1.75rem] bg-[#FE6B45] text-white shadow-[0_16px_35px_rgba(254,107,69,0.28)]">
+                    <Sparkles size={34} aria-hidden />
+                </div>
+
+                <p className="mt-8 inline-flex rounded-full bg-cta-yellow px-4 py-1.5 text-sm font-extrabold uppercase tracking-[0.18em] text-forest">
+                    Error inesperado
+                </p>
+                <h1 className="mx-auto mt-5 max-w-2xl text-balance text-4xl font-extrabold leading-[0.95] tracking-[-0.045em] text-forest sm:text-6xl">
+                    Se nos ha movido una pieza del tablero.
+                </h1>
+                <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-relaxed text-forest/70 sm:text-lg">
+                    Puedes reintentar la carga o volver al inicio. El detalle técnico queda registrado para poder revisarlo.
+                </p>
+
+                {(error.message || error.digest) ? (
+                    <div className="mx-auto mt-7 max-w-2xl overflow-auto rounded-3xl border border-black/10 bg-[#FDF8EE] p-4 text-left shadow-inner">
+                        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-coral">
+                            Detalle técnico
+                        </p>
+                        <code className="mt-2 block whitespace-pre-wrap font-mono text-xs leading-relaxed text-forest/70">
+                            {error.message || 'Error desconocido'}
+                            {error.digest ? <span className="mt-2 block text-forest/45">Digest: {error.digest}</span> : null}
+                        </code>
+                    </div>
+                ) : null}
+
+                <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+                    <button
+                        type="button"
+                        onClick={() => reset()}
+                        className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FE6B45] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                    >
+                        <RefreshCcw size={18} aria-hidden />
+                        Reintentar
+                    </button>
+                    <Link
+                        href="/"
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-6 py-3 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
+                    >
+                        <Home size={18} aria-hidden />
+                        Volver al inicio
+                    </Link>
+                </div>
+            </section>
+        </main>
     )
 }

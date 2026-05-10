@@ -65,14 +65,14 @@ describe('applyAdminSymbolGridMove', () => {
     }
   })
 
-  it('no mueve si el destino tiene ocupante no movible', () => {
-    const symbols = [row('a', 0, 0), { ...row('t', 1, 0), id: 'template-x' }]
+  it('no mueve si el destino está fuera de límites', () => {
+    const symbols = [row('a', 0, 0), row('b', 1, 0)]
     const r = applyAdminSymbolGridMove({
       symbols,
       gridCols: cols,
       gridRows: rows,
       dragId: 'a',
-      targetX: 1,
+      targetX: -1,
       targetY: 0,
     })
     assert.equal(r.ok, false)

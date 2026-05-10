@@ -8,6 +8,8 @@ const PATHS: { path: string; changeFrequency: MetadataRoute.Sitemap[0]['changeFr
   { path: '/plan', changeFrequency: 'weekly', priority: 0.8 },
   { path: '/login', changeFrequency: 'monthly', priority: 0.65 },
   { path: '/register', changeFrequency: 'monthly', priority: 0.65 },
+  { path: '/instalar', changeFrequency: 'monthly', priority: 0.75 },
+  { path: '/sobre-nosotros', changeFrequency: 'monthly', priority: 0.6 },
   { path: '/terminos', changeFrequency: 'yearly', priority: 0.4 },
   { path: '/privacidad', changeFrequency: 'yearly', priority: 0.4 },
   { path: '/cookies', changeFrequency: 'yearly', priority: 0.35 },

@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useId, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { useCallback, useEffect, useId, useState } from 'react'
+import { motion } from 'framer-motion'
 
 export type FaqItem = {
   question: string
@@ -24,9 +24,18 @@ export default function LandingFaq({ items }: Props) {
 
 function FaqRow({ item }: { item: FaqItem }) {
   const [open, setOpen] = useState(false)
-  const reduceMotion = useReducedMotion()
+  /** Misma preferencia en servidor y primer render cliente (evita mismatch con `useReducedMotion()`). */
+  const [reduceMotion, setReduceMotion] = useState(false)
   const panelId = useId()
   const duration = reduceMotion ? 0 : 0.38
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => setReduceMotion(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   const toggle = useCallback(() => setOpen((o) => !o), [])
 

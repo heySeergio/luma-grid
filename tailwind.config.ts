@@ -12,6 +12,14 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        canvas: "#FDF8EE",
+        coral: "#E8583E",
+        "accent-blue": "#3A7CEC",
+        "cta-yellow": "#FFEC5C",
+        forest: "#1C2B24",
+      },
+      fontFamily: {
+        bricolage: ['"bricolage-grotesque-36"', "sans-serif"],
       },
     },
   },

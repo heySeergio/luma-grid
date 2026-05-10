@@ -1,4 +1,15 @@
+import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
+import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { isLandingComingSoon } from '@/lib/site/comingSoon'
+
+export const metadata: Metadata = {
+  title: 'Términos y condiciones',
+  description:
+    'Condiciones de uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, autenticación con correo o Google, pagos con Stripe, voz con ElevenLabs, predicción AAC y uso como PWA.',
+  alternates: { canonical: '/terminos' },
+  robots: { index: true, follow: true },
+}
 
 const sections = [
   {
@@ -147,11 +158,14 @@ const sections = [
 
 export default function TermsPage() {
   return (
-    <LegalPage
-      eyebrow="Términos y condiciones"
-      title="Términos y condiciones de uso"
-      intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, inicio de sesión con correo o Google, integración con pagos (Stripe), voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."
-      sections={sections}
-    />
+    <MarketingSiteShell comingSoon={isLandingComingSoon()}>
+      <LegalPage
+        variant="marketing"
+        eyebrow="Términos y condiciones"
+        title="Términos y condiciones de uso"
+        intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, inicio de sesión con correo o Google, integración con pagos (Stripe), voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."
+        sections={sections}
+      />
+    </MarketingSiteShell>
   )
 }

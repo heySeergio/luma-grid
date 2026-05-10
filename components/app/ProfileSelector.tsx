@@ -14,8 +14,8 @@ export default function ProfileSelector({ profiles, currentProfile, onSelect, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-xl" style={{ background: 'var(--app-modal-backdrop)' }}>
       <div className="ui-modal-panel w-full max-w-sm rounded-[2rem]">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Seleccionar tablero</h2>
+        <div className="flex items-center justify-between border-b border-black/[0.08] p-4 dark:border-slate-800">
+          <h2 className="text-xl font-bold text-[var(--app-foreground)] dark:text-slate-100">Seleccionar tablero</h2>
           <button onClick={onClose} className="ui-icon-button rounded-xl p-2 dark:text-slate-200">
             <X size={20} />
           </button>
@@ -41,7 +41,7 @@ export default function ProfileSelector({ profiles, currentProfile, onSelect, on
               >
                 {profile.avatar || profile.name[0]}
               </div>
-              <span className="text-lg font-semibold text-gray-800 dark:text-slate-100">{profile.name}</span>
+              <span className="text-lg font-semibold text-[var(--app-foreground)] dark:text-slate-100">{profile.name}</span>
             </button>
           ))}
         </div>

@@ -50,7 +50,7 @@ export default function TableroQuickTips() {
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex min-w-0 gap-2">
-          <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden />
+          <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-accent-blue dark:text-sky-300" aria-hidden />
           <ul className="list-inside list-disc space-y-0.5 text-xs leading-relaxed text-[var(--app-foreground)]">
             <li>
               Toca símbolos para formar la frase en la barra superior; usa <strong className="font-semibold">Hablar</strong> para leerla en voz
@@ -60,7 +60,7 @@ export default function TableroQuickTips() {
               Las celdas resaltadas sugieren la siguiente palabra. Puedes desactivar predicción en celdas o la franja «Siguiente» desde{' '}
               <Link
                 href="/admin"
-                className="font-semibold text-indigo-700 underline decoration-indigo-400/80 underline-offset-2 hover:text-indigo-900 dark:text-indigo-200 dark:decoration-indigo-400/50 dark:hover:text-white"
+                className="font-semibold text-accent-blue underline decoration-[#fe6b45]/70 underline-offset-2 hover:text-forest dark:text-sky-200 dark:decoration-sky-400/50 dark:hover:text-white"
               >
                 cuenta en el panel
               </Link>

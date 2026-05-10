@@ -281,3 +281,27 @@ model SymbolUsageEvent {
   @@index([lexemeId])
   @@map("symbol_usage_events")
 }
+
+/// Opiniones enviadas desde la landing / sobre nosotros (modal de feedback).
+model FeedbackEntry {
+  id        String   @id @default(cuid())
+  anonymous Boolean  @default(false)
+  email     String?
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("feedback_entries")
+}
+
+/// Inscripciones a la waitlist (CTA de la landing).
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}

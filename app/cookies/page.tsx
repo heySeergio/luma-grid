@@ -1,4 +1,15 @@
+import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
+import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { isLandingComingSoon } from '@/lib/site/comingSoon'
+
+export const metadata: Metadata = {
+  title: 'Política de cookies',
+  description:
+    'Información sobre el uso de cookies, sesión NextAuth, almacenamiento local (localStorage, IndexedDB), PWA con service worker y relación con pagos Stripe en Luma Grid.',
+  alternates: { canonical: '/cookies' },
+  robots: { index: true, follow: true },
+}
 
 const sections = [
   {
@@ -102,11 +113,14 @@ const sections = [
 
 export default function CookiesPage() {
   return (
-    <LegalPage
-      eyebrow="Cookies"
-      title="Política de cookies"
-      intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google, PWA con service worker y relación con pagos Stripe."
-      sections={sections}
-    />
+    <MarketingSiteShell comingSoon={isLandingComingSoon()}>
+      <LegalPage
+        variant="marketing"
+        eyebrow="Cookies"
+        title="Política de cookies"
+        intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google, PWA con service worker y relación con pagos Stripe."
+        sections={sections}
+      />
+    </MarketingSiteShell>
   )
 }

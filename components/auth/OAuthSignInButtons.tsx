@@ -28,7 +28,7 @@ function GoogleIcon() {
 }
 
 const btnClass =
-  'flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-70 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
+  'flex w-full items-center justify-center gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-strong)] px-4 py-3.5 text-sm font-bold text-[var(--app-foreground)] shadow-sm transition hover:bg-[var(--app-surface-muted)] disabled:opacity-70 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
 type Props = {
   callbackUrl: string

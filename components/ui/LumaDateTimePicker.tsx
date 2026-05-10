@@ -104,7 +104,7 @@ export default function LumaDateTimePicker({ label, value, onChange, id, min, ma
       setViewYear(parsed.getFullYear())
       setViewMonth(parsed.getMonth())
     }
-  }, [value])
+  }, [parsed])
 
   useEffect(() => {
     if (!open) return

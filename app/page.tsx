@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import LandingPageOriginal from '@/components/site/LandingPageOriginal'
+import { LandingPageNoSsr } from '@/components/landing/LandingPageNoSsr'
+import { LandingJsonLd } from '@/components/seo/LandingJsonLd'
+import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
 import { getOgImageAbsoluteUrl, getOgImageDimensions } from '@/lib/seo/ogImage'
 import { getSiteUrl } from '@/lib/seo/siteUrl'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
@@ -86,5 +88,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootPage() {
-  return <LandingPageOriginal comingSoon={isLandingComingSoon()} />
+  const comingSoon = isLandingComingSoon()
+  const showJsonLd = !comingSoon
+  return (
+    <MarketingSiteShell comingSoon={comingSoon}>
+      {showJsonLd ? <LandingJsonLd /> : null}
+      <LandingPageNoSsr comingSoon={comingSoon} />
+    </MarketingSiteShell>
+  )
 }

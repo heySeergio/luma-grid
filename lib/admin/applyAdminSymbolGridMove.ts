@@ -25,11 +25,6 @@ function getPos(s: AdminGridSymbolRow): { x: number; y: number } {
 /** Alineado con `isMovableSymbol` en AdminPageClient. */
 export function isAdminGridSymbolMovableById(id: string | number | null | undefined): boolean {
   if (id == null || id === '') return false
-  const sid = String(id)
-  if (sid.startsWith('fixed-left')) return false
-  if (sid.startsWith('template')) return false
-  if (sid.startsWith('folder-item-')) return false
-  if (sid.startsWith('default-') && !sid.startsWith('default-left-')) return false
   return true
 }
 
@@ -166,5 +161,3 @@ export function applyAdminSymbolGridMove<T extends AdminGridSymbolRow>(input: {
 
   return { ok: false, reason: 'blocked_or_immovable_target' }
 }
-
-export const ADMIN_GRID_DRAG_MIME = 'application/x-luma-admin-symbol-id'

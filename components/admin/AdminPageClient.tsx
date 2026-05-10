@@ -77,6 +77,7 @@ import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal
 import PlanPickerModal from '@/components/plan/PlanPickerModal'
 import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
 import PictoEmoji from '@/components/ui/PictoEmoji'
+import AdminArasaacCellIcon from '@/components/admin/AdminArasaacCellIcon'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
 import BoardUsageEvaluation from '@/components/admin/BoardUsageEvaluation'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
@@ -2754,25 +2755,22 @@ export default function AdminPageClient() {
     fixedZoneEditMode
 
   return (
-    <div className="theme-page-shell flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden text-slate-900 dark:text-slate-100">
-      <header className="z-40 w-full shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)]/95 backdrop-blur-md dark:border-slate-700/80">
+    <div className="theme-page-shell flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
+      <header className="z-40 w-full shrink-0 border-b border-black/[0.06] bg-[var(--app-bg)]/95 backdrop-blur-md dark:border-slate-700/80">
         <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
           <div className="app-panel min-w-0 rounded-2xl p-4 sm:p-6">
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-start lg:gap-x-6 lg:gap-y-3">
               <div className="flex min-w-0 flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center lg:col-span-1">
-                <BrandLockup
-                  href="/"
-                  iconSize={44}
-                  wordmarkWidth={156}
-                  priority
-                />
+                <BrandLockup href="/" iconSize={40} variant="marketing" priority />
                 <div
                   aria-hidden="true"
-                  className="hidden h-12 w-px bg-slate-200/80 dark:bg-slate-700/80 sm:block"
+                  className="hidden h-12 w-px bg-black/[0.08] dark:bg-slate-700/80 sm:block"
                 />
                 <div className="min-w-0">
-                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Panel de Administración</h1>
-                  <p className="mt-1 text-slate-500 dark:text-slate-400">Personaliza el comunicador para cada tablero.</p>
+                  <h1 className="text-3xl font-bold tracking-tight text-forest dark:text-white">Panel de Administración</h1>
+                  <p className="mt-1 text-[var(--app-muted-foreground)] dark:text-slate-400">
+                    Personaliza el comunicador para cada tablero.
+                  </p>
                 </div>
               </div>
 
@@ -2807,7 +2805,7 @@ export default function AdminPageClient() {
                       : undefined
                 }
                 className={[
-                  'relative inline-flex w-full items-center justify-center self-center overflow-visible rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:pointer-events-none disabled:opacity-45 sm:col-span-2 lg:col-span-1 lg:col-start-4 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end',
+                  'relative inline-flex w-full items-center justify-center self-center overflow-visible rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue disabled:pointer-events-none disabled:opacity-45 sm:col-span-2 lg:col-span-1 lg:col-start-4 lg:row-start-1 lg:w-[min(100%,11rem)] lg:max-w-full lg:justify-self-end',
                   gridSavePhase === 'idle'
                     ? hasUnsavedGridChanges
                       ? 'ui-primary-button shadow-sm'
@@ -2860,7 +2858,7 @@ export default function AdminPageClient() {
                     <User size={16} /> Tableros
                     {loadingData ? (
                       <span
-                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
+                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-accent-blue/20 border-t-accent-blue dark:border-accent-blue/35 dark:border-t-sky-300"
                         aria-hidden
                       />
                     ) : null}
@@ -2886,7 +2884,7 @@ export default function AdminPageClient() {
                     >
                       <button
                         onClick={() => setSelectedProfileId(p.id)}
-                        className={`min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm font-semibold ${selectedProfileId === p.id ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-200'}`}
+                        className={`min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm font-semibold ${selectedProfileId === p.id ? 'text-accent-blue dark:text-sky-200' : 'text-slate-700 dark:text-slate-200'}`}
                         type="button"
                       >
                         {p.name}
@@ -2896,7 +2894,7 @@ export default function AdminPageClient() {
                         disabled={Boolean(p.isOpeningProfile) || Boolean(settingDefaultProfileId)}
                         className={`ui-icon-button inline-flex h-8 w-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-50 ${
                           p.isOpeningProfile
-                            ? 'text-indigo-600 dark:text-indigo-300'
+                            ? 'text-accent-blue dark:text-sky-300'
                             : 'text-slate-500 dark:text-slate-300'
                         }`}
                         type="button"
@@ -2945,7 +2943,7 @@ export default function AdminPageClient() {
                     onClick={() => setKeyboardThemeModalOpen(true)}
                     suppressHydrationWarning
                     disabled={Boolean(blockProfileHeaderActions)}
-                    className="flex w-full min-w-0 items-center gap-2 rounded-2xl p-2 text-left transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500/60 dark:focus-visible:outline-indigo-400/50"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-2xl p-2 text-left transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue/60 dark:focus-visible:outline-sky-400/50"
                     style={{ background: 'var(--app-surface-muted)' }}
                     aria-label="Editar colores del teclado"
                     title={
@@ -3065,7 +3063,7 @@ export default function AdminPageClient() {
                     onClick={() => setAdminSettingsView('account')}
                     className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
                       adminSettingsView === 'account'
-                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        ? 'bg-accent-blue/10 text-forest shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-accent-blue/15 dark:text-sky-100'
                         : 'ui-secondary-button text-[var(--app-foreground)]'
                     }`}
                   >
@@ -3077,7 +3075,7 @@ export default function AdminPageClient() {
                     onClick={() => setAdminSettingsView('luma')}
                     className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
                       adminSettingsView === 'luma'
-                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        ? 'bg-accent-blue/10 text-forest shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-accent-blue/15 dark:text-sky-100'
                         : 'ui-secondary-button text-[var(--app-foreground)]'
                     }`}
                   >
@@ -3092,7 +3090,7 @@ export default function AdminPageClient() {
                     }}
                     className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
                       adminSettingsView === 'lexicon'
-                        ? 'bg-indigo-50 text-indigo-800 shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-indigo-500/15 dark:text-indigo-100'
+                        ? 'bg-accent-blue/10 text-forest shadow-[0_0_0_1px_var(--app-predicted-border)] dark:bg-accent-blue/15 dark:text-sky-100'
                         : 'ui-secondary-button text-[var(--app-foreground)]'
                     }`}
                   >
@@ -3111,7 +3109,7 @@ export default function AdminPageClient() {
                       setViewMode('grid')
                       setAdminSettingsView(null)
                     }}
-                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' && adminSettingsView === null ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'grid' && adminSettingsView === null ? 'ui-secondary-button text-accent-blue shadow-sm dark:text-sky-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                       }`}
                   >
                     <LayoutGrid size={16} className="shrink-0" aria-hidden /> Grid
@@ -3122,7 +3120,7 @@ export default function AdminPageClient() {
                       setViewMode('table')
                       setAdminSettingsView(null)
                     }}
-                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' && adminSettingsView === null ? 'ui-secondary-button text-indigo-600 shadow-sm dark:text-indigo-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                    className={`flex min-h-[2.75rem] min-w-0 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition ${viewMode === 'table' && adminSettingsView === null ? 'ui-secondary-button text-accent-blue shadow-sm dark:text-sky-300' : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                       }`}
                   >
                     <List size={16} className="shrink-0" aria-hidden /> Lista
@@ -3205,7 +3203,7 @@ export default function AdminPageClient() {
                           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
                           <p className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
                             Plan actual:{' '}
-                            <span className="text-indigo-600 dark:text-indigo-400">
+                            <span className="text-accent-blue dark:text-sky-400">
                               Plan {subscriptionPlanLabel(voicePlan)}
                             </span>
                             {voiceSubscriptionActive ? (
@@ -3251,7 +3249,7 @@ export default function AdminPageClient() {
                             type="button"
                             disabled={subscriptionPortalBusy}
                             onClick={() => handleSubscriptionClick()}
-                            className="shrink-0 rounded-2xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+                            className="shrink-0 rounded-2xl bg-accent-blue px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-95 disabled:opacity-50"
                           >
                             {subscriptionPortalBusy
                               ? 'Abriendo…'
@@ -3380,7 +3378,7 @@ export default function AdminPageClient() {
                               key={option.value}
                               type="button"
                               onClick={() => setAccountPreferredTheme(option.value)}
-                              className={`rounded-2xl border px-3 py-3 text-left transition ${isActive ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                              className={`rounded-2xl border px-3 py-3 text-left transition ${isActive ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                               style={{ borderColor: isActive ? 'var(--app-predicted-border)' : undefined }}
                             >
                               <div className="flex items-center gap-2">
@@ -3406,7 +3404,7 @@ export default function AdminPageClient() {
                               key={option.label}
                               type="button"
                               onClick={() => setAccountPreferredDyslexiaFont(option.value)}
-                              className={`rounded-2xl border px-3 py-3 text-left transition ${isActive ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                              className={`rounded-2xl border px-3 py-3 text-left transition ${isActive ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                               style={{ borderColor: isActive ? 'var(--app-predicted-border)' : undefined }}
                             >
                               <div className="text-sm font-semibold">
@@ -3445,8 +3443,8 @@ export default function AdminPageClient() {
                             aria-checked={accountShowFrequentPhrasesSection}
                             aria-label="Mostrar frases frecuentes en el tablero"
                             onClick={() => setAccountShowFrequentPhrasesSection((v) => !v)}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
-                              accountShowFrequentPhrasesSection ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountShowFrequentPhrasesSection ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
                             }`}
                           >
                             <span
@@ -3466,8 +3464,8 @@ export default function AdminPageClient() {
                             aria-checked={accountShowPhraseCompletionSection}
                             aria-label="Mostrar apartado Siguiente bajo la barra de frase"
                             onClick={() => setAccountShowPhraseCompletionSection((v) => !v)}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
-                              accountShowPhraseCompletionSection ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountShowPhraseCompletionSection ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
                             }`}
                           >
                             <span
@@ -3487,8 +3485,8 @@ export default function AdminPageClient() {
                             aria-checked={accountShowGridCellPredictions}
                             aria-label="Mostrar predicciones en celdas del grid"
                             onClick={() => setAccountShowGridCellPredictions((v) => !v)}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
-                              accountShowGridCellPredictions ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountShowGridCellPredictions ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
                             }`}
                           >
                             <span
@@ -3509,7 +3507,7 @@ export default function AdminPageClient() {
                               onClick={() => setAccountDefaultTableroTab('grid')}
                               className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
                                 accountDefaultTableroTab === 'grid'
-                                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
+                                  ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200'
                                   : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                               }`}
                               style={{
@@ -3525,7 +3523,7 @@ export default function AdminPageClient() {
                               onClick={() => setAccountDefaultTableroTab('keyboard')}
                               className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
                                 accountDefaultTableroTab === 'keyboard'
-                                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
+                                  ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200'
                                   : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                               }`}
                               style={{
@@ -3552,8 +3550,8 @@ export default function AdminPageClient() {
                               aria-checked={accountShareUsageForPredictions}
                               aria-label="Permitir uso de datos para predicciones"
                               onClick={() => setAccountShareUsageForPredictions((v) => !v)}
-                              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
-                                accountShareUsageForPredictions ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                                accountShareUsageForPredictions ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
                               }`}
                             >
                               <span
@@ -3565,7 +3563,7 @@ export default function AdminPageClient() {
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             Más información en la{' '}
-                            <Link href="/privacidad" className="font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                            <Link href="/privacidad" className="font-medium text-accent-blue underline-offset-2 hover:underline dark:text-sky-400">
                               política de privacidad
                             </Link>
                             .
@@ -3623,7 +3621,7 @@ export default function AdminPageClient() {
                           <button
                             type="button"
                             onClick={() => setAccountGender('male')}
-                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'male' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: accountGender === 'male' ? 'var(--app-predicted-border)' : undefined }}
                           >
                             Masculino
@@ -3631,7 +3629,7 @@ export default function AdminPageClient() {
                           <button
                             type="button"
                             onClick={() => setAccountGender('female')}
-                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            className={`rounded-2xl border px-3 py-2 text-sm font-semibold transition ${accountGender === 'female' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: accountGender === 'female' ? 'var(--app-predicted-border)' : undefined }}
                           >
                             Femenino
@@ -3683,7 +3681,7 @@ export default function AdminPageClient() {
                           <button
                             type="button"
                             onClick={() => setVoiceTtsMode('browser')}
-                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'browser' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'browser' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: voiceTtsMode === 'browser' ? 'var(--app-predicted-border)' : undefined }}
                           >
                             Voz del sistema
@@ -3698,7 +3696,7 @@ export default function AdminPageClient() {
                               }
                               setVoiceTtsMode('preset')
                             }}
-                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
                           >
                             Voces naturales
@@ -3713,7 +3711,7 @@ export default function AdminPageClient() {
                               }
                               openCustomVoiceMode()
                             }}
-                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
+                            className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
                           >
                             Crear mi voz
@@ -3759,7 +3757,7 @@ export default function AdminPageClient() {
                                       }}
                                       className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
                                         selected
-                                          ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                          ? 'bg-accent-blue/10 text-forest dark:bg-accent-blue/15 dark:text-sky-100'
                                           : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80'
                                       }`}
                                     >
@@ -3774,7 +3772,7 @@ export default function AdminPageClient() {
                                       }}
                                       className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
                                         playing
-                                          ? 'border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/20 dark:text-indigo-100'
+                                          ? 'border-accent-blue/45 bg-accent-blue/10 text-accent-blue dark:border-accent-blue/50 dark:bg-accent-blue/20 dark:text-sky-100'
                                           : 'border-[var(--app-border)] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                                       } disabled:opacity-50`}
                                       aria-label={`Escuchar muestra de ${v.name}`}
@@ -3948,7 +3946,7 @@ export default function AdminPageClient() {
                         onClick={() => setLexiconSubTab('coverage')}
                         className={`min-h-[2.5rem] flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition sm:flex-none ${
                           lexiconSubTab === 'coverage'
-                            ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500'
+                            ? 'bg-accent-blue text-white shadow-sm dark:bg-accent-blue'
                             : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                         }`}
                       >
@@ -3959,7 +3957,7 @@ export default function AdminPageClient() {
                         onClick={() => setLexiconSubTab('usage')}
                         className={`min-h-[2.5rem] flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition sm:flex-none ${
                           lexiconSubTab === 'usage'
-                            ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500'
+                            ? 'bg-accent-blue text-white shadow-sm dark:bg-accent-blue'
                             : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                         }`}
                       >
@@ -4057,7 +4055,7 @@ export default function AdminPageClient() {
                         <button
                           type="button"
                           onClick={() => setActiveFolder(null)}
-                          className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 transition hover:text-indigo-500 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
+                          className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-accent-blue transition hover:text-accent-blue hover:underline dark:text-sky-300 dark:hover:text-sky-200"
                         >
                           <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
                           Volver al tablero principal
@@ -4204,7 +4202,7 @@ export default function AdminPageClient() {
                           gridDropHover?.x === x &&
                           gridDropHover?.y === y &&
                           !fixedZoneEditMode
-                            ? 'rounded-xl ring-2 ring-indigo-500/85 ring-offset-2 ring-offset-white dark:ring-indigo-400/80 dark:ring-offset-slate-900'
+                            ? 'rounded-xl ring-2 ring-accent-blue/85 ring-offset-2 ring-offset-white dark:ring-sky-400/80 dark:ring-offset-slate-900'
                             : ''
 
                         if (symbolsLoadPending) {
@@ -4272,18 +4270,7 @@ export default function AdminPageClient() {
                           const hasRenderableCellContent = Boolean(
                             gridCellImageSrc || symbol.emoji?.trim() || symbol.label?.trim(),
                           )
-                          const pos = getSymbolPosition(symbol)
                           const shapeClass = 'aspect-video'
-                          const showFixedHighlight =
-                            !fixedZoneEditMode &&
-                            (symbol.gridId ?? 'main') === 'main' &&
-                            isFixedZonePosition(
-                              pos.x,
-                              pos.y,
-                              previewGridCols,
-                              previewGridRows,
-                              adminFixedZoneSet,
-                            )
                           const showFixedZoneEditHighlight =
                             fixedZoneEditMode && isFixedCellAtPreview(x, y)
                           const baseCellBg = resolveSymbolColor(symbol.color)
@@ -4324,13 +4311,11 @@ export default function AdminPageClient() {
                                         ? 'Clic para editar · Arrastra para mover o intercambiar'
                                         : undefined
                                     }
-                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${showFixedHighlight ? 'ring-2 ring-violet-500/45' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                     style={{
                                       backgroundColor: showFixedZoneEditHighlight
                                         ? `color-mix(in srgb, ${baseCellBg} 58%, rgb(167 139 250) 42%)`
-                                        : showFixedHighlight
-                                          ? `color-mix(in srgb, ${baseCellBg} 78%, rgb(167 139 250) 22%)`
-                                          : baseCellBg,
+                                        : baseCellBg,
                                       borderColor: showFixedZoneEditHighlight ? 'rgba(139, 92, 246, 0.45)' : 'var(--app-border)',
                                       color: getSymbolTextColor(symbol.color),
                                     }}
@@ -4345,18 +4330,7 @@ export default function AdminPageClient() {
                                       </span>
                                     ) : null}
                                     <div className="text-xl mb-1">
-                                      {gridCellImageSrc ? (
-                                        /* eslint-disable-next-line @next/next/no-img-element */
-                                        <img
-                                          src={gridCellImageSrc}
-                                          alt={symbol.label}
-                                          className="h-8 w-8 object-contain"
-                                          draggable={false}
-                                          onContextMenu={(e) => e.preventDefault()}
-                                        />
-                                      ) : (
-                                        <PictoEmoji emoji={symbol.emoji || '❓'} aria-hidden />
-                                      )}
+                                      <AdminArasaacCellIcon symbol={symbol} />
                                     </div>
                                     <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
                                       {symbol.label}
@@ -4477,10 +4451,10 @@ export default function AdminPageClient() {
                               <button
                                 onClick={() => setSplitEmptyCell({ x, y })}
                                 type="button"
-                                className={`group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter,border-color,background-color] duration-300 ease-out hover:border-indigo-400/70 hover:bg-indigo-500/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/15 ${fadeVariableCellClass} ${fixedZoneEditMode ? 'pointer-events-none' : ''}`}
+                                className={`group flex aspect-video w-full min-w-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/50 bg-slate-900/35 transition-[opacity,filter,border-color,background-color] duration-300 ease-out hover:border-accent-blue/55 hover:bg-accent-blue/10 dark:border-slate-500/60 dark:bg-slate-950/45 dark:hover:border-accent-blue/50 dark:hover:bg-accent-blue/15 ${fadeVariableCellClass} ${fixedZoneEditMode ? 'pointer-events-none' : ''}`}
                                 aria-label="Añadir en celda vacía"
                               >
-                                <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-indigo-400 dark:text-slate-500" />
+                                <Plus size={16} strokeWidth={2} className="text-slate-400 transition group-hover:text-accent-blue dark:text-slate-500" />
                               </button>
                             )}
                             {fixedZoneEditMode ? (
@@ -4505,7 +4479,7 @@ export default function AdminPageClient() {
                       <DragOverlay modifiers={[snapCenterToCursor]} dropAnimation={null}>
                         {adminGridDraggedSymbol ? (
                           <div
-                            className="pointer-events-none flex aspect-video w-[var(--aac-cell-width,8.5rem)] flex-col items-center justify-center rounded-xl border border-solid p-1.5 shadow-2xl ring-2 ring-indigo-500/70"
+                            className="pointer-events-none flex aspect-video w-[var(--aac-cell-width,8.5rem)] flex-col items-center justify-center rounded-xl border border-solid p-1.5 shadow-2xl ring-2 ring-accent-blue/70"
                             style={{
                               width: ADMIN_PREVIEW_CELL_COL_WIDTH,
                               backgroundColor: resolveSymbolColor(adminGridDraggedSymbol.color),
@@ -4514,17 +4488,7 @@ export default function AdminPageClient() {
                             }}
                           >
                             <div className="text-xl mb-1">
-                              {symbolImageDisplayUrl(adminGridDraggedSymbol) ? (
-                                /* eslint-disable-next-line @next/next/no-img-element */
-                                <img
-                                  src={symbolImageDisplayUrl(adminGridDraggedSymbol)}
-                                  alt={adminGridDraggedSymbol.label ?? ''}
-                                  className="h-8 w-8 object-contain"
-                                  draggable={false}
-                                />
-                              ) : (
-                                <PictoEmoji emoji={adminGridDraggedSymbol.emoji || '❓'} aria-hidden />
-                              )}
+                              <AdminArasaacCellIcon symbol={adminGridDraggedSymbol} />
                             </div>
                             <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
                               {adminGridDraggedSymbol.label}
@@ -4547,7 +4511,7 @@ export default function AdminPageClient() {
                                 ? 'Sal de la carpeta para cambiar el tamaño del tablero'
                                 : 'Añadir una columna a la derecha'
                           }
-                          className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-3 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
+                          className="flex min-h-[10rem] w-full flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-accent-blue/45 bg-accent-blue/[0.08] px-4 py-3 text-sm font-bold text-forest transition hover:border-accent-blue/70 hover:bg-accent-blue/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-accent-blue/40 dark:bg-accent-blue/10 dark:text-sky-200 md:col-start-2 md:row-start-1 md:min-h-0 md:w-14 md:max-w-[4.5rem] md:flex-col md:justify-center md:gap-2 md:self-stretch md:px-2 md:py-6 md:text-xs"
                         >
                           <Columns2 className="h-7 w-7 shrink-0 md:h-8 md:w-8" aria-hidden />
                           <span className="max-w-[10rem] text-center leading-tight md:max-w-none md:[writing-mode:vertical-rl] md:rotate-180">
@@ -4568,7 +4532,7 @@ export default function AdminPageClient() {
                                 ? 'Sal de la carpeta para cambiar el tamaño del tablero'
                                 : 'Añadir una fila abajo'
                           }
-                          className={`col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-indigo-400/45 bg-indigo-500/[0.08] px-4 py-4 text-sm font-bold text-indigo-800 transition hover:border-indigo-500/70 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 md:col-start-1 md:row-start-2 md:py-5 ${
+                          className={`col-span-1 flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-accent-blue/45 bg-accent-blue/[0.08] px-4 py-4 text-sm font-bold text-forest transition hover:border-accent-blue/70 hover:bg-accent-blue/15 disabled:cursor-not-allowed disabled:opacity-40 dark:border-accent-blue/40 dark:bg-accent-blue/10 dark:text-sky-200 md:col-start-1 md:row-start-2 md:py-5 ${
                             showAdminAddColumnChrome ? 'md:col-span-2' : 'md:col-span-1'
                           }`}
                         >
@@ -4591,7 +4555,7 @@ export default function AdminPageClient() {
                         {activeFolder && (
                           <button
                             onClick={() => setActiveFolder(null)}
-                            className="mt-2 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                            className="mt-2 text-sm font-medium text-accent-blue hover:underline dark:text-sky-300"
                             type="button"
                           >
                             &larr; Volver al grid principal
@@ -4641,7 +4605,7 @@ export default function AdminPageClient() {
                   {symbolsLoadPending ? (
                     <div className="flex flex-col items-center justify-center px-6 py-16">
                       <div
-                        className="h-9 w-9 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-800 dark:border-t-indigo-300"
+                        className="h-9 w-9 animate-spin rounded-full border-2 border-accent-blue/20 border-t-accent-blue dark:border-accent-blue/35 dark:border-t-sky-300"
                         aria-hidden
                       />
                       <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Cargando símbolos del tablero…</p>
@@ -4813,7 +4777,7 @@ export default function AdminPageClient() {
                         ) : lexemePreview ? (
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200">
+                              <span className="rounded-full bg-accent-blue/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200">
                                 {getSpanishPosLabel(lexemePreview.primaryPos ?? lexemePreview.symbolPosType)}
                               </span>
                               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -4855,7 +4819,7 @@ export default function AdminPageClient() {
                                       key={`${alternative.lexemeId || alternative.lemma}-${alternative.method}`}
                                       type="button"
                                       onClick={() => applyLexemeAlternative(alternative)}
-                                      className="ui-chip rounded-full px-3 py-1 text-[11px] font-medium text-slate-700 transition hover:text-indigo-700 dark:text-slate-200 dark:hover:text-indigo-200"
+                                      className="ui-chip rounded-full px-3 py-1 text-[11px] font-medium text-slate-700 transition hover:text-accent-blue dark:text-slate-200 dark:hover:text-sky-200"
                                     >
                                       {alternative.lemma} · {getSpanishPosLabel(alternative.primaryPos)}
                                     </button>
@@ -4975,7 +4939,7 @@ export default function AdminPageClient() {
                               })
                             }
                           }}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-accent-blue focus:ring-accent-blue"
                         />
                         <span>
                           <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -5095,7 +5059,7 @@ export default function AdminPageClient() {
                             onClick={() => setEditingSymbol({ ...editingSymbol, emoji })}
                             className={`grid h-10 w-full place-items-center rounded-lg border text-xl leading-none transition ${
                               editingSymbol.emoji === emoji
-                                ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                                ? 'border-accent-blue bg-accent-blue/10 shadow-sm'
                                 : 'ui-icon-button border-transparent'
                             }`}
                             aria-label={`Seleccionar emoji ${emoji}`}
@@ -5108,7 +5072,7 @@ export default function AdminPageClient() {
 
                     <div>
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Imagen Personalizada</label>
-                      <div className="ui-floating-panel flex flex-col gap-3 rounded-2xl border-2 border-dashed p-4 transition hover:border-indigo-400">
+                      <div className="ui-floating-panel flex flex-col gap-3 rounded-2xl border-2 border-dashed p-4 transition hover:border-accent-blue/45">
                         {editingSymbol.imageUrl ? (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img src={editingSymbol.imageUrl} alt="Preview" className="mx-auto h-16 w-16 object-contain" />
@@ -5120,8 +5084,8 @@ export default function AdminPageClient() {
                         <div className="mx-auto flex w-full max-w-[14rem] flex-col gap-2">
                           <label className={`cursor-pointer rounded-xl px-3 py-1.5 text-center text-xs font-semibold transition ${
                             imageInputTab === 'upload'
-                              ? 'bg-indigo-600 text-white'
-                              : 'ui-secondary-button text-indigo-600 dark:text-indigo-300'
+                              ? 'bg-accent-blue text-white'
+                              : 'ui-secondary-button text-accent-blue dark:text-sky-300'
                           }`}>
                             Subir imagen
                             <input
@@ -5139,7 +5103,7 @@ export default function AdminPageClient() {
                             onClick={() => setImageInputTab('url')}
                             className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                               imageInputTab === 'url'
-                                ? 'bg-indigo-600 text-white'
+                                ? 'bg-accent-blue text-white'
                                 : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                             }`}
                           >
@@ -5150,7 +5114,7 @@ export default function AdminPageClient() {
                             onClick={() => setImageInputTab('arasaac')}
                             className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                               imageInputTab === 'arasaac'
-                                ? 'bg-indigo-600 text-white'
+                                ? 'bg-accent-blue text-white'
                                 : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                             }`}
                           >
@@ -5174,7 +5138,7 @@ export default function AdminPageClient() {
                               <button
                                 type="button"
                                 onClick={applyImageFromUrlInput}
-                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-300"
+                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-accent-blue dark:text-sky-300"
                               >
                                 Usar
                               </button>
@@ -5205,7 +5169,7 @@ export default function AdminPageClient() {
                                 type="button"
                                 onClick={() => void handleSearchArasaac()}
                                 disabled={arasaacLoading}
-                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-300"
+                                className="ui-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-accent-blue disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-300"
                               >
                                 {arasaacLoading ? 'Buscando...' : 'Buscar'}
                               </button>
@@ -5225,8 +5189,8 @@ export default function AdminPageClient() {
                                       title={picto.label}
                                       className={`rounded-lg border p-1 transition ${
                                         selected
-                                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20'
-                                          : 'border-slate-200 hover:border-indigo-300 dark:border-slate-700'
+                                          ? 'border-accent-blue bg-accent-blue/10 dark:bg-accent-blue/20'
+                                          : 'border-slate-200 hover:border-accent-blue/35 dark:border-slate-700'
                                       }`}
                                     >
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -5269,14 +5233,14 @@ export default function AdminPageClient() {
                       <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Estado en Tablero</label>
                       <div className="space-y-2">
                         {STATE_OPTIONS.map(opt => (
-                          <label key={opt.value} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition ${editingSymbol.state === opt.value ? 'bg-indigo-50/50 dark:bg-indigo-500/10' : 'ui-secondary-button'}`} style={{ borderColor: editingSymbol.state === opt.value ? 'var(--app-predicted-border)' : undefined }}>
+                          <label key={opt.value} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition ${editingSymbol.state === opt.value ? 'bg-accent-blue/[0.07] dark:bg-accent-blue/10' : 'ui-secondary-button'}`} style={{ borderColor: editingSymbol.state === opt.value ? 'var(--app-predicted-border)' : undefined }}>
                             <input
                               type="radio"
                               name="state"
                               value={opt.value}
                               checked={editingSymbol.state === opt.value}
                               onChange={() => setEditingSymbol({ ...editingSymbol, state: opt.value })}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-600"
+                              className="h-4 w-4 text-accent-blue focus:ring-accent-blue"
                             />
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{opt.label}</span>
                           </label>
@@ -5291,7 +5255,7 @@ export default function AdminPageClient() {
                         onChange={(e) =>
                           setEditingSymbol({ ...editingSymbol, opensKeyboard: e.target.checked })
                         }
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-accent-blue focus:ring-accent-blue"
                       />
                       <span>
                         <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -5327,7 +5291,7 @@ export default function AdminPageClient() {
                 <button
                   type="button"
                   onClick={handleEditSave}
-                  className="ui-primary-button order-1 w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:order-none sm:w-auto"
+                  className="ui-primary-button order-1 w-full rounded-2xl px-6 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue sm:order-none sm:w-auto"
                 >
                   Guardar en Grid
                 </button>
@@ -5386,7 +5350,7 @@ export default function AdminPageClient() {
                                 : { ...EMPTY_WORD_VARIANTS_EDIT },
                             })
                           }}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-accent-blue focus:ring-accent-blue"
                         />
                         <span>
                           <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -5429,7 +5393,7 @@ export default function AdminPageClient() {
                                           wordVariants: { ...wv, defaultIndex: slot },
                                         })
                                       }
-                                      className="h-4 w-4 shrink-0 text-indigo-600 focus:ring-indigo-600"
+                                      className="h-4 w-4 shrink-0 text-accent-blue focus:ring-accent-blue"
                                       aria-label={`Variante ${slot + 1} como predeterminada al toque corto`}
                                     />
                                     <input
@@ -5541,7 +5505,7 @@ export default function AdminPageClient() {
               <form onSubmit={confirmCreateFolder} className="flex flex-col">
                 <div className="flex shrink-0 items-center justify-between border-b border-slate-100/80 bg-[var(--app-surface-muted)] p-4 sm:p-5 dark:border-slate-800">
                   <div className="flex items-center gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-200">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-accent-blue/25 bg-accent-blue/10 text-accent-blue dark:border-accent-blue/40 dark:bg-accent-blue/15 dark:text-sky-200">
                       <FolderOpen size={20} aria-hidden />
                     </span>
                     <div>
@@ -5717,7 +5681,7 @@ export default function AdminPageClient() {
                         onClick={() => setNewProfileGender('male')}
                         className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition ${
                           newProfileGender === 'male'
-                            ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-100'
+                            ? 'border-accent-blue/45 bg-accent-blue/10 text-forest dark:border-accent-blue/50 dark:bg-accent-blue/15 dark:text-sky-100'
                             : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                         }`}
                       >
@@ -5728,7 +5692,7 @@ export default function AdminPageClient() {
                         onClick={() => setNewProfileGender('female')}
                         className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition ${
                           newProfileGender === 'female'
-                            ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-100'
+                            ? 'border-accent-blue/45 bg-accent-blue/10 text-forest dark:border-accent-blue/50 dark:bg-accent-blue/15 dark:text-sky-100'
                             : 'ui-secondary-button text-slate-600 dark:text-slate-300'
                         }`}
                       >
@@ -6079,7 +6043,7 @@ export default function AdminPageClient() {
                   <button
                     type="button"
                     onClick={acceptVoiceCloneDisclaimer}
-                    className="rounded-2xl bg-indigo-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400"
+                    className="rounded-2xl bg-accent-blue px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-95"
                   >
                     Entendido, continuar
                   </button>
