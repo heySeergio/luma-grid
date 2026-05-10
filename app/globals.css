@@ -156,6 +156,12 @@ body {
   overscroll-behavior: none;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   background: var(--app-bg);
   color: var(--app-foreground);

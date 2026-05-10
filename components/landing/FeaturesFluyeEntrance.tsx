@@ -69,7 +69,10 @@ export function FeaturesFluyeEntrance({
     return (
       <div ref={rootRef} className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:items-center lg:gap-16 xl:gap-20">
         <div className="relative min-w-0 overflow-visible">
-          <h2 className="max-w-xl text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]">
+          <h2
+            id="comunicacion-fluye"
+            className="max-w-xl scroll-mt-40 text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:scroll-mt-32 sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]"
+          >
             <span className="block">Comunicación</span>
             <span className="mt-1 block sm:mt-1.5">
               <span className="text-[#1C2B24]">que </span>
@@ -146,7 +149,10 @@ export function FeaturesFluyeEntrance({
       className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:items-center lg:gap-16 xl:gap-20"
     >
       <div className="relative min-w-0 overflow-visible">
-        <h2 className="max-w-xl text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]">
+        <h2
+          id="comunicacion-fluye"
+          className="max-w-xl scroll-mt-40 text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:scroll-mt-32 sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]"
+        >
           <motion.span
             className="block"
             initial={headlineBlock.initial}

@@ -116,7 +116,7 @@ con el mundo.`}
               )}
               {comingSoon ? (
                 <Link
-                  href="/#funciones"
+                  href="/#comunicacion-fluye"
                   className="text-sm font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
                 >
                   Ver cómo funciona →
