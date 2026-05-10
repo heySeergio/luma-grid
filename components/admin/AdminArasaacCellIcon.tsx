@@ -27,7 +27,15 @@ export default function AdminArasaacCellIcon({ symbol, className = 'h-8 w-8 obje
   useEffect(() => {
     let cancelled = false
     setArasaacUrl(null)
-    if (!shouldAutoloadArasaacForSymbol(symbol)) return
+    if (
+      !shouldAutoloadArasaacForSymbol({
+        id: symbol.id,
+        gridId: symbol.gridId,
+        imageUrl: symbol.imageUrl,
+        image_url: symbol.image_url,
+      })
+    )
+      return
     void fetchFirstArasaacImage(symbol.label).then((url) => {
       if (!cancelled) setArasaacUrl(url)
     })

@@ -33,10 +33,6 @@ interface Props {
 
 const LONG_PRESS_MS = 480
 
-function shouldAutoloadArasaac(symbol: Symbol): boolean {
-  return shouldAutoloadArasaacForSymbol(symbol)
-}
-
 /**
  * Tipografía: cqmin/cqw/cqh escalan con la celda; vmin refuerza legibilidad según pantalla.
  */
@@ -145,7 +141,14 @@ export default function SymbolCell({
   useEffect(() => {
     let cancelled = false
     setArasaacImageUrl(null)
-    if (!shouldAutoloadArasaac(symbol)) return
+    if (
+      !shouldAutoloadArasaacForSymbol({
+        id: symbol.id,
+        gridId: symbol.gridId,
+        imageUrl: symbol.imageUrl,
+      })
+    )
+      return
     void fetchFirstArasaacImage(symbol.label).then((url) => {
       if (!cancelled) setArasaacImageUrl(url)
     })
