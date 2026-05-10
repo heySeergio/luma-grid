@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import Image from 'next/image'
+import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
 import { InstallIconAndroid, InstallIconApple, InstallIconDesktop } from '@/components/site/installPlatformIcons'
 
 /** Metadatos de `/instalar` (usados en `app/instalar/page.tsx`). */
@@ -35,13 +37,44 @@ function Section({
   )
 }
 
+/** Misma composición que `MarketingFooter`, sin hipervínculos (pie de `/instalar`). */
 function InstalarFooterSinEnlaces() {
   return (
     <footer className="border-t border-black/10 bg-canvas px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        <p className="text-lg font-extrabold tracking-tight text-forest">Luma Grid</p>
-        <p className="mt-2 text-sm font-medium text-forest/65">Comunicación aumentativa y alternativa</p>
-        <p className="mt-6 text-sm font-medium text-forest/70">Un proyecto de Casa Numa.</p>
+      <div className="mx-auto flex max-w-6xl flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-forest">
+            <Image
+              src="/logo-luma-grid.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-9 w-9 shrink-0 object-cover shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
+            />
+            <NavBrandTitle>Luma Grid</NavBrandTitle>
+          </div>
+          <p className="mt-2 text-sm font-medium text-forest/65">Comunicación Aumentativa y Alternativa</p>
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-forest/70">Un proyecto de</p>
+            <span className="inline-block w-[2.2rem] shrink-0">
+              <Image
+                src="/casa-numa-logo.png"
+                alt="Casa NUMA"
+                width={895}
+                height={350}
+                className="h-auto w-full object-contain object-left"
+              />
+            </span>
+          </div>
+        </div>
+        <div
+          aria-label="Documentación legal (solo texto)"
+          className="grid w-full grid-cols-3 gap-3 text-center text-sm font-semibold leading-snug text-forest/80 sm:ml-auto sm:w-auto sm:max-w-2xl sm:gap-8 sm:text-right"
+        >
+          <p className="min-w-0">Términos y Condiciones</p>
+          <p>Privacidad</p>
+          <p>Cookies</p>
+        </div>
       </div>
     </footer>
   )
@@ -144,7 +177,7 @@ export default function InstalarPageContent() {
           </Section>
         </div>
 
-        <div className="mt-14 rounded-[22px] border border-black/[0.06] bg-white p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
+        <div className="mt-14 mb-10 rounded-[22px] border border-black/[0.06] bg-white p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] sm:mb-14">
           <p className="text-sm font-extrabold text-forest">Resumen</p>
           <p className="mt-3 text-sm font-medium leading-relaxed text-forest/85">
             Cuando Luma Grid esté disponible para quienes la vayan a usar, abre siempre la aplicación en el navegador en la dirección indicada para tu caso

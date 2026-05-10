@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Handshake, Volume2, Wrench, type LucideIcon } from 'lucide-react'
 
+import { MarketingFooter } from '@/components/landing/MarketingFooter'
 import { FeedbackOpinionCta } from '@/components/sobre-nosotros/FeedbackOpinionCta'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
@@ -174,6 +175,7 @@ con calma.`}
           </section>
         </article>
       </main>
+      <MarketingFooter />
     </MarketingSiteShell>
   )
 }
