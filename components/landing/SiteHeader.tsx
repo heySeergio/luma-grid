@@ -2,7 +2,8 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
+import { Menu, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
@@ -29,11 +30,23 @@ type SiteHeaderProps = {
 export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
   const [waitlistOpen, setWaitlistOpen] = useState(false)
   const [waitlistKey, setWaitlistKey] = useState(0)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const openWaitlist = () => {
     setWaitlistKey(k => k + 1)
     setWaitlistOpen(true)
   }
+
+  const closeMobileNav = () => setMobileNavOpen(false)
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [mobileNavOpen])
 
   return (
     <AnimatedHeader
@@ -41,7 +54,7 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
       suppressHydrationWarning
       viewportAmount={0.01}
     >
-      <div className="mx-auto max-w-6xl px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
+      <div className="relative mx-auto max-w-6xl px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
         <div className="flex flex-col gap-3 rounded-full border border-black/[0.06] bg-white py-3 pl-4 pr-5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] sm:flex-row sm:items-center sm:gap-2 sm:py-2.5 sm:pl-6 sm:pr-6">
           <div className="flex items-center justify-between gap-3 sm:contents">
             <Link
@@ -58,31 +71,50 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
               />
               <NavBrandTitle>Luma Grid</NavBrandTitle>
             </Link>
-            {comingSoon ? (
+            <div className="flex items-center gap-2 sm:hidden">
+              {comingSoon ? (
+                <button
+                  type="button"
+                  onClick={openWaitlist}
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+                  aria-haspopup="dialog"
+                  aria-expanded={waitlistOpen}
+                >
+                  Entrar en waitlist
+                </button>
+              ) : (
+                <Link
+                  href="/tablero"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  Abrir app
+                </Link>
+              )}
               <button
                 type="button"
-                onClick={openWaitlist}
-                className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95 sm:hidden"
-                aria-haspopup="dialog"
-                aria-expanded={waitlistOpen}
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] bg-white text-neutral-800 shadow-sm transition hover:bg-neutral-50"
+                aria-expanded={mobileNavOpen}
+                aria-controls="marketing-mobile-nav"
+                aria-label={mobileNavOpen ? 'Cerrar menú' : 'Abrir menú'}
+                onClick={() => setMobileNavOpen(o => !o)}
               >
-                Entrar en waitlist
+                {mobileNavOpen ? (
+                  <X className="size-[1.15rem]" strokeWidth={2.25} aria-hidden />
+                ) : (
+                  <Menu className="size-[1.15rem]" strokeWidth={2.25} aria-hidden />
+                )}
               </button>
-            ) : (
-              <Link
-                href="/tablero"
-                className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95 sm:hidden"
-              >
-                Abrir app
-              </Link>
-            )}
+            </div>
           </div>
 
-          <nav className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1 text-sm font-medium text-neutral-600 sm:mx-0 sm:flex-1 sm:justify-center sm:gap-0 sm:px-0 sm:py-0">
+          <nav
+            className="no-scrollbar -mx-1 hidden items-center gap-1 overflow-x-auto px-1 text-sm font-medium text-neutral-600 md:flex md:flex-1 md:justify-center md:gap-0 md:px-0 md:py-0"
+            aria-label="Secciones principales"
+          >
             {nav.map((item, index) => (
               <span key={item.href} className="flex shrink-0 items-center">
                 {index === navBeforeSeparator ? (
-                  <span className="mx-2 hidden h-4 w-px shrink-0 bg-neutral-200 sm:block" aria-hidden />
+                  <span className="mx-2 hidden h-4 w-px shrink-0 bg-neutral-200 md:block" aria-hidden />
                 ) : null}
                 <Link
                   href={navHref(item.href)}
@@ -98,14 +130,14 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
             <button
               type="button"
               onClick={openWaitlist}
-              className="hidden shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 sm:inline-flex"
+              className="hidden shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 md:inline-flex"
               aria-haspopup="dialog"
               aria-expanded={waitlistOpen}
             >
               Entrar en waitlist
             </button>
           ) : (
-            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            <div className="hidden shrink-0 items-center gap-2 md:flex">
               <Link
                 href="/admin"
                 className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
@@ -121,6 +153,38 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
             </div>
           )}
         </div>
+
+        {mobileNavOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[105] bg-black/30 md:hidden"
+              aria-label="Cerrar menú"
+              onClick={closeMobileNav}
+            />
+            <nav
+              id="marketing-mobile-nav"
+              className="absolute left-4 right-4 top-full z-[110] mt-2 md:hidden"
+              aria-label="Secciones principales"
+            >
+              <div className="overflow-hidden rounded-[22px] border border-black/[0.06] bg-white shadow-[0_20px_48px_rgba(0,0,0,0.14)]">
+                <ul className="flex flex-col py-1">
+                  {nav.map(item => (
+                    <li key={item.href}>
+                      <Link
+                        href={navHref(item.href)}
+                        className="block px-5 py-3.5 text-[15px] font-semibold text-neutral-800 transition hover:bg-neutral-50 active:bg-neutral-100"
+                        onClick={closeMobileNav}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </nav>
+          </>
+        ) : null}
       </div>
       {comingSoon ? (
         <WaitlistModal key={waitlistKey} open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />

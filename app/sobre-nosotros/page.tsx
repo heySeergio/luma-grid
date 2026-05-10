@@ -61,7 +61,7 @@ export default function SobreNosotrosPage() {
   const comingSoon = isLandingComingSoon()
   return (
     <MarketingSiteShell comingSoon={comingSoon}>
-      <main className="bg-canvas px-4 pb-20 pt-36 text-forest sm:pt-32 md:px-6">
+      <main className="bg-canvas px-4 pb-[max(5rem,env(safe-area-inset-bottom))] pt-36 text-forest sm:pt-32 md:px-6 md:pb-20">
         <article className="mx-auto max-w-3xl">
           <p className="text-sm font-semibold text-forest/70">
             <Link

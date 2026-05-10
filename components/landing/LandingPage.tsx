@@ -86,11 +86,11 @@ function Hero({ comingSoon }: { comingSoon: boolean }) {
       className="mt-2 overflow-visible border-b border-black/5 sm:mt-3"
       enableLoop={false}
     >
-      <div className="relative min-h-[min(38vh,360px)] overflow-visible bg-canvas px-4 pb-10 pt-8 sm:min-h-[min(42vh,400px)] sm:px-6 sm:pb-12 sm:pt-10 lg:min-h-[min(44vh,420px)] lg:px-6 lg:pb-14 lg:pt-11">
+      <div className="relative min-h-[min(26vh,220px)] overflow-visible bg-canvas px-4 pb-8 pt-7 sm:min-h-[min(34vh,320px)] sm:px-6 sm:pb-10 sm:pt-9 md:min-h-[min(38vh,360px)] md:pb-12 md:pt-10 lg:min-h-[min(44vh,420px)] lg:px-6 lg:pb-14 lg:pt-11">
         <HeroDraggableDecors moverEnabled={moverSvgOn} />
         <div className="relative z-10 mx-auto mt-2 w-full max-w-6xl sm:mt-3 lg:mt-4">
           <HeroHeadline />
-          <div className="mt-16 w-full sm:mt-20 lg:mt-24">
+          <div className="mt-10 w-full sm:mt-16 md:mt-20 lg:mt-24">
             <p className="max-w-2xl whitespace-pre-line text-base leading-snug text-[#042D22] sm:text-lg sm:leading-snug">
               {`Luma Grid es un tablero de comunicación
 aumentativa y alternativa.

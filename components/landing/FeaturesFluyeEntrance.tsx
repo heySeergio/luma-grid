@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { FeaturesDriftShell } from "@/components/landing/FeaturesDriftShell";
 import { useDelayedSectionReveal } from "@/components/landing/useDelayedSectionReveal";
 import { FeaturesFluyeDecors } from "@/components/landing/FeaturesFluyeDecors";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -22,8 +23,9 @@ const ENTRANCE_DURATION = 0.44;
 /** Fade-in de cada ítem de la lista (fluye). */
 const LIST_ENTRANCE_DURATION = 0.52;
 /** Tras el fade del ítem, inicia el bucle propio (s). */
-const listLoopDelay = (index: number) =>
-  LIST_BASE_DELAY + index * LIST_STAGGER + LIST_ENTRANCE_DURATION;
+function makeListLoopDelay(base: number, stagger: number) {
+  return (index: number) => base + index * stagger + LIST_ENTRANCE_DURATION;
+}
 const LIST_LOOP_FLOAT_Y = [0, -3.2, 0];
 const LIST_LOOP_FLOAT_DURATION = 5.5;
 const LIST_LOOP_ROTATE = [-1.05, 1.05, -1.05];
@@ -55,6 +57,13 @@ export function FeaturesFluyeEntrance({
   const rootRef = useRef(null);
   const { revealed: reveal } = useDelayedSectionReveal(rootRef);
   const reduceMotion = useReducedMotion();
+  const isMobileLayout = useIsMobileLayout();
+
+  const headlineLine2Delay = isMobileLayout ? 0 : HEADLINE_LINE2_DELAY;
+  const listBase = isMobileLayout ? 0 : LIST_BASE_DELAY;
+  const listStagger = isMobileLayout ? 0 : LIST_STAGGER;
+  const listLoopDelay = makeListLoopDelay(listBase, listStagger);
+  const driftDelaySec = isMobileLayout ? 0 : DRIFT_DELAY_AFTER_REVEAL_SEC;
 
   if (reduceMotion) {
     return (
@@ -157,7 +166,7 @@ export function FeaturesFluyeEntrance({
             transition={{
               duration: ENTRANCE_DURATION,
               ease: easeOut,
-              delay: HEADLINE_LINE2_DELAY,
+              delay: headlineLine2Delay,
             }}
           >
             <span className="text-[#1C2B24]">que </span>
@@ -192,7 +201,7 @@ export function FeaturesFluyeEntrance({
 
         <FeaturesDriftShell
           className="relative mx-auto mt-10 block min-h-[min(52dvh,360px)] w-full max-w-lg sm:mt-12 sm:min-h-[380px] lg:mx-0 lg:max-w-none lg:min-h-[420px]"
-          driftDelaySec={DRIFT_DELAY_AFTER_REVEAL_SEC}
+          driftDelaySec={driftDelaySec}
         >
           <FeaturesFluyeDecors
             moverEnabled={featuresDecorMoverOn}
@@ -219,7 +228,7 @@ export function FeaturesFluyeEntrance({
                 transition={{
                   duration: LIST_ENTRANCE_DURATION,
                   ease: easeOut,
-                  delay: LIST_BASE_DELAY + index * LIST_STAGGER,
+                  delay: listBase + index * listStagger,
                 }}
               >
                 <motion.div

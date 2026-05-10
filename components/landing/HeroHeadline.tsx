@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 
 import { LevitatingMessyLetters } from "@/components/landing/LevitatingMessyLetters";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 function MessyLine({
   children,
@@ -58,6 +59,12 @@ function FadeWord({
 }
 
 export function HeroHeadline() {
+  const isMobileLayout = useIsMobileLayout();
+  const d = (sec: number) => (isMobileLayout ? 0 : sec);
+  const letterStagger = isMobileLayout ? 0 : 0.07;
+  const levitationAfter = (fadeDelay: number) =>
+    isMobileLayout ? 0 : levitationStartAfterFade(fadeDelay);
+
   return (
     <h1 className="text-balance subpixel-antialiased">
       <div className="flex flex-col gap-1 sm:gap-2 lg:gap-1">
@@ -66,18 +73,20 @@ export function HeroHeadline() {
             rotation={-6}
             className="text-[#042D22] text-[clamp(2.5rem,8vw,4.75rem)] leading-[0.95]"
           >
-            <FadeWord delay={0}>
+            <FadeWord delay={d(0)}>
               <LevitatingMessyLetters
                 text="Tu"
                 pattern={[0, 6]}
-                levitationStartDelay={levitationStartAfterFade(0)}
+                stagger={letterStagger}
+                levitationStartDelay={levitationAfter(0)}
               />
             </FadeWord>
-            <FadeWord delay={0.16}>
+            <FadeWord delay={d(0.16)}>
               <LevitatingMessyLetters
                 text=" voz."
                 pattern={[6, 16, 8, -2]}
-                levitationStartDelay={levitationStartAfterFade(0.16)}
+                stagger={letterStagger}
+                levitationStartDelay={levitationAfter(0.16)}
               />
             </FadeWord>
           </MessyLine>
@@ -85,11 +94,12 @@ export function HeroHeadline() {
             rotation={5}
             className="text-[#2F69BA] text-[clamp(2.5rem,8vw,4.75rem)] leading-[0.95]"
           >
-            <FadeWord delay={0.34}>
+            <FadeWord delay={d(0.34)}>
               <LevitatingMessyLetters
                 text="Sin"
                 pattern={[-4, 8, -2]}
-                levitationStartDelay={levitationStartAfterFade(0.34)}
+                stagger={letterStagger}
+                levitationStartDelay={levitationAfter(0.34)}
               />
             </FadeWord>
           </MessyLine>
@@ -98,13 +108,14 @@ export function HeroHeadline() {
           rotation={-2}
           className="text-[#FE6B45] text-[clamp(2.75rem,9vw,5.5rem)] leading-[0.92]"
         >
-          <FadeWord delay={0.52}>
+          <FadeWord delay={d(0.52)}>
             <LevitatingMessyLetters
               text="complicaciones."
               pattern={[
                 0, -8, 4, -12, 6, -4, 10, -6, 3, -9, 5, -3, 8, -5, 2,
               ]}
-              levitationStartDelay={levitationStartAfterFade(0.52)}
+              stagger={letterStagger}
+              levitationStartDelay={levitationAfter(0.52)}
             />
           </FadeWord>
         </MessyLine>

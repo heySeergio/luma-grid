@@ -14,6 +14,7 @@ import {
   SECTION_REVEAL_MARGIN,
   SECTION_REVEAL_NUDGE_MS,
 } from "@/components/landing/sectionReveal";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 type InViewMargin = NonNullable<UseInViewOptions["margin"]>;
 
@@ -165,6 +166,7 @@ function useScrollEnterLoop(
 ) {
   const ref = useRef(null);
   const reduceMotion = useReducedMotion();
+  const isMobileLayout = useIsMobileLayout();
   const rawInView = useInView(ref, {
     once: true,
     amount: viewportAmount,
@@ -183,9 +185,10 @@ function useScrollEnterLoop(
       setInDone(false);
       return;
     }
-    const id = window.setTimeout(() => setIsInView(true), SECTION_REVEAL_NUDGE_MS);
+    const nudgeMs = isMobileLayout ? 0 : SECTION_REVEAL_NUDGE_MS;
+    const id = window.setTimeout(() => setIsInView(true), nudgeMs);
     return () => window.clearTimeout(id);
-  }, [rawInView, reduceMotion]);
+  }, [rawInView, reduceMotion, isMobileLayout]);
 
   const loopDef = enableLoop ? loopFor(loop, reduceMotion) : settledAfterEnter;
 

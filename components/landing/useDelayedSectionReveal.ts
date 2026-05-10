@@ -9,6 +9,7 @@ import {
   SECTION_REVEAL_NUDGE_MS,
   type SectionRevealMargin,
 } from "@/components/landing/sectionReveal";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 export function useDelayedSectionReveal(
   ref: RefObject<Element | null>,
@@ -21,10 +22,13 @@ export function useDelayedSectionReveal(
   const amount = overrides?.amount ?? SECTION_REVEAL_AMOUNT;
   const margin = overrides?.margin ?? SECTION_REVEAL_MARGIN;
   const nudgeMs = overrides?.nudgeMs ?? SECTION_REVEAL_NUDGE_MS;
+  const isMobileLayout = useIsMobileLayout();
 
   const rawInView = useInView(ref, { once: true, amount, margin });
   const reduceMotion = useReducedMotion();
   const [revealed, setRevealed] = useState(false);
+
+  const effectiveNudgeMs = isMobileLayout ? 0 : nudgeMs;
 
   useEffect(() => {
     if (reduceMotion) {
@@ -35,9 +39,9 @@ export function useDelayedSectionReveal(
       setRevealed(false);
       return;
     }
-    const id = window.setTimeout(() => setRevealed(true), nudgeMs);
+    const id = window.setTimeout(() => setRevealed(true), effectiveNudgeMs);
     return () => window.clearTimeout(id);
-  }, [rawInView, reduceMotion, nudgeMs]);
+  }, [rawInView, reduceMotion, effectiveNudgeMs]);
 
   return { rawInView, revealed: reduceMotion ? rawInView : revealed };
 }

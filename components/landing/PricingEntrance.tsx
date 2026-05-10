@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useRef } from "react";
 
 import { useDelayedSectionReveal } from "@/components/landing/useDelayedSectionReveal";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -25,6 +26,10 @@ export function PricingEntrance() {
   const rootRef = useRef(null);
   const { revealed } = useDelayedSectionReveal(rootRef);
   const reduceMotion = useReducedMotion();
+  const isMobileLayout = useIsMobileLayout();
+
+  const cardDelay = (index: number) =>
+    isMobileLayout ? 0 : FIRST_CARD_DELAY + index * CARD_STAGGER;
 
   const lineHidden = reduceMotion
     ? { opacity: 1, y: 0 }
@@ -62,7 +67,7 @@ export function PricingEntrance() {
             reduceMotion
               ? { duration: 0 }
               : {
-                  delay: FIRST_CARD_DELAY + 0 * CARD_STAGGER,
+                  delay: cardDelay(0),
                   duration: CARD_DURATION,
                   ease: easeOut,
                 }
@@ -99,7 +104,7 @@ export function PricingEntrance() {
             reduceMotion
               ? { duration: 0 }
               : {
-                  delay: FIRST_CARD_DELAY + 1 * CARD_STAGGER,
+                  delay: cardDelay(1),
                   duration: CARD_DURATION,
                   ease: easeOut,
                 }
@@ -143,7 +148,7 @@ export function PricingEntrance() {
             reduceMotion
               ? { duration: 0 }
               : {
-                  delay: FIRST_CARD_DELAY + 2 * CARD_STAGGER,
+                  delay: cardDelay(2),
                   duration: CARD_DURATION,
                   ease: easeOut,
                 }

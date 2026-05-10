@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useRef } from "react";
 
 import { useDelayedSectionReveal } from "@/components/landing/useDelayedSectionReveal";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 export type AudienceCard = {
   title: string;
@@ -26,6 +27,7 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
   const containerRef = useRef(null);
   const { revealed: isInView } = useDelayedSectionReveal(containerRef);
   const reduceMotion = useReducedMotion();
+  const isMobileLayout = useIsMobileLayout();
 
   return (
     <div
@@ -37,7 +39,7 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
         const tiltLeft = order % 2 === 1;
         const restRotate = tiltLeft ? -TILT_DEG : TILT_DEG;
 
-        const stampDelay = index * STAGGER_S;
+        const stampDelay = isMobileLayout ? 0 : index * STAGGER_S;
 
         return (
           <motion.article
@@ -90,14 +92,14 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
                 alt=""
                 fill
                 className="pointer-events-none select-none object-cover"
-                sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                sizes="(max-width: 767px) min(92vw, 100vw), (max-width: 1280px) 50vw, 25vw"
               />
               <Image
                 src={card.overlay}
                 alt=""
                 fill
                 className="pointer-events-none select-none object-contain"
-                sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                sizes="(max-width: 767px) min(92vw, 100vw), (max-width: 1280px) 50vw, 25vw"
               />
             </div>
             <h3 className="text-left text-[19px] font-extrabold leading-snug tracking-tight text-forest">

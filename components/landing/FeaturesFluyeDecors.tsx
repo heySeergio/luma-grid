@@ -4,6 +4,8 @@ import { startTransition, useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion, type PanInfo } from "framer-motion";
 
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
+
 const STORAGE_KEY = "luma-grid-features-fluye-positions";
 
 export type FluyeDecorId = "plant" | "boy";
@@ -87,6 +89,7 @@ export function FeaturesFluyeDecors({
 }: FeaturesFluyeDecorsProps) {
   const reducedHook = useReducedMotion();
   const reducedMotion = reducedMotionProp ?? reducedHook;
+  const isMobileLayout = useIsMobileLayout();
 
   const [positions, setPositions] = useState<FluyeDecorPositions>(DEFAULT_POSITIONS);
   const [positionsReady, setPositionsReady] = useState(false);
@@ -125,10 +128,15 @@ export function FeaturesFluyeDecors({
 
   const reveal = positionsReady && entranceActive;
   const delayFor = (id: FluyeDecorId) =>
-    id === "plant" ? ENTRANCE_DELAY_PLANT_SEC : ENTRANCE_DELAY_BOY_SEC;
+    isMobileLayout
+      ? 0
+      : id === "plant"
+        ? ENTRANCE_DELAY_PLANT_SEC
+        : ENTRANCE_DELAY_BOY_SEC;
 
-  const plantLoopDelay =
-    ENTRANCE_DELAY_PLANT_SEC + ENTRANCE_DURATION;
+  const plantLoopDelay = isMobileLayout
+    ? ENTRANCE_DURATION
+    : ENTRANCE_DELAY_PLANT_SEC + ENTRANCE_DURATION;
 
   return (
     <div

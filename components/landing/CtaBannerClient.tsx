@@ -10,6 +10,7 @@ import {
   CTA_GLOBAL_OFFSET_SEC,
 } from '@/components/landing/CtaBannerDecors'
 import { useDelayedSectionReveal } from '@/components/landing/useDelayedSectionReveal'
+import { useIsMobileLayout } from '@/lib/hooks/useIsMobileLayout'
 
 const easeOut = [0.22, 1, 0.36, 1] as const
 
@@ -23,6 +24,8 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
 
   const reduceMotion = useReducedMotion()
   const { revealed } = useDelayedSectionReveal(rootRef)
+  const isMobileLayout = useIsMobileLayout()
+  const ctaEntranceDelay = isMobileLayout ? 0 : CTA_GLOBAL_OFFSET_SEC
 
   const instant = reduceMotion === true
   const entranceStarted = instant || revealed
@@ -50,7 +53,7 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
             : {
                 duration: CTA_ENTRANCE_DURATION,
                 ease: easeOut,
-                delay: CTA_GLOBAL_OFFSET_SEC,
+                delay: ctaEntranceDelay,
               }
         }
       >
