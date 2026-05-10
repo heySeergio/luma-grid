@@ -34,12 +34,15 @@ import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
 import type { KeyboardThemeColors } from '@/lib/keyboard/theme'
 import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import type { TableroInitialPayload } from '@/lib/tablero/loadTableroInitial'
 
 type TabMode = 'grid' | 'keyboard'
 
 type AppInterfaceProps = {
   /** Preferencia de cuenta para la primera pintura (SSR); evita mostrar el grid y luego el teclado. */
   initialDefaultTableroTab?: DefaultTableroTab
+  /** Datos precargados en el servidor: evita cascada perfiles → símbolos en el primer pintado. */
+  tableroInitial?: TableroInitialPayload | null
 }
 
 type LocalProfile = Profile & {
@@ -94,24 +97,49 @@ const PRONOUN_GENDER: Record<string, 'male' | 'female'> = {
   'ella': 'female', 'ellas': 'female', 'nosotras': 'female', 'vosotras': 'female',
 }
 
+function pickInitialProfile(list: LocalProfile[], activeId: string | null): LocalProfile | null {
+  if (!activeId || list.length === 0) return null
+  return list.find((p) => p.id === activeId) ?? null
+}
+
 
 export default function AppInterface({
   initialDefaultTableroTab = 'grid',
+  tableroInitial = null,
 }: AppInterfaceProps = {}) {
-  const [profile, setProfile] = useState<LocalProfile | null>(null)
-  const [profiles, setProfiles] = useState<LocalProfile[]>([])
-  const [symbols, setSymbols] = useState<Symbol[]>([])
+  const [profiles, setProfiles] = useState<LocalProfile[]>(() => {
+    if (!tableroInitial) return []
+    return applyProfileGenders(tableroInitial.profiles as Profile[]) as LocalProfile[]
+  })
+  const [profile, setProfile] = useState<LocalProfile | null>(() => {
+    if (!tableroInitial) return null
+    const list = applyProfileGenders(tableroInitial.profiles as Profile[]) as LocalProfile[]
+    return pickInitialProfile(list, tableroInitial.activeProfileId)
+  })
+  const [symbols, setSymbols] = useState<Symbol[]>(() => tableroInitial?.symbols ?? [])
   const [selectedSymbols, setSelectedSymbols] = useState<Symbol[]>([])
-  const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
-  const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>([])
+  const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>(
+    () => tableroInitial?.pinnedPhrases ?? [],
+  )
+  const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>(
+    () => tableroInitial?.frequentPhrases ?? [],
+  )
   /** Fila «Frecuentes» en /tablero; preferencia de cuenta (por defecto visible). */
-  const [showFrequentPhrasesSection, setShowFrequentPhrasesSection] = useState(true)
+  const [showFrequentPhrasesSection, setShowFrequentPhrasesSection] = useState(
+    () => tableroInitial?.accountSettings?.showFrequentPhrasesSection ?? true,
+  )
   /** Franja «Siguiente» (chips bajo la barra); no afecta a predicciones en celdas. */
-  const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(true)
+  const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(
+    () => tableroInitial?.accountSettings?.showPhraseCompletionSection ?? true,
+  )
   /** Iluminación predictiva en celdas del grid (independiente de la franja «Siguiente»). */
-  const [showGridCellPredictions, setShowGridCellPredictions] = useState(true)
+  const [showGridCellPredictions, setShowGridCellPredictions] = useState(
+    () => tableroInitial?.accountSettings?.showGridCellPredictions ?? true,
+  )
   /** Guardar pulsaciones para aprendizaje de predicciones (preferencia de privacidad en cuenta). */
-  const [shareUsageForPredictions, setShareUsageForPredictions] = useState(true)
+  const [shareUsageForPredictions, setShareUsageForPredictions] = useState(
+    () => tableroInitial?.accountSettings?.shareUsageForPredictions !== false,
+  )
   /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
   const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
   const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
@@ -124,6 +152,8 @@ export default function AppInterface({
   const [showProfileSelector, setShowProfileSelector] = useState(false)
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
+  /** Snapshot SSR para omitir la primera recarga; el cleanup restaura en Strict Mode. */
+  const tableroBootstrapRef = useRef(tableroInitial)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
   const profileId = profile?.id ?? ''
 
@@ -345,11 +375,15 @@ export default function AppInterface({
     return () => window.removeEventListener('storage', onStorage)
   }, [loadProfiles, loadSymbols])
 
-  useEffect(() => {
-    void loadProfiles()
-  }, [loadProfiles])
+  const hydratedFromServer = tableroInitial != null
 
   useEffect(() => {
+    if (hydratedFromServer) return
+    void loadProfiles()
+  }, [loadProfiles, hydratedFromServer])
+
+  useEffect(() => {
+    if (hydratedFromServer) return
     void getAccountSettings().then((s) => {
       if (!s) return
       if (typeof s.showFrequentPhrasesSection === 'boolean') {
@@ -366,7 +400,14 @@ export default function AppInterface({
       setShareUsageForPredictions(share)
       if (!share) void clearPendingUsageEvents()
     })
-  }, [])
+  }, [hydratedFromServer])
+
+  useEffect(() => {
+    if (!hydratedFromServer) return
+    if (tableroInitial?.accountSettings?.shareUsageForPredictions === false) {
+      void clearPendingUsageEvents()
+    }
+  }, [hydratedFromServer, tableroInitial?.accountSettings?.shareUsageForPredictions])
 
   useEffect(() => {
     if (!showGridCellPredictions) {
@@ -376,6 +417,22 @@ export default function AppInterface({
 
   useEffect(() => {
     if (!profileId) return
+
+    const bootstrap = tableroBootstrapRef.current
+    const useServerBundle =
+      bootstrap &&
+      profileId === bootstrap.activeProfileId &&
+      bootstrap.activeProfileId !== null
+
+    if (useServerBundle) {
+      const snapshot = bootstrap
+      tableroBootstrapRef.current = null
+      const unsubStorage = subscribeToChanges()
+      return () => {
+        tableroBootstrapRef.current = snapshot
+        unsubStorage()
+      }
+    }
 
     resetPhraseTracking()
     setSymbols([])
@@ -776,7 +833,7 @@ export default function AppInterface({
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
-    <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
+    <div className="theme-page-shell flex min-h-0 flex-1 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
       <PendingSyncStatus isOnline={isOnline} shareUsageForPredictions={shareUsageForPredictions} />
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
