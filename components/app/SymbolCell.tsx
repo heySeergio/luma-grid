@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import Image from 'next/image'
 import { Folder, Layers } from 'lucide-react'
 import type { Symbol } from '@/lib/supabase/types'
@@ -12,7 +12,7 @@ import {
 } from '@/lib/symbolWordVariants'
 import SymbolCellAutoFitLabel from '@/components/app/SymbolCellAutoFitLabel'
 import PictoEmoji from '@/components/ui/PictoEmoji'
-import { shouldAutoloadArasaacForSymbol, fetchFirstArasaacImage } from '@/lib/arasaac'
+import { useResolvedSymbolGlyph } from '@/lib/hooks/useResolvedSymbolGlyph'
 
 export type SymbolGridDensity = 'sparse' | 'comfortable' | 'dense'
 
@@ -73,7 +73,6 @@ export default function SymbolCell({
   onVariantRadialOpen,
 }: Props) {
   const [isPopping, setIsPopping] = useState(false)
-  const [arasaacImageUrl, setArasaacImageUrl] = useState<string | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
 
@@ -138,28 +137,11 @@ export default function SymbolCell({
   const cellPadding =
     gridDensity === 'sparse' ? 'p-2 sm:p-2.5 md:p-3' : gridDensity === 'comfortable' ? 'p-2 md:p-2' : 'p-1.5'
 
-  useEffect(() => {
-    let cancelled = false
-    setArasaacImageUrl(null)
-    if (
-      !shouldAutoloadArasaacForSymbol({
-        id: symbol.id,
-        gridId: symbol.gridId,
-        imageUrl: symbol.imageUrl,
-      })
-    )
-      return
-    void fetchFirstArasaacImage(symbol.label).then((url) => {
-      if (!cancelled) setArasaacImageUrl(url)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [symbol.id, symbol.gridId, symbol.imageUrl, symbol.label])
+  const { resolvedImageUrl, displayEmoji } = useResolvedSymbolGlyph(symbol)
 
-  const resolvedImageUrl =
-    (typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) || arasaacImageUrl || ''
-  const hasGlyph = Boolean(resolvedImageUrl) || Boolean(typeof symbol.emoji === 'string' && symbol.emoji.trim())
+  const hasGlyph =
+    Boolean(resolvedImageUrl.trim()) ||
+    Boolean(typeof displayEmoji === 'string' && displayEmoji.trim())
 
   return (
     <div
@@ -239,7 +221,7 @@ export default function SymbolCell({
                 </div>
               ) : (
                 <PictoEmoji
-                  emoji={symbol.emoji ?? ''}
+                  emoji={displayEmoji}
                   className={`${CELL_EMOJI[gridDensity]} flex max-h-[min(54cqh,88cqmin)] min-h-0 w-full items-center justify-center overflow-hidden leading-none`}
                   aria-hidden
                 />

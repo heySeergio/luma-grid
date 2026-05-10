@@ -194,7 +194,7 @@ function Audience() {
   return (
     <AnimatedSection
       id="para-quien"
-      className="relative z-10 scroll-mt-28 border-b border-black/5 px-4 py-14 sm:px-6 sm:py-20 lg:px-8"
+      className="relative z-10 hidden scroll-mt-28 border-b border-black/5 px-4 py-14 sm:px-6 sm:py-20 md:block lg:px-8"
       enableLoop={false}
     >
       <div className="mx-auto max-w-6xl">

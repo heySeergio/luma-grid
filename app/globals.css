@@ -259,13 +259,39 @@ body.font-dyslexia-enabled .dyslexia-comfort-btn {
   line-height: 1.35;
 }
 
-/* Barras de desplazamiento invisibles (rueda, teclado y gestos siguen funcionando). */
+/* Barras de desplazamiento invisibles por defecto (rueda, teclado y gestos siguen funcionando). */
 * {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 *::-webkit-scrollbar {
   display: none;
+}
+
+/**
+ * Vista previa del tablero en /admin: el scroll horizontal del grid debe verse.
+ * La regla `*` anterior oculta también estos contenedores; se restaura solo en este subárbol.
+ */
+.luma-visible-scrollbars,
+.luma-visible-scrollbars * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-muted-foreground) 55%, transparent) transparent;
+  -ms-overflow-style: auto;
+}
+.luma-visible-scrollbars::-webkit-scrollbar,
+.luma-visible-scrollbars *::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+.luma-visible-scrollbars::-webkit-scrollbar-thumb,
+.luma-visible-scrollbars *::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--app-muted-foreground) 45%, transparent);
+}
+.luma-visible-scrollbars::-webkit-scrollbar-track,
+.luma-visible-scrollbars *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Glassmorphism */
@@ -587,6 +613,19 @@ body.font-dyslexia-enabled .dyslexia-comfort-btn {
 html:not(.dark):has(.luma-product-shell) body {
   background: var(--luma-marketing-canvas);
   color: var(--luma-marketing-foreground);
+}
+
+/**
+ * Solo /tablero: ventana a alto `dvh` sin scroll de documento (login/admin usan también `.luma-product-shell`).
+ */
+html:has(.luma-tablero-viewport) {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+html:has(.luma-tablero-viewport) body {
+  min-height: 100%;
+  height: 100%;
 }
 
 html:not(.dark) .luma-product-shell {

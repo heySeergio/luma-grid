@@ -55,7 +55,9 @@ export function PricingEntrance() {
           }
         >
           Elige el plan que mejor se adapta{" "}
-          <span style={{ color: BRAND_ORANGE }}>a ti.</span>
+          <span className="text-forest underline decoration-forest underline-offset-[0.2em] decoration-2">
+            a ti.
+          </span>
         </motion.span>
       </h2>
       <div className="mt-12 grid gap-6 lg:grid-cols-3">

@@ -4168,7 +4168,7 @@ export default function AdminPageClient() {
                     <div
                       className={`grid w-full max-w-full grid-cols-1 gap-2 ${adminPreviewChromeOuterClass}`}
                     >
-                      <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
+                      <div className="luma-visible-scrollbars min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
                       <DndContext
                         sensors={adminGridSensors}
                         collisionDetection={adminGridCollisionDetection}

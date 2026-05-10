@@ -881,7 +881,7 @@ export const DEFAULT_FOLDER_TILES: PartialSymbol[] = [
   { label: 'Formas y medidas', emoji: '📏', category: 'Carpetas', posType: 'other', positionX: 12, positionY: 6, color: DEFAULT_FOLDER_COLOR, hidden: false },
   { label: 'Números', emoji: '🔢', category: 'Carpetas', posType: 'other', positionX: 7, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
   { label: 'Aficiones', emoji: '🎯', category: 'Carpetas', posType: 'other', positionX: 9, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
-  { label: 'Frases hechas', emoji: '🗨️', category: 'Carpetas', posType: 'other', positionX: 11, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Frases hechas', category: 'Carpetas', posType: 'other', positionX: 11, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
 ]
 
 /** Pictos de carpeta retirados de la plantilla; se ignoran al componer el grid y se borran al cargar el perfil demo. */
@@ -2242,19 +2242,20 @@ export function computeMainGrid(
           : activeFolder === 'Frases hechas'
             ? undefined
             : '🧩'
+      const isFrasesHechasFolder = activeFolder === 'Frases hechas'
       return [
         {
           id: `folder-item-${activeFolder}-${i}`,
           gridId: 'demo',
           label,
-          emoji: match?.emoji ?? folderDef?.emoji ?? defaultFolderItemEmoji,
+          emoji: isFrasesHechasFolder ? undefined : match?.emoji ?? folderDef?.emoji ?? defaultFolderItemEmoji,
           category: activeFolder,
           posType,
           positionX: (i % VARIABLE_COL_COUNT) + FIXED_COLUMNS,
           positionY: VARIABLE_ROW_START + Math.floor(i / VARIABLE_COL_COUNT),
           color: DEFAULT_SYMBOL_COLOR,
           hidden: false,
-          imageUrl: match?.imageUrl || folderDef?.imageUrl,
+          imageUrl: isFrasesHechasFolder ? undefined : match?.imageUrl || folderDef?.imageUrl,
           state: 'visible',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
