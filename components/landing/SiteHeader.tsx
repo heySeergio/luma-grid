@@ -6,18 +6,20 @@ import { Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
+import { SHOW_LANDING_PRICING_SECTION } from '@/components/landing/landingFlags'
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
-import { WaitlistModal } from '@/components/landing/WaitlistModal'
+import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 
 const nav = [
   { href: '#inicio', label: 'Inicio' },
   { href: '#funciones', label: 'Funciones' },
-  { href: '#planes', label: 'Planes' },
+  ...(SHOW_LANDING_PRICING_SECTION ? [{ href: '#planes' as const, label: 'Planes' as const }] : []),
   { href: 'instalar', label: 'Instalar' },
   { href: 'sobre-nosotros', label: 'Sobre nosotros' },
 ] as const
 
-const navBeforeSeparator = 3
+/** Separador antes de «Instalar» (índice del primer enlace tras Inicio/Funciones[/Planes]). */
+const navBeforeSeparator = SHOW_LANDING_PRICING_SECTION ? 3 : 2
 
 function navHref(href: string) {
   return href.startsWith('#') ? `/${href}` : `/${href}`
@@ -28,14 +30,8 @@ type SiteHeaderProps = {
 }
 
 export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
-  const [waitlistOpen, setWaitlistOpen] = useState(false)
-  const [waitlistKey, setWaitlistKey] = useState(0)
+  const { openWaitlist, waitlistOpen } = useWaitlistModal()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-
-  const openWaitlist = () => {
-    setWaitlistKey(k => k + 1)
-    setWaitlistOpen(true)
-  }
 
   const closeMobileNav = () => setMobileNavOpen(false)
 
@@ -59,7 +55,7 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
           <div className="flex items-center justify-between gap-3 sm:contents">
             <Link
               href="/#inicio"
-              className="flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-neutral-950 sm:shrink-0 sm:text-lg"
+              className="flex min-w-0 items-center gap-2.5 font-bricolage-heading text-base font-extrabold tracking-tight text-neutral-950 sm:shrink-0 sm:text-lg"
             >
               <Image
                 src="/logo-luma-grid.png"
@@ -186,9 +182,6 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
           </>
         ) : null}
       </div>
-      {comingSoon ? (
-        <WaitlistModal key={waitlistKey} open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />
-      ) : null}
     </AnimatedHeader>
   )
 }

@@ -15,13 +15,19 @@ import { createPortal } from "react-dom";
 type FeedbackModalProps = {
   open: boolean;
   onClose: () => void;
+  /** Si se define, al elegir «Notificarme» se usa este correo (solo lectura), p. ej. sesión admin. */
+  lockedNotifyEmail?: string | null;
 };
 
 type FeedbackMode = "anonymous" | "notify";
 
 const noopSubscribe = () => () => {};
 
-export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
+export function FeedbackModal({
+  open,
+  onClose,
+  lockedNotifyEmail,
+}: FeedbackModalProps) {
   const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const reduceMotion = useReducedMotion();
   const titleId = useId();
@@ -36,11 +42,23 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
   );
   const [errorMessage, setErrorMessage] = useState("");
 
+  const lockedEmail = lockedNotifyEmail?.trim() ?? "";
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setMode(null);
+      setMessage("");
+      setEmail("");
+      setStatus("idle");
+      setErrorMessage("");
+      return;
+    }
+    if (lockedEmail) {
+      setEmail(lockedEmail);
+    }
     const t = requestAnimationFrame(() => firstRadioRef.current?.focus());
     return () => cancelAnimationFrame(t);
-  }, [open]);
+  }, [open, lockedEmail]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,16 +88,23 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
       return;
     }
 
+    const anonymous = mode === "anonymous";
+    const notifyEmail = lockedEmail || email.trim();
+    if (!anonymous && !notifyEmail) {
+      setStatus("error");
+      setErrorMessage("Falta un correo para poder notificarte.");
+      return;
+    }
+
     setStatus("loading");
     try {
-      const anonymous = mode === "anonymous";
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           anonymous,
           message: message.trim(),
-          email: anonymous ? undefined : email.trim(),
+          email: anonymous ? undefined : notifyEmail!,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -107,14 +132,14 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
     : { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const };
 
   const successAnonymous = mode === "anonymous";
-  const trimmedEmail = email.trim();
+  const trimmedEmail = (lockedEmail || email).trim();
 
   return createPortal(
     <AnimatePresence>
       {open ? (
         <div
           key="feedback-modal"
-          className="luma-marketing-portal tk-bricolage-grotesque-36 fixed inset-0 z-[200] flex items-end justify-center p-4 font-bricolage sm:items-center sm:p-6"
+          className="luma-marketing-portal tk-bricolage-grotesque-extralig fixed inset-0 z-[200] flex items-end justify-center p-4 font-bricolage sm:items-center sm:p-6"
         >
           <motion.button
             type="button"
@@ -257,7 +282,9 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                           Notificarme
                         </span>
                         <span className="mt-0.5 block text-xs font-normal leading-snug text-neutral-600">
-                          Te avisamos cuando haya mejoras; necesitamos tu correo.
+                          {lockedEmail
+                            ? "Te avisamos cuando haya mejoras; usaremos el correo de tu cuenta."
+                            : "Te avisamos cuando haya mejoras; necesitamos tu correo."}
                         </span>
                       </span>
                     </label>
@@ -285,23 +312,40 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
 
                 {mode === "notify" ? (
                   <div className="space-y-2">
-                    <label
-                      htmlFor="feedback-email"
-                      className="block text-sm font-bold text-neutral-950"
-                    >
-                      Correo electrónico
-                    </label>
-                    <input
-                      id="feedback-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm font-medium text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#3A7CEC] focus:ring-4 focus:ring-[#3A7CEC]/18"
-                      placeholder="tu@correo.com"
-                    />
+                    {lockedEmail ? (
+                      <>
+                        <p className="text-sm font-bold text-neutral-950">
+                          Correo de tu cuenta
+                        </p>
+                        <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3.5 text-sm font-semibold text-neutral-800">
+                          {lockedEmail}
+                        </p>
+                        <p className="text-xs font-normal leading-snug text-neutral-600">
+                          Este es el correo registrado en tu cuenta; lo enviaremos con tu
+                          mensaje para poder responderte.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <label
+                          htmlFor="feedback-email"
+                          className="block text-sm font-bold text-neutral-950"
+                        >
+                          Correo electrónico
+                        </label>
+                        <input
+                          id="feedback-email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          required
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm font-medium text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#3A7CEC] focus:ring-4 focus:ring-[#3A7CEC]/18"
+                          placeholder="tu@correo.com"
+                        />
+                      </>
+                    )}
                   </div>
                 ) : null}
 

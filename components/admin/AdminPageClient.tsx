@@ -2,12 +2,11 @@
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useClientReady, useIsClient } from '@/lib/ui/useClientReady'
-import { BookOpen, Check, Columns2, Download, Eye, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
+import { BookOpen, Check, Columns2, Download, Eye, FlaskConical, Folder, Keyboard, LayoutGrid, Layers, List, Loader2, LockKeyhole, LogOut, Mail, Menu, Mic, Minus, Monitor, Moon, Pencil, Pin, Play, Plus, RotateCcw, Rows, Settings, ShieldAlert, Square, Sun, Trash2, Volume2, X, FolderOpen, ArrowLeft, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
 import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
-import { getSubscriptionGateState } from '@/app/actions/plan'
 import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
@@ -73,12 +72,10 @@ import {
 } from '@dnd-kit/core'
 import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import Link from 'next/link'
-import AdminFreePlanUpsellModal from '@/components/plan/AdminFreePlanUpsellModal'
-import PlanPickerModal from '@/components/plan/PlanPickerModal'
-import VoicePlanRequiredModal from '@/components/plan/VoicePlanRequiredModal'
 import PictoEmoji from '@/components/ui/PictoEmoji'
 import AdminArasaacCellIcon from '@/components/admin/AdminArasaacCellIcon'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
+import { FeedbackModal } from '@/components/sobre-nosotros/FeedbackModal'
 import BoardUsageEvaluation from '@/components/admin/BoardUsageEvaluation'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
 import { VoiceCloneLiveWaveform, VoiceCloneSamplePreview } from '@/components/admin/VoiceCloneAudioStrip'
@@ -122,29 +119,6 @@ import {
 
 const VOICE_CLONE_DISCLAIMER_STORAGE_KEY = 'luma_voice_clone_disclaimer_v1'
 const MAX_VOICE_CLONE_BYTES = 25 * 1024 * 1024
-/** Última vez que se mostró el upsell de plan Libre (ms); no volver a mostrar hasta 24 h. */
-const ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY = 'luma_admin_free_plan_upsell_last_ms'
-const ADMIN_FREE_PLAN_UPSELL_COOLDOWN_MS = 24 * 60 * 60 * 1000
-
-function readAdminFreePlanUpsellLastMs(): number | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY)
-    if (!raw) return null
-    const n = Number(raw)
-    return Number.isFinite(n) ? n : null
-  } catch {
-    return null
-  }
-}
-
-function writeAdminFreePlanUpsellLastMs(ts: number) {
-  try {
-    localStorage.setItem(ADMIN_FREE_PLAN_UPSELL_LAST_MS_KEY, String(ts))
-  } catch {
-    /* privado / storage lleno */
-  }
-}
 
 const ADMIN_GRID_DIM_MIN = 1
 const ADMIN_GRID_DIM_MAX = 20
@@ -160,19 +134,6 @@ const COVERAGE_REVIEW_REASON_LABEL = {
 
 /** No auto-ocultar: si la operación tarda >7s el usuario seguiría viendo el aviso. */
 const ADMIN_STATUS_SKIP_AUTO_DISMISS = new Set(['Cargando...'])
-
-function subscriptionPlanLabel(plan: SubscriptionPlan): string {
-  switch (plan) {
-    case 'free':
-      return 'Libre'
-    case 'voice':
-      return 'Voz'
-    case 'identity':
-      return 'Identidad'
-    default:
-      return 'Libre'
-  }
-}
 
 type AdminProfile = {
   id: string
@@ -601,6 +562,8 @@ export default function AdminPageClient() {
     showFrequentPhrasesSection?: boolean
     showPhraseCompletionSection?: boolean
     showGridCellPredictions?: boolean
+    keyboardPictoAutocomplete?: boolean
+    keyboardArasaacPictograms?: boolean
     defaultTableroTab?: DefaultTableroTab
     shareUsageForPredictions?: boolean
     hasLocalPassword?: boolean
@@ -660,6 +623,10 @@ export default function AdminPageClient() {
   const [accountShowPhraseCompletionSection, setAccountShowPhraseCompletionSection] = useState(true)
   /** Predicciones visuales en celdas del grid en /tablero. */
   const [accountShowGridCellPredictions, setAccountShowGridCellPredictions] = useState(true)
+  /** Autocompletar pictos al escribir con el teclado en /tablero. */
+  const [accountKeyboardPictoAutocomplete, setAccountKeyboardPictoAutocomplete] = useState(true)
+  /** Pictogramas ARASAAC para cada palabra escrita con teclado en /tablero. */
+  const [accountKeyboardArasaacPictograms, setAccountKeyboardArasaacPictograms] = useState(true)
   /** Vista inicial al abrir /tablero: grid o teclado. */
   const [accountDefaultTableroTab, setAccountDefaultTableroTab] = useState<DefaultTableroTab>('grid')
   /** Permitir guardar uso para predicciones (privacidad). */
@@ -708,16 +675,9 @@ export default function AdminPageClient() {
   const [voiceTtsMode, setVoiceTtsMode] = useState<TtsMode>('browser')
   const [voicePresetElevenId, setVoicePresetElevenId] = useState<string>('')
   const [voiceCharsUsed, setVoiceCharsUsed] = useState(0)
-  const [voiceMonthlyLimit, setVoiceMonthlyLimit] = useState(10_000)
-  const [voicePlan, setVoicePlan] = useState<SubscriptionPlan>('free')
-  const [voiceSubscriptionActive, setVoiceSubscriptionActive] = useState(false)
-  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null)
-  const [showPlanPickerModal, setShowPlanPickerModal] = useState(false)
-  const [showFreePlanUpsell, setShowFreePlanUpsell] = useState(false)
-  const [showVoicePlanRequiredModal, setShowVoicePlanRequiredModal] = useState(false)
   const [voiceCloneDisclaimerOpen, setVoiceCloneDisclaimerOpen] = useState(false)
-  const [subscriptionPortalBusy, setSubscriptionPortalBusy] = useState(false)
-  const [complimentaryUnlimited, setComplimentaryUnlimited] = useState(false)
+  const [adminFeedbackOpen, setAdminFeedbackOpen] = useState(false)
+  const [adminFeedbackKey, setAdminFeedbackKey] = useState(0)
   const [voiceCloneBusy, setVoiceCloneBusy] = useState(false)
   const [cloneVoiceName, setCloneVoiceName] = useState('Mi voz AAC')
   const [cloneRecording, setCloneRecording] = useState(false)
@@ -733,19 +693,11 @@ export default function AdminPageClient() {
   const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null)
   const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  /** Nivel de producto para voz (sin UI de planes). Fijo a identidad para evitar `ReferenceError` por caché/HMR antiguo. */
+  const voicePlan: SubscriptionPlan = 'identity'
   const previewAudioContextRef = useRef<AudioContext | null>(null)
   const previewBlobUrlRef = useRef<string | null>(null)
-
-  const canUsePresetVoices = voiceSubscriptionActive && (voicePlan === 'voice' || voicePlan === 'identity')
-  const canUseCustomVoice = voiceSubscriptionActive && voicePlan === 'identity'
-
-  const voiceTtsQuotaExceeded = useMemo(
-    () =>
-      voiceSubscriptionActive &&
-      voiceMonthlyLimit > 0 &&
-      voiceCharsUsed > voiceMonthlyLimit,
-    [voiceSubscriptionActive, voiceMonthlyLimit, voiceCharsUsed],
-  )
 
   const selectedProfileIdRef = useRef(selectedProfileId)
   selectedProfileIdRef.current = selectedProfileId
@@ -755,11 +707,10 @@ export default function AdminPageClient() {
   const loadData = useCallback(async () => {
     setLoadingData(true)
     try {
-      const [fetchedProfiles, fetchedAccountSettings, voiceSettings, gateState] = await Promise.all([
+      const [fetchedProfiles, fetchedAccountSettings, voiceSettings] = await Promise.all([
         getProfiles(),
         getAccountSettings(),
         getVoiceSettings(),
-        getSubscriptionGateState(),
       ])
       const normalizedAccountSettings = fetchedAccountSettings
         ? {
@@ -768,10 +719,6 @@ export default function AdminPageClient() {
             hasLocalPassword: Boolean(fetchedAccountSettings.hasLocalPassword),
           }
         : null
-      if (gateState.signedIn) {
-        setStripeCustomerId(gateState.stripeCustomerId)
-      }
-
       setProfiles(fetchedProfiles)
       setAccountSettings(normalizedAccountSettings)
       setAccountName(normalizedAccountSettings?.name ?? '')
@@ -791,6 +738,16 @@ export default function AdminPageClient() {
       setAccountShowGridCellPredictions(
         typeof normalizedAccountSettings?.showGridCellPredictions === 'boolean'
           ? normalizedAccountSettings.showGridCellPredictions
+          : true,
+      )
+      setAccountKeyboardPictoAutocomplete(
+        typeof normalizedAccountSettings?.keyboardPictoAutocomplete === 'boolean'
+          ? normalizedAccountSettings.keyboardPictoAutocomplete
+          : true,
+      )
+      setAccountKeyboardArasaacPictograms(
+        typeof normalizedAccountSettings?.keyboardArasaacPictograms === 'boolean'
+          ? normalizedAccountSettings.keyboardArasaacPictograms
           : true,
       )
       setAccountDefaultTableroTab(parseDefaultTableroTab(normalizedAccountSettings?.defaultTableroTab))
@@ -829,10 +786,6 @@ export default function AdminPageClient() {
           setVoicePresetElevenId(defaultPreset)
         }
         setVoiceCharsUsed(voiceSettings.charactersUsed)
-        setVoiceMonthlyLimit(voiceSettings.monthlyCharLimit)
-        setVoicePlan(voiceSettings.plan)
-        setVoiceSubscriptionActive(voiceSettings.hasActivePaidSubscription)
-        setComplimentaryUnlimited(voiceSettings.complimentaryUnlimited)
       }
     } catch (error) {
       console.error(error)
@@ -869,11 +822,6 @@ export default function AdminPageClient() {
   }, [])
 
   const openCustomVoiceMode = useCallback(() => {
-    if (!voiceSubscriptionActive) return
-    if (voicePlan !== 'identity') {
-      setVoiceTtsMode('custom')
-      return
-    }
     if (typeof window !== 'undefined') {
       try {
         if (window.localStorage.getItem(VOICE_CLONE_DISCLAIMER_STORAGE_KEY) === '1') {
@@ -885,7 +833,7 @@ export default function AdminPageClient() {
       }
     }
     setVoiceCloneDisclaimerOpen(true)
-  }, [voicePlan, voiceSubscriptionActive])
+  }, [])
 
   const acceptVoiceCloneDisclaimer = useCallback(() => {
     try {
@@ -902,33 +850,6 @@ export default function AdminPageClient() {
   const cancelVoiceCloneDisclaimer = useCallback(() => {
     setVoiceCloneDisclaimerOpen(false)
   }, [])
-
-  const openSubscriptionPortal = useCallback(async () => {
-    setSubscriptionPortalBusy(true)
-    try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'include' })
-      const data = (await res.json()) as { url?: string; error?: string }
-      if (!res.ok) {
-        if (data.error === 'no_customer') {
-          setShowPlanPickerModal(true)
-        }
-        return
-      }
-      if (data.url) {
-        window.location.href = data.url
-      }
-    } finally {
-      setSubscriptionPortalBusy(false)
-    }
-  }, [])
-
-  const handleSubscriptionClick = useCallback(() => {
-    if (stripeCustomerId) {
-      void openSubscriptionPortal()
-    } else {
-      setShowPlanPickerModal(true)
-    }
-  }, [stripeCustomerId, openSubscriptionPortal])
 
   const stopVoicePreviewAndCloneCleanup = useCallback(() => {
     abortCloneRecording()
@@ -1039,7 +960,6 @@ export default function AdminPageClient() {
 
   const submitVoiceClone = useCallback(
     async (file: File) => {
-      if (voicePlan !== 'identity' || !voiceSubscriptionActive) return
       setVoiceCloneBusy(true)
       setStatus('')
       try {
@@ -1059,14 +979,14 @@ export default function AdminPageClient() {
         setVoiceCloneBusy(false)
       }
     },
-    [cloneVoiceName, voicePlan, voiceSubscriptionActive, loadData],
+    [cloneVoiceName, loadData],
   )
 
   const handleVoiceCloneUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       e.target.value = ''
-      if (!file || voicePlan !== 'identity' || !voiceSubscriptionActive) return
+      if (!file) return
       if (file.size > MAX_VOICE_CLONE_BYTES) {
         setStatus('❌ Archivo demasiado grande (máx. 25 MB).')
         return
@@ -1074,7 +994,7 @@ export default function AdminPageClient() {
       setStatus('')
       setClonePreviewFile(file)
     },
-    [voicePlan, voiceSubscriptionActive],
+    [],
   )
 
   const clearClonePreview = useCallback(() => {
@@ -1082,7 +1002,6 @@ export default function AdminPageClient() {
   }, [])
 
   const startCloneRecording = useCallback(async () => {
-    if (voicePlan !== 'identity' || !voiceSubscriptionActive) return
     if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setStatus('❌ Tu navegador no permite grabar audio. Usa «Subir archivo».')
       return
@@ -1108,7 +1027,7 @@ export default function AdminPageClient() {
     } catch {
       setStatus('❌ No se pudo usar el micrófono. Permite el permiso o usa «Subir archivo».')
     }
-  }, [voicePlan, voiceSubscriptionActive])
+  }, [])
 
   const stopCloneRecordingAndUpload = useCallback(async () => {
     const mr = cloneMediaRecorderRef.current
@@ -1171,31 +1090,6 @@ export default function AdminPageClient() {
     const id = window.setTimeout(() => setStatus(''), 7000)
     return () => window.clearTimeout(id)
   }, [status])
-
-  const dismissFreePlanUpsell = useCallback(() => {
-    setShowFreePlanUpsell(false)
-  }, [])
-
-  useEffect(() => {
-    if (loadingData) return
-    if (voicePlan !== 'free') {
-      setShowFreePlanUpsell(false)
-      return
-    }
-    if (typeof window === 'undefined') return
-    const last = readAdminFreePlanUpsellLastMs()
-    if (last !== null && Date.now() - last < ADMIN_FREE_PLAN_UPSELL_COOLDOWN_MS) {
-      setShowFreePlanUpsell(false)
-      return
-    }
-    setShowFreePlanUpsell(true)
-  }, [loadingData, voicePlan])
-
-  useEffect(() => {
-    if (!showFreePlanUpsell) return
-    if (typeof window === 'undefined') return
-    writeAdminFreePlanUpsellLastMs(Date.now())
-  }, [showFreePlanUpsell])
 
   useEffect(() => {
     if (!cloneRecording) return
@@ -1379,11 +1273,6 @@ export default function AdminPageClient() {
       return
     }
 
-    if (voiceTtsMode === 'custom' && voicePlan !== 'identity') {
-      setStatus('❌ La voz clonada requiere plan Pro. Elige otro modo de voz o actualiza tu plan.')
-      return
-    }
-
     setSavingAccountSettings(true)
     setStatus('')
     try {
@@ -1398,6 +1287,8 @@ export default function AdminPageClient() {
         showFrequentPhrasesSection: accountShowFrequentPhrasesSection,
         showPhraseCompletionSection: accountShowPhraseCompletionSection,
         showGridCellPredictions: accountShowGridCellPredictions,
+        keyboardPictoAutocomplete: accountKeyboardPictoAutocomplete,
+        keyboardArasaacPictograms: accountKeyboardArasaacPictograms,
         defaultTableroTab: accountDefaultTableroTab,
         shareUsageForPredictions: accountShareUsageForPredictions,
         currentPassword: accountCurrentPassword,
@@ -1432,6 +1323,8 @@ export default function AdminPageClient() {
       setAccountShowFrequentPhrasesSection(Boolean(updatedAccount.showFrequentPhrasesSection ?? true))
       setAccountShowPhraseCompletionSection(Boolean(updatedAccount.showPhraseCompletionSection ?? true))
       setAccountShowGridCellPredictions(Boolean(updatedAccount.showGridCellPredictions ?? true))
+      setAccountKeyboardPictoAutocomplete(Boolean(updatedAccount.keyboardPictoAutocomplete ?? true))
+      setAccountKeyboardArasaacPictograms(Boolean(updatedAccount.keyboardArasaacPictograms ?? true))
       setAccountDefaultTableroTab(parseDefaultTableroTab(updatedAccount.defaultTableroTab))
       setAccountShareUsageForPredictions(Boolean(updatedAccount.shareUsageForPredictions ?? true))
       resetPasswordFields()
@@ -2848,10 +2741,10 @@ export default function AdminPageClient() {
         <div className="flex min-h-min flex-col lg:flex-row lg:items-stretch">
             {/* Sidebar */}
             <aside
-              className="w-full min-w-0 shrink-0 border-b border-slate-200/80 bg-[var(--app-bg)] lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
+              className="flex w-full min-w-0 shrink-0 flex-col border-b border-slate-200/80 bg-[var(--app-bg)] lg:min-h-0 lg:w-[min(19rem,100vw)] lg:border-b-0 lg:border-r dark:border-slate-700/80"
               aria-label="Panel lateral de administración"
             >
-            <div className="flex w-full min-w-0 flex-col gap-4 py-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 py-4 px-4 sm:px-6 lg:px-8">
               <div className="app-panel w-full min-w-0 rounded-2xl p-5">
                 <div className="mb-4 flex w-full min-w-0 items-center justify-between gap-3">
                   <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -3127,6 +3020,38 @@ export default function AdminPageClient() {
                   </button>
                 </div>
               </div>
+
+              <div className="app-panel mt-auto w-full min-w-0 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-5 dark:border-amber-900/50 dark:bg-amber-950/35">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-200/90 text-amber-950 dark:bg-amber-500/25 dark:text-amber-100"
+                    aria-hidden
+                  >
+                    <FlaskConical className="size-[1.15rem]" strokeWidth={2.25} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900/90 dark:text-amber-200/95">
+                      Versión experimental
+                    </h2>
+                    <p className="mt-2 text-sm font-medium leading-relaxed text-amber-950/90 dark:text-amber-100/90">
+                      Luma Grid está en fase beta: puede haber errores o cambios. Siempre puedes
+                      enviarnos sugerencias o avisarnos si algo falla.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminFeedbackKey((k) => k + 1)
+                        setAdminFeedbackOpen(true)
+                      }}
+                      className="mt-4 w-full rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-bold text-amber-50 shadow-sm transition hover:brightness-110 dark:bg-amber-400 dark:text-amber-950 dark:hover:brightness-95"
+                      aria-haspopup="dialog"
+                      aria-expanded={adminFeedbackOpen}
+                    >
+                      Enviar sugerencia
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
             </aside>
 
@@ -3180,7 +3105,7 @@ export default function AdminPageClient() {
                     <div>
                       <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Ajustes de cuenta y preferencias</h2>
                       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        Gestiona tus datos, el plan y las preferencias de la app.
+                        Gestiona tus datos y las preferencias de la app.
                       </p>
                     </div>
                     <button
@@ -3198,68 +3123,6 @@ export default function AdminPageClient() {
                     className="flex flex-col"
                   >
                     <div className="grid gap-6 md:grid-cols-2">
-                      <div className="md:col-span-2 flex flex-col gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suscripción</p>
-                          <p className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-50">
-                            Plan actual:{' '}
-                            <span className="text-accent-blue dark:text-sky-400">
-                              Plan {subscriptionPlanLabel(voicePlan)}
-                            </span>
-                            {voiceSubscriptionActive ? (
-                              <span className="ml-2 inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                                Activo
-                              </span>
-                            ) : voicePlan !== 'free' ? (
-                              <span className="ml-2 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-                                Sin pago activo
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {complimentaryUnlimited
-                              ? 'Tienes acceso completo a Identidad por cortesía. No necesitas gestionar facturación aquí.'
-                              : voicePlan === 'free'
-                                ? (
-                                  <>
-                                    {accountEmail ? (
-                                      <span className="block font-medium text-slate-700 dark:text-slate-300">
-                                        Correo en plan Libre:{' '}
-                                        <span className="font-mono text-slate-900 dark:text-slate-100">{accountEmail}</span>
-                                      </span>
-                                    ) : (
-                                      <span className="block font-medium text-slate-700 dark:text-slate-300">Tu cuenta está en el plan Libre.</span>
-                                    )}
-                                    <span className="mt-1 block">
-                                      Activa un plan de pago o continúa con el plan Libre. Puedes revisar opciones en /plan.
-                                    </span>
-                                  </>
-                                )
-                                : stripeCustomerId
-                                  ? 'Cambia de plan, método de pago o consulta facturas en el portal de Stripe.'
-                                  : 'Completa el pago o elige un plan desde el selector para activar las prestaciones.'}
-                          </p>
-                        </div>
-                        {complimentaryUnlimited ? (
-                          <p className="shrink-0 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-center text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-                            ¡Disfruta sin límites!
-                          </p>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={subscriptionPortalBusy}
-                            onClick={() => handleSubscriptionClick()}
-                            className="shrink-0 rounded-2xl bg-accent-blue px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-95 disabled:opacity-50"
-                          >
-                            {subscriptionPortalBusy
-                              ? 'Abriendo…'
-                              : voicePlan === 'voice' || voicePlan === 'identity'
-                                ? 'Gestionar suscripción'
-                                : 'Actualizar plan'}
-                          </button>
-                        )}
-                      </div>
-
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
@@ -3477,6 +3340,51 @@ export default function AdminPageClient() {
                         </li>
                         <li className="flex items-center gap-4 py-4">
                           <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Al escribir con el teclado, usar el pictograma del tablero cuando la palabra coincide con un
+                            símbolo (misma palabra o mismo lexema vinculado).
+                          </p>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountKeyboardPictoAutocomplete}
+                            aria-label="Autocompletar pictogramas al escribir con el teclado"
+                            onClick={() => setAccountKeyboardPictoAutocomplete((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountKeyboardPictoAutocomplete ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountKeyboardPictoAutocomplete ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </li>
+                        <li className="flex items-center gap-4 py-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Al escribir con el teclado, mostrar un pictograma ARASAAC para cada palabra (búsqueda en el
+                            repositorio público; se respeta la licencia CC BY-NC-SA de ARASAAC). Si no hay resultado, se
+                            puede usar el picto del tablero si está activa la opción anterior.
+                          </p>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountKeyboardArasaacPictograms}
+                            aria-label="Pictogramas ARASAAC al escribir con el teclado"
+                            onClick={() => setAccountKeyboardArasaacPictograms((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountKeyboardArasaacPictograms ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountKeyboardArasaacPictograms ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </li>
+                        <li className="flex items-center gap-4 py-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
                             Mostrar predicciones en las celdas del grid (resaltado e iluminación de la siguiente palabra probable).
                           </p>
                           <button
@@ -3611,6 +3519,7 @@ export default function AdminPageClient() {
                   </div>
                   <form
                     data-settings-modal="luma"
+                    data-voice-product-tier={voicePlan}
                     onSubmit={handleSaveAccountSettings}
                     className="flex flex-col"
                   >
@@ -3646,36 +3555,12 @@ export default function AdminPageClient() {
                           Voz (texto a voz)
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {!voiceSubscriptionActive ? (
-                            <span className="font-medium text-amber-800 dark:text-amber-200">
-                              Sin suscripción activa: solo se usa la voz del navegador hasta que tengas un plan de pago vigente.
-                            </span>
-                          ) : (
-                            <>
-                              Plan {subscriptionPlanLabel(voicePlan)} · Uso ElevenLabs este mes:{' '}
-                              <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
-                                {voiceCharsUsed.toLocaleString('es-ES')} / {voiceMonthlyLimit.toLocaleString('es-ES')} caracteres
-                              </span>
-                              {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
-                            </>
-                          )}
+                          Uso ElevenLabs este mes:{' '}
+                          <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
+                            {voiceCharsUsed.toLocaleString('es-ES')} caracteres
+                          </span>
+                          {voiceTtsMode === 'browser' ? ' (solo cuenta al usar voces ElevenLabs).' : null}
                         </p>
-
-                        {voiceSubscriptionActive && voiceTtsQuotaExceeded ? (
-                          <div
-                            role="status"
-                            className="rounded-xl border border-amber-300/90 bg-amber-50/95 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/40 dark:text-amber-100"
-                          >
-                            <p className="font-medium">Has superado la referencia mensual de caracteres de voz de tu plan.</p>
-                            <p className="mt-1.5 text-amber-900/90 dark:text-amber-200/95">
-                              Considera ampliar el plan en{' '}
-                              <Link href="/plan" className="font-semibold underline underline-offset-2">
-                                Planes y precios
-                              </Link>
-                              . Si el uso de ElevenLabs queda limitado, se puede pasar a voz del navegador; el contador sigue registrando el consumo.
-                            </p>
-                          </div>
-                        ) : null}
 
                         <div className="grid gap-2 sm:grid-cols-3">
                           <button
@@ -3689,13 +3574,7 @@ export default function AdminPageClient() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!canUsePresetVoices) {
-                                setShowVoicePlanRequiredModal(true)
-                                return
-                              }
-                              setVoiceTtsMode('preset')
-                            }}
+                            onClick={() => setVoiceTtsMode('preset')}
                             className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'preset' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: voiceTtsMode === 'preset' ? 'var(--app-predicted-border)' : undefined }}
                           >
@@ -3704,19 +3583,18 @@ export default function AdminPageClient() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!canUseCustomVoice) {
-                                setShowVoicePlanRequiredModal(true)
-                                return
-                              }
-                              openCustomVoiceMode()
-                            }}
+                            onClick={() => openCustomVoiceMode()}
                             className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${voiceTtsMode === 'custom' ? 'bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/15 dark:text-sky-200' : 'ui-secondary-button text-slate-600 dark:text-slate-300'}`}
                             style={{ borderColor: voiceTtsMode === 'custom' ? 'var(--app-predicted-border)' : undefined }}
                           >
-                            Crear mi voz
+                            <span className="flex flex-wrap items-center gap-2">
+                              Crear mi voz
+                              <span className="rounded-md border border-amber-500/40 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 dark:border-amber-400/35 dark:bg-amber-400/15 dark:text-amber-100">
+                                EXPERIMENTAL
+                              </span>
+                            </span>
                             <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">
-                              {voicePlan === 'identity' ? 'Plan Identidad · clonación' : 'Requiere plan Identidad'}
+                              Clonación con ElevenLabs
                             </span>
                           </button>
                         </div>
@@ -3786,18 +3664,7 @@ export default function AdminPageClient() {
                           </div>
                         ) : null}
 
-                        {voiceTtsMode === 'custom' && voicePlan !== 'identity' ? (
-                          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-                            <p className="font-semibold">Plan Identidad necesario</p>
-                            <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
-                              La clonación de voz con ElevenLabs está incluida en el plan Identidad. Mientras tanto puedes usar «Voces naturales» (plan
-                              Voz o superior) o «Voz del sistema». Si ya tienes Identidad y ves este mensaje, comprueba tu suscripción o contacta con
-                              soporte.
-                            </p>
-                          </div>
-                        ) : null}
-
-                        {voiceTtsMode === 'custom' && voicePlan === 'identity' ? (
+                        {voiceTtsMode === 'custom' ? (
                           <div className="space-y-3">
                             <div className="space-y-1.5">
                               <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Nombre de la voz clonada</label>
@@ -4168,7 +4035,7 @@ export default function AdminPageClient() {
                     <div
                       className={`grid w-full max-w-full grid-cols-1 gap-2 ${adminPreviewChromeOuterClass}`}
                     >
-                      <div className="min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
+                      <div className="luma-visible-scrollbars min-w-0 overflow-x-auto overflow-y-visible rounded-[1.8rem] pb-1 md:col-start-1 md:row-start-1">
                       <DndContext
                         sensors={adminGridSensors}
                         collisionDetection={adminGridCollisionDetection}
@@ -5008,7 +4875,7 @@ export default function AdminPageClient() {
                                 } catch (err) {
                                   console.error(err)
                                   setStatus(
-                                    '❌ No se pudo guardar la carpeta. Revisa la conexión o los límites del plan e inténtalo de nuevo.',
+                                    '❌ No se pudo guardar la carpeta. Revisa la conexión e inténtalo de nuevo.',
                                   )
                                 } finally {
                                   setSavingSymbols(false)
@@ -6054,22 +5921,11 @@ export default function AdminPageClient() {
         )}
       </AnimatePresence>
 
-      {showFreePlanUpsell ? (
-        <AdminFreePlanUpsellModal open={showFreePlanUpsell} onDismiss={dismissFreePlanUpsell} />
-      ) : null}
-
-      {showVoicePlanRequiredModal ? (
-        <VoicePlanRequiredModal open onDismiss={() => setShowVoicePlanRequiredModal(false)} />
-      ) : null}
-
-      <PlanPickerModal
-        open={showPlanPickerModal}
-        dismissable
-        onClose={() => setShowPlanPickerModal(false)}
-        onCompleted={() => {
-          setShowPlanPickerModal(false)
-          void loadData()
-        }}
+      <FeedbackModal
+        key={adminFeedbackKey}
+        open={adminFeedbackOpen}
+        onClose={() => setAdminFeedbackOpen(false)}
+        lockedNotifyEmail={accountEmail.trim() ? accountEmail.trim() : null}
       />
 
       <KeyboardThemeModal

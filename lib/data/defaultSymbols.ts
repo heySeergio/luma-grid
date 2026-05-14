@@ -1,5 +1,6 @@
 import type { WordVariantsConfig } from '@/lib/symbolWordVariants'
 import type { PosType, Symbol } from '@/lib/supabase/types'
+import { BASE_GRID_ARASAAC_IMAGE_BY_LABEL } from '@/lib/data/baseGridArasaacLocal'
 import { BASE_FIXED_LEFT_COLUMN_COUNT } from '@/lib/grid/baseFixedZone'
 import { isFixedZonePosition } from '@/lib/grid/fixedZoneStorage'
 import { effectiveSymbolGridId } from '@/lib/grid/gridCellOverlap'
@@ -881,7 +882,7 @@ export const DEFAULT_FOLDER_TILES: PartialSymbol[] = [
   { label: 'Formas y medidas', emoji: '📏', category: 'Carpetas', posType: 'other', positionX: 12, positionY: 6, color: DEFAULT_FOLDER_COLOR, hidden: false },
   { label: 'Números', emoji: '🔢', category: 'Carpetas', posType: 'other', positionX: 7, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
   { label: 'Aficiones', emoji: '🎯', category: 'Carpetas', posType: 'other', positionX: 9, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
-  { label: 'Frases hechas', emoji: '🗨️', category: 'Carpetas', posType: 'other', positionX: 11, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
+  { label: 'Frases hechas', category: 'Carpetas', posType: 'other', positionX: 11, positionY: 7, color: DEFAULT_FOLDER_COLOR, hidden: false },
 ]
 
 /** Pictos de carpeta retirados de la plantilla; se ignoran al componer el grid y se borran al cargar el perfil demo. */
@@ -2093,8 +2094,9 @@ function isCustomPosition(symbol: Symbol) {
 /** Rellena imagen/emoji de la plantilla DEMO cuando la fila en BD no los tiene (p. ej. Yo / Tú). */
 function mergeDefaultVisualsForLabel(label: string, existing: Symbol) {
   const def = DEFAULT_SYMBOL_BY_LABEL.get(label.toLowerCase())
+  const localArasaac = BASE_GRID_ARASAAC_IMAGE_BY_LABEL[label.toLowerCase()]
   return {
-    imageUrl: existing.imageUrl || def?.imageUrl,
+    imageUrl: existing.imageUrl || def?.imageUrl || localArasaac,
     emoji: existing.emoji ?? def?.emoji,
   }
 }
@@ -2242,19 +2244,20 @@ export function computeMainGrid(
           : activeFolder === 'Frases hechas'
             ? undefined
             : '🧩'
+      const isFrasesHechasFolder = activeFolder === 'Frases hechas'
       return [
         {
           id: `folder-item-${activeFolder}-${i}`,
           gridId: 'demo',
           label,
-          emoji: match?.emoji ?? folderDef?.emoji ?? defaultFolderItemEmoji,
+          emoji: isFrasesHechasFolder ? undefined : match?.emoji ?? folderDef?.emoji ?? defaultFolderItemEmoji,
           category: activeFolder,
           posType,
           positionX: (i % VARIABLE_COL_COUNT) + FIXED_COLUMNS,
           positionY: VARIABLE_ROW_START + Math.floor(i / VARIABLE_COL_COUNT),
           color: DEFAULT_SYMBOL_COLOR,
           hidden: false,
-          imageUrl: match?.imageUrl || folderDef?.imageUrl,
+          imageUrl: isFrasesHechasFolder ? undefined : match?.imageUrl || folderDef?.imageUrl,
           state: 'visible',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

@@ -7,6 +7,6 @@ export const TTS_MONTHLY_CHAR_LIMIT: Record<SubscriptionPlan, number> = {
   identity: 100_000,
 }
 
-export function getMonthlyCharLimit(plan: SubscriptionPlan): number {
-  return TTS_MONTHLY_CHAR_LIMIT[plan] ?? 0
+export function getMonthlyCharLimit(_plan: SubscriptionPlan): number {
+  return Number.MAX_SAFE_INTEGER
 }

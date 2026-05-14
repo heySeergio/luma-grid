@@ -22,6 +22,7 @@ const CARD_DURATION = 0.46;
 /** Naranja CTA marketing (cabecera, hero, acentos) */
 const BRAND_ORANGE = "#FE6B45";
 
+/** Tarifas en la home; visibilidad: `SHOW_LANDING_PRICING_SECTION` en `landingFlags.ts`. */
 export function PricingEntrance() {
   const rootRef = useRef(null);
   const { revealed } = useDelayedSectionReveal(rootRef);
@@ -55,7 +56,9 @@ export function PricingEntrance() {
           }
         >
           Elige el plan que mejor se adapta{" "}
-          <span style={{ color: BRAND_ORANGE }}>a ti.</span>
+          <span className="text-[#35AA63] underline decoration-[#35AA63] underline-offset-[0.2em] decoration-2">
+            a ti.
+          </span>
         </motion.span>
       </h2>
       <div className="mt-12 grid gap-6 lg:grid-cols-3">

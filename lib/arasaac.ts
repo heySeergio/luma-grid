@@ -3,10 +3,20 @@
  * Usadas tanto en el tablero (/tablero) como en el panel de administración (/admin).
  */
 
-export const ARASAAC_BASE_GRID_IDS = new Set(['default', 'default-left', 'template', 'template-left'])
+/** Incluye `demo`: ítems de carpeta del tablero base (`computeMainGrid`) usan ese gridId. */
+export const ARASAAC_BASE_GRID_IDS = new Set([
+  'default',
+  'default-left',
+  'template',
+  'template-left',
+  'demo',
+])
 
 const arasaacFirstImageCache = new Map<string, string | null>()
 const arasaacInFlight = new Map<string, Promise<string | null>>()
+
+/** Categoría de los ítems de la carpeta «Frases hechas»: solo texto, sin emoji ni pictogramas ARASAAC. */
+export const FRASES_HECHAS_CATEGORY = 'Frases hechas'
 
 /** Devuelve true si este símbolo del tablero base debe intentar cargar un pictograma ARASAAC automáticamente. */
 export function shouldAutoloadArasaacForSymbol(symbol: {
@@ -14,7 +24,10 @@ export function shouldAutoloadArasaacForSymbol(symbol: {
   image_url?: string | null
   gridId?: string | null
   id?: string | null
+  category?: string | null
 }): boolean {
+  const cat = typeof symbol.category === 'string' ? symbol.category.trim() : ''
+  if (cat === FRASES_HECHAS_CATEGORY) return false
   const imageUrl = symbol.imageUrl ?? symbol.image_url
   if (typeof imageUrl === 'string' && imageUrl.trim().length > 0) return false
   const gridId = typeof symbol.gridId === 'string' ? symbol.gridId : ''

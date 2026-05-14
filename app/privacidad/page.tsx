@@ -6,7 +6,7 @@ import { isLandingComingSoon } from '@/lib/site/comingSoon'
 export const metadata: Metadata = {
   title: 'Política de privacidad',
   description:
-    'Política de privacidad de Luma Grid: tratamiento de datos de cuenta, tableros y comunicador AAC, aprendizaje de predicción opcional, voz y pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo.',
+    'Política de privacidad de Luma Grid: tratamiento de datos de cuenta, tableros y comunicador AAC, aprendizaje de predicción opcional, voz, proveedores técnicos y almacenamiento local en el dispositivo.',
   alternates: { canonical: '/privacidad' },
   robots: { index: true, follow: true },
 }
@@ -39,17 +39,12 @@ const sections = [
           pueden eliminar colas locales pendientes en el dispositivo.
         </p>
         <p>
-          <strong className="text-[var(--app-foreground)]">Voz y facturación de síntesis:</strong> texto enviado a servicios de síntesis de voz de
-          terceros cuando elijas voces gestionadas por proveedor externo; contadores de caracteres u otros límites asociados al plan y periodo de
-          facturación; en el caso de clonación de voz, muestras de audio que envíes para crear una voz personalizada.
+          <strong className="text-[var(--app-foreground)]">Voz:</strong> texto enviado a servicios de síntesis de voz de terceros cuando elijas voces
+          gestionadas por proveedor externo; en el caso de clonación de voz, muestras de audio que envíes para crear una voz personalizada.
         </p>
         <p>
           <strong className="text-[var(--app-foreground)]">Caché de audio en servidor:</strong> para determinadas voces, la aplicación puede almacenar de
           forma acotada frases ya sintetizadas para evitar regenerar el mismo audio (texto acotado a la petición de voz).
-        </p>
-        <p>
-          <strong className="text-[var(--app-foreground)]">Planes y pagos:</strong> tipo de plan, estado de la suscripción, identificadores de cliente o
-          suscripción ante el proveedor de pagos cuando existan, y los datos necesarios para facturación u obligaciones fiscales y contables.
         </p>
         <p>
           <strong className="text-[var(--app-foreground)]">Panel de administración y léxico:</strong> datos que visualices o generes al revisar
@@ -74,17 +69,13 @@ const sections = [
     content: (
       <>
         <p>
-          Los datos se utilizan para permitir el acceso a la aplicación, gestionar cuentas y suscripciones, guardar configuraciones, personalizar
-          tableros, aplicar los límites del plan, ofrecer predicción y comunicación aumentativa, aplicar el sistema léxico (incluida conjugación y
+          Los datos se utilizan para permitir el acceso a la aplicación, gestionar la cuenta, guardar configuraciones, personalizar
+          tableros, ofrecer predicción y comunicación aumentativa, aplicar el sistema léxico (incluida conjugación y
           detección cuando corresponda), reproducir frases con voz del sistema o mediante proveedores de síntesis, y mantener la seguridad del servicio.
         </p>
         <p>
           Los datos opcionales de uso del tablero para predicción se tratan para mejorar las sugerencias contextuales en tu cuenta, no para publicidad de
           terceros.
-        </p>
-        <p>
-          Los datos de pago se tratan para formalizar la relación contractual, procesar cobros y permitir la gestión de la suscripción (incluido acceso
-          al portal del proveedor de pagos cuando esté disponible).
         </p>
         <p>
           También pueden emplearse para prevenir abusos y fraudes, proteger la seguridad del servicio y mantener la continuidad operativa de la plataforma.
@@ -104,10 +95,6 @@ const sections = [
           <li>
             <strong className="text-[var(--app-foreground)]">Proveedor de alojamiento y base de datos</strong> (p. ej. infraestructura en la nube y{' '}
             <strong className="text-[var(--app-foreground)]">PostgreSQL</strong>) para almacenar cuentas, tableros y datos de aplicación.
-          </li>
-          <li>
-            <strong className="text-[var(--app-foreground)]">Stripe</strong> (u otro procesador de pagos) para cobros, suscripciones y gestión del cliente
-            de pago.
           </li>
           <li>
             <strong className="text-[var(--app-foreground)]">ElevenLabs</strong> u otros proveedores de voz para síntesis y, si lo utilizas, creación de
@@ -137,8 +124,8 @@ const sections = [
     content: (
       <>
         <p>
-          Se procurará conservar únicamente la información necesaria para prestar el servicio, gestionar la relación contractual y el plan contratado,
-          cumplir obligaciones legales y atender requisitos técnicos.
+          Se procurará conservar únicamente la información necesaria para prestar el servicio, gestionar la relación con el usuario respecto del
+          servicio, cumplir obligaciones legales y atender requisitos técnicos.
         </p>
         <p>
           El diseño de Luma Grid prioriza la minimización de datos y el almacenamiento vinculado a la utilidad para la persona usuaria. Los eventos de
@@ -206,7 +193,7 @@ export default function PrivacyPage() {
         variant="marketing"
         eyebrow="Privacidad"
         title="Política de privacidad"
-        intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz y límites de plan, pagos con Stripe, proveedores técnicos y almacenamiento local en el dispositivo."
+        intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz, proveedores técnicos y almacenamiento local en el dispositivo."
         sections={sections}
       />
     </MarketingSiteShell>

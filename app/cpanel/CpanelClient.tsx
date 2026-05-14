@@ -270,7 +270,7 @@ export function CpanelClient() {
               id="cpanel-feedback-heading"
               className="mt-2 text-2xl font-extrabold tracking-tight text-forest sm:text-3xl"
             >
-              Feedback <span className="text-accent-blue">web</span>
+              Feed<span className="text-accent-blue">backs</span>
             </h2>
           </div>
           <button
@@ -341,7 +341,7 @@ export function CpanelClient() {
               id="cpanel-waitlist-heading"
               className="mt-2 text-2xl font-extrabold tracking-tight text-forest sm:text-3xl"
             >
-              Waitlist <span className="text-[#FE6B45]">CTA</span>
+              Lista de <span className="text-[#FE6B45]">espera</span>
             </h2>
           </div>
           <button

@@ -17,7 +17,7 @@ export default function Error({
     }, [error])
 
     return (
-        <main className="luma-marketing-site tk-bricolage-grotesque-36 relative flex min-h-screen items-center overflow-hidden bg-canvas px-4 py-12 font-bricolage text-forest antialiased sm:px-6 lg:px-8">
+        <main className="luma-marketing-site tk-bricolage-grotesque-extralig relative flex min-h-screen items-center overflow-hidden bg-canvas px-4 py-12 font-bricolage text-forest antialiased sm:px-6 lg:px-8">
             <div className="pointer-events-none absolute -left-20 bottom-10 h-56 w-56 rounded-full bg-[#FFB3C8]/60 blur-3xl" aria-hidden />
             <div className="pointer-events-none absolute right-[-4rem] top-[-4rem] h-64 w-64 rounded-full bg-cta-yellow/70 blur-3xl" aria-hidden />
             <div className="pointer-events-none absolute left-1/2 top-1/4 h-56 w-56 -translate-x-1/2 rounded-full bg-accent-blue/15 blur-3xl" aria-hidden />

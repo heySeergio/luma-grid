@@ -15,6 +15,8 @@ import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymb
 import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
 import { detectQuestionType } from '@/lib/lexicon/questions'
 import { getAccountSettings } from '@/app/actions/account'
+import { pickBoardGlyphForKeyboardToken } from '@/lib/tablero/keyboardPictoAutocomplete'
+import { fetchFirstArasaacImage } from '@/lib/arasaac'
 import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
@@ -34,12 +36,15 @@ import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
 import type { KeyboardThemeColors } from '@/lib/keyboard/theme'
 import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
+import type { TableroInitialPayload } from '@/lib/tablero/loadTableroInitial'
 
 type TabMode = 'grid' | 'keyboard'
 
 type AppInterfaceProps = {
   /** Preferencia de cuenta para la primera pintura (SSR); evita mostrar el grid y luego el teclado. */
   initialDefaultTableroTab?: DefaultTableroTab
+  /** Datos precargados en el servidor: evita cascada perfiles → símbolos en el primer pintado. */
+  tableroInitial?: TableroInitialPayload | null
 }
 
 type LocalProfile = Profile & {
@@ -94,24 +99,57 @@ const PRONOUN_GENDER: Record<string, 'male' | 'female'> = {
   'ella': 'female', 'ellas': 'female', 'nosotras': 'female', 'vosotras': 'female',
 }
 
+function pickInitialProfile(list: LocalProfile[], activeId: string | null): LocalProfile | null {
+  if (!activeId || list.length === 0) return null
+  return list.find((p) => p.id === activeId) ?? null
+}
+
 
 export default function AppInterface({
   initialDefaultTableroTab = 'grid',
+  tableroInitial = null,
 }: AppInterfaceProps = {}) {
-  const [profile, setProfile] = useState<LocalProfile | null>(null)
-  const [profiles, setProfiles] = useState<LocalProfile[]>([])
-  const [symbols, setSymbols] = useState<Symbol[]>([])
+  const [profiles, setProfiles] = useState<LocalProfile[]>(() => {
+    if (!tableroInitial) return []
+    return applyProfileGenders(tableroInitial.profiles as Profile[]) as LocalProfile[]
+  })
+  const [profile, setProfile] = useState<LocalProfile | null>(() => {
+    if (!tableroInitial) return null
+    const list = applyProfileGenders(tableroInitial.profiles as Profile[]) as LocalProfile[]
+    return pickInitialProfile(list, tableroInitial.activeProfileId)
+  })
+  const [symbols, setSymbols] = useState<Symbol[]>(() => tableroInitial?.symbols ?? [])
   const [selectedSymbols, setSelectedSymbols] = useState<Symbol[]>([])
-  const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>([])
-  const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>([])
+  const [pinnedPhrases, setPinnedPhrases] = useState<Phrase[]>(
+    () => tableroInitial?.pinnedPhrases ?? [],
+  )
+  const [frequentPhrases, setFrequentPhrases] = useState<Phrase[]>(
+    () => tableroInitial?.frequentPhrases ?? [],
+  )
   /** Fila «Frecuentes» en /tablero; preferencia de cuenta (por defecto visible). */
-  const [showFrequentPhrasesSection, setShowFrequentPhrasesSection] = useState(true)
+  const [showFrequentPhrasesSection, setShowFrequentPhrasesSection] = useState(
+    () => tableroInitial?.accountSettings?.showFrequentPhrasesSection ?? true,
+  )
   /** Franja «Siguiente» (chips bajo la barra); no afecta a predicciones en celdas. */
-  const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(true)
+  const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(
+    () => tableroInitial?.accountSettings?.showPhraseCompletionSection ?? true,
+  )
   /** Iluminación predictiva en celdas del grid (independiente de la franja «Siguiente»). */
-  const [showGridCellPredictions, setShowGridCellPredictions] = useState(true)
+  const [showGridCellPredictions, setShowGridCellPredictions] = useState(
+    () => tableroInitial?.accountSettings?.showGridCellPredictions ?? true,
+  )
   /** Guardar pulsaciones para aprendizaje de predicciones (preferencia de privacidad en cuenta). */
-  const [shareUsageForPredictions, setShareUsageForPredictions] = useState(true)
+  const [shareUsageForPredictions, setShareUsageForPredictions] = useState(
+    () => tableroInitial?.accountSettings?.shareUsageForPredictions !== false,
+  )
+  /** Si la palabra del teclado coincide con un símbolo del tablero, mostrar su picto (por defecto activo). */
+  const [keyboardPictoAutocomplete, setKeyboardPictoAutocomplete] = useState(
+    () => tableroInitial?.accountSettings?.keyboardPictoAutocomplete ?? true,
+  )
+  /** Pictograma ARASAAC por palabra escrita con teclado (búsqueda vía API, con caché). */
+  const [keyboardArasaacPictograms, setKeyboardArasaacPictograms] = useState(
+    () => tableroInitial?.accountSettings?.keyboardArasaacPictograms ?? true,
+  )
   /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
   const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
   const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
@@ -124,6 +162,8 @@ export default function AppInterface({
   const [showProfileSelector, setShowProfileSelector] = useState(false)
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
+  /** Snapshot SSR para omitir la primera recarga; el cleanup restaura en Strict Mode. */
+  const tableroBootstrapRef = useRef(tableroInitial)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
   const profileId = profile?.id ?? ''
 
@@ -345,11 +385,15 @@ export default function AppInterface({
     return () => window.removeEventListener('storage', onStorage)
   }, [loadProfiles, loadSymbols])
 
-  useEffect(() => {
-    void loadProfiles()
-  }, [loadProfiles])
+  const hydratedFromServer = tableroInitial != null
 
   useEffect(() => {
+    if (hydratedFromServer) return
+    void loadProfiles()
+  }, [loadProfiles, hydratedFromServer])
+
+  useEffect(() => {
+    if (hydratedFromServer) return
     void getAccountSettings().then((s) => {
       if (!s) return
       if (typeof s.showFrequentPhrasesSection === 'boolean') {
@@ -365,8 +409,21 @@ export default function AppInterface({
       const share = s.shareUsageForPredictions !== false
       setShareUsageForPredictions(share)
       if (!share) void clearPendingUsageEvents()
+      if (typeof s.keyboardPictoAutocomplete === 'boolean') {
+        setKeyboardPictoAutocomplete(s.keyboardPictoAutocomplete)
+      }
+      if (typeof s.keyboardArasaacPictograms === 'boolean') {
+        setKeyboardArasaacPictograms(s.keyboardArasaacPictograms)
+      }
     })
-  }, [])
+  }, [hydratedFromServer])
+
+  useEffect(() => {
+    if (!hydratedFromServer) return
+    if (tableroInitial?.accountSettings?.shareUsageForPredictions === false) {
+      void clearPendingUsageEvents()
+    }
+  }, [hydratedFromServer, tableroInitial?.accountSettings?.shareUsageForPredictions])
 
   useEffect(() => {
     if (!showGridCellPredictions) {
@@ -376,6 +433,22 @@ export default function AppInterface({
 
   useEffect(() => {
     if (!profileId) return
+
+    const bootstrap = tableroBootstrapRef.current
+    const useServerBundle =
+      bootstrap &&
+      profileId === bootstrap.activeProfileId &&
+      bootstrap.activeProfileId !== null
+
+    if (useServerBundle) {
+      const snapshot = bootstrap
+      tableroBootstrapRef.current = null
+      const unsubStorage = subscribeToChanges()
+      return () => {
+        tableroBootstrapRef.current = snapshot
+        unsubStorage()
+      }
+    }
 
     resetPhraseTracking()
     setSymbols([])
@@ -615,6 +688,11 @@ export default function AppInterface({
       return
     }
 
+    if (activeTab === 'keyboard') {
+      setCompletionChips([])
+      return
+    }
+
     const candidates = mainOrderedSymbols.map((c) => ({
       id: c.id,
       label: c.label,
@@ -662,6 +740,7 @@ export default function AppInterface({
     mainOrderedSymbols,
     toPredictionFromPhraseSelection,
     showPhraseCompletionSection,
+    activeTab,
   ])
 
   const handleDeleteLast = () => {
@@ -776,7 +855,7 @@ export default function AppInterface({
   const scannerSpeed = accessConfig?.scanner_speed || 2.0
 
   return (
-    <div className="theme-page-shell flex h-screen min-h-0 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
+    <div className="theme-page-shell flex min-h-0 flex-1 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
       <PendingSyncStatus isOnline={isOnline} shareUsageForPredictions={shareUsageForPredictions} />
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (
@@ -820,7 +899,7 @@ export default function AppInterface({
           speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
           externalCompositionReset={phraseCompositionReset}
         />
-        {showPhraseCompletionSection ? (
+        {showPhraseCompletionSection && activeTab !== 'keyboard' ? (
           <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
         ) : null}
       </div>
@@ -846,27 +925,56 @@ export default function AppInterface({
 
               const batchId = Date.now()
               const timestamp = new Date().toISOString()
-              const pseudoSymbols = analyzedTokens.map((token, index) => ({
-                id: `text-${batchId}-${index}`,
-                sourceSymbolId: `text-${batchId}-${index}`,
-                gridId: '',
-                label: token.label,
-                normalizedLabel: token.normalizedLabel,
-                emoji: undefined,
-                imageUrl: undefined,
-                category: 'Texto',
-                posType: token.symbolPosType,
-                posConfidence: token.confidence,
-                manualGrammarOverride: false,
-                lexemeId: token.lexemeId ?? null,
-                positionX: 0,
-                positionY: 0,
-                color: '#f3f4f6',
-                hidden: false,
-                state: 'visible',
-                createdAt: timestamp,
-                updatedAt: timestamp,
-              } as Symbol))
+              const pseudoSymbols = await Promise.all(
+                analyzedTokens.map(async (token, index) => {
+                  const id = `text-${batchId}-${index}`
+                  const glyph =
+                    keyboardPictoAutocomplete && symbols.length > 0
+                      ? pickBoardGlyphForKeyboardToken(symbols, {
+                          label: token.label,
+                          normalizedLabel: token.normalizedLabel,
+                          lexemeId: token.lexemeId ?? null,
+                        })
+                      : null
+
+                  let imageUrl: string | undefined = glyph?.imageUrl
+                  let emoji: string | undefined = glyph?.emoji
+                  let sourceSymbolId = glyph?.sourceSymbolId ?? id
+                  let category: string = glyph?.category ?? 'Texto'
+
+                  if (keyboardArasaacPictograms) {
+                    const arUrl = await fetchFirstArasaacImage(token.label)
+                    if (arUrl) {
+                      imageUrl = arUrl
+                      emoji = undefined
+                      sourceSymbolId = id
+                      category = 'Texto'
+                    }
+                  }
+
+                  return {
+                    id,
+                    sourceSymbolId,
+                    gridId: '',
+                    label: token.label,
+                    normalizedLabel: token.normalizedLabel,
+                    emoji,
+                    imageUrl,
+                    category,
+                    posType: token.symbolPosType,
+                    posConfidence: token.confidence,
+                    manualGrammarOverride: false,
+                    lexemeId: token.lexemeId ?? null,
+                    positionX: 0,
+                    positionY: 0,
+                    color: '#f3f4f6',
+                    hidden: false,
+                    state: 'visible',
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                  } as Symbol
+                }),
+              )
 
               setSelectedSymbols(prev => [...prev, ...pseudoSymbols])
 

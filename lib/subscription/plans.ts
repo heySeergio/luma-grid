@@ -1,5 +1,3 @@
-import { hasComplimentaryUnlimitedPlan } from '@/lib/subscription/complimentary'
-
 /** Plan de producto Luma Grid (facturación y límites). */
 export type SubscriptionPlan = 'free' | 'voice' | 'identity'
 
@@ -11,21 +9,13 @@ export type UserSubscriptionFields = {
 }
 
 /**
- * Suscripción de pago vigente (Stripe) o cuenta de cortesía con plan Identidad.
- * Sin suscripción activa (y sin cortesía), ElevenLabs no aplica: solo voz del navegador.
- * Pasa `email` cuando lo tengas para aplicar cortesía aunque no haya suscripción en BD.
+ * Compatibilidad con código que comprobaba Stripe. En esta versión siempre es verdadero
+ * (sin bloqueo por suscripción en servidor).
  */
 export function hasActivePaidSubscription(
-  user: UserSubscriptionFields,
-  email?: string | null,
+  _user: UserSubscriptionFields,
+  _email?: string | null,
 ): boolean {
-  if (hasComplimentaryUnlimitedPlan(email)) return true
-  const tier = normalizeSubscriptionPlan(user.plan)
-  if (tier !== 'voice' && tier !== 'identity') return false
-  const sid = user.stripeSubscriptionId?.trim()
-  if (!sid) return false
-  const exp = user.planExpiresAt
-  if (exp && exp.getTime() <= Date.now()) return false
   return true
 }
 
@@ -39,13 +29,12 @@ export function normalizeSubscriptionPlan(raw: string | null | undefined): Subsc
   return 'free'
 }
 
-/** Plan efectivo para permisos y cuotas (BD + cuentas de cortesía al máximo). */
+/** Permisos de producto: siempre nivel máximo (sin cupos por plan en esta versión). */
 export function effectiveSubscriptionPlan(
-  email: string | null | undefined,
-  raw: string | null | undefined,
+  _email: string | null | undefined,
+  _raw: string | null | undefined,
 ): SubscriptionPlan {
-  if (hasComplimentaryUnlimitedPlan(email)) return 'identity'
-  return normalizeSubscriptionPlan(raw)
+  return 'identity'
 }
 
 export const MAX_PROFILES: Record<SubscriptionPlan, number> = {
@@ -57,14 +46,14 @@ export const MAX_PROFILES: Record<SubscriptionPlan, number> = {
 /** Botones totales (incl. carpetas) en plan Libre. */
 export const FREE_MAX_TOTAL_SYMBOLS = 60
 
-export function getMaxProfiles(plan: SubscriptionPlan): number {
-  return MAX_PROFILES[plan] ?? 1
+export function getMaxProfiles(_plan: SubscriptionPlan): number {
+  return 9999
 }
 
-export function canUseElevenLabsPresets(plan: SubscriptionPlan): boolean {
-  return plan === 'voice' || plan === 'identity'
+export function canUseElevenLabsPresets(_plan: SubscriptionPlan): boolean {
+  return true
 }
 
-export function canUseVoiceCloning(plan: SubscriptionPlan): boolean {
-  return plan === 'identity'
+export function canUseVoiceCloning(_plan: SubscriptionPlan): boolean {
+  return true
 }

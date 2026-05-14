@@ -10,6 +10,7 @@ import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 import type { Phrase, Profile, Symbol, VoiceConfig } from '@/lib/supabase/types'
 import { useClientReady } from '@/lib/ui/useClientReady'
 import PictoEmoji from '@/components/ui/PictoEmoji'
+import { useResolvedSymbolGlyph } from '@/lib/hooks/useResolvedSymbolGlyph'
 
 type LocalProfile = Profile & {
   communication_gender?: 'male' | 'female'
@@ -20,6 +21,54 @@ type ConjugationTokenInput = {
   lexemeId?: string | null
   posType?: string | null
   normalizedLabel?: string | null
+}
+
+function PhraseBarSymbolChip({
+  symbol,
+  onRemoveSymbol,
+}: {
+  symbol: Symbol
+  onRemoveSymbol?: (phraseEntryId: string) => void
+}) {
+  const { resolvedImageUrl, displayEmoji } = useResolvedSymbolGlyph(symbol)
+
+  return (
+    <div
+      className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-black/[0.08] bg-white/90 px-3 py-2 shadow-sm dark:border-[color-mix(in_srgb,var(--app-border)_90%,transparent)] dark:bg-[color-mix(in_srgb,var(--app-surface-elevated)_78%,var(--app-border))] dark:shadow-none"
+    >
+      {onRemoveSymbol ? (
+        <button
+          type="button"
+          onClick={() => onRemoveSymbol(symbol.id)}
+          className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full bg-slate-900/80 text-white opacity-0 shadow transition hover:bg-rose-600 group-hover:opacity-100"
+          aria-label={`Quitar ${symbol.label}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+      {resolvedImageUrl ? (
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9">
+          <Image
+            src={resolvedImageUrl}
+            alt={symbol.label}
+            width={40}
+            height={40}
+            className="max-h-full max-w-full object-contain"
+            unoptimized
+          />
+        </span>
+      ) : (
+        <PictoEmoji
+          emoji={displayEmoji || '📝'}
+          className="text-2xl leading-none text-forest dark:text-white sm:text-3xl"
+          aria-hidden
+        />
+      )}
+      <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-forest dark:text-white sm:text-xs">
+        {symbol.label}
+      </span>
+    </div>
+  )
 }
 
 interface Props {
@@ -214,42 +263,11 @@ export default function PhraseBar({
           {symbols.length > 0 ? (
             <div className="flex items-center gap-2 overflow-hidden flex-wrap">
               {symbols.map((symbol, i) => (
-                <div
+                <PhraseBarSymbolChip
                   key={`preview-${symbol.id}-${i}`}
-                  className="ui-chip group relative inline-flex min-w-[72px] flex-col items-center justify-center rounded-2xl border-black/[0.08] bg-white/90 px-3 py-2 shadow-sm dark:border-[color-mix(in_srgb,var(--app-border)_90%,transparent)] dark:bg-[color-mix(in_srgb,var(--app-surface-elevated)_78%,var(--app-border))] dark:shadow-none"
-                >
-                  {onRemoveSymbol ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveSymbol(symbol.id)}
-                      className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full bg-slate-900/80 text-white opacity-0 shadow transition hover:bg-rose-600 group-hover:opacity-100"
-                      aria-label={`Quitar ${symbol.label}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                  {symbol.imageUrl ? (
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9">
-                      <Image
-                        src={symbol.imageUrl}
-                        alt={symbol.label}
-                        width={40}
-                        height={40}
-                        className="max-h-full max-w-full object-contain"
-                        unoptimized
-                      />
-                    </span>
-                  ) : (
-                    <PictoEmoji
-                      emoji={symbol.emoji || '📝'}
-                      className="text-2xl leading-none text-forest dark:text-white sm:text-3xl"
-                      aria-hidden
-                    />
-                  )}
-                  <span className="mt-1 text-center text-[11px] font-semibold leading-tight text-forest dark:text-white sm:text-xs">
-                    {symbol.label}
-                  </span>
-                </div>
+                  symbol={symbol}
+                  onRemoveSymbol={onRemoveSymbol}
+                />
               ))}
             </div>
           ) : (

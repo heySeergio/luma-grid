@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
-import Link from 'next/link'
-import { MarketingFooter } from '@/components/landing/MarketingFooter'
+import Image from 'next/image'
+import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
 import { InstallIconAndroid, InstallIconApple, InstallIconDesktop } from '@/components/site/installPlatformIcons'
 
 /** Metadatos de `/instalar` (usados en `app/instalar/page.tsx`). */
 export const INSTALAR_PAGE_METADATA = {
   title: 'Cómo instalar Luma Grid',
   description:
-    'Instala Luma Grid como aplicación (PWA) en iPhone, Android u ordenador. Los pasos se hacen desde la página del tablero.',
+    'Cuando la aplicación esté disponible para su uso, estos son los pasos para instalarla como PWA en iPhone, Android u ordenador.',
 } as const
 
 function Section({
@@ -37,41 +37,71 @@ function Section({
   )
 }
 
+/** Misma composición que `MarketingFooter`, sin hipervínculos (pie de `/instalar`). */
+function InstalarFooterSinEnlaces() {
+  return (
+    <footer className="border-t border-black/10 bg-canvas px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-forest">
+            <Image
+              src="/logo-luma-grid.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-9 w-9 shrink-0 object-cover shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
+            />
+            <NavBrandTitle>Luma Grid</NavBrandTitle>
+          </div>
+          <p className="mt-2 text-sm font-medium text-forest/65">Comunicación Aumentativa y Alternativa</p>
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-forest/70">Un proyecto de</p>
+            <span className="inline-block w-[2.2rem] shrink-0">
+              <Image
+                src="/casa-numa-logo.png"
+                alt="Casa NUMA"
+                width={895}
+                height={350}
+                className="h-auto w-full object-contain object-left"
+              />
+            </span>
+          </div>
+        </div>
+        <div
+          aria-label="Documentación legal (solo texto)"
+          className="grid w-full grid-cols-3 gap-3 text-center text-sm font-semibold leading-snug text-forest/80 sm:ml-auto sm:w-auto sm:max-w-2xl sm:gap-8 sm:text-right"
+        >
+          <p className="min-w-0">Términos y Condiciones</p>
+          <p>Privacidad</p>
+          <p>Cookies</p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
 /** Contenido de `/instalar` (estética alineada con la landing comercial). */
 export default function InstalarPageContent() {
   return (
     <main className="bg-canvas px-4 pb-[max(4rem,env(safe-area-inset-bottom))] pt-36 text-forest sm:pt-32 md:px-6 md:pb-16">
       <article className="mx-auto w-full max-w-3xl">
-        <p className="text-sm font-semibold text-forest/70">
-          <Link
-            href="/#inicio"
-            className="text-forest underline-offset-4 transition hover:text-coral hover:underline"
-          >
-            ← Volver al inicio
-          </Link>
-        </p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-forest/55">Guía de instalación</p>
 
-        <header className="mt-8">
+        <header className="mt-6">
           <h1 className="text-balance text-3xl font-black tracking-tight text-forest md:text-4xl">Instalar Luma Grid</h1>
           <p className="mt-4 text-base font-medium leading-relaxed text-forest/80">
-            Luma Grid es una <strong className="font-extrabold text-forest">aplicación web progresiva (PWA)</strong>. Para añadirla a tu pantalla de
-            inicio o instalarla como app, debes seguir los pasos estando en la{' '}
-            <strong className="font-extrabold text-forest">página del tablero</strong>, no solo en la portada del sitio.
+            Cuando la aplicación sea de uso general y esté disponible para las personas que la utilizarán,{' '}
+            <strong className="font-extrabold text-forest">estos serán los pasos</strong> para añadirla a la pantalla de inicio o instalarla como{' '}
+            <strong className="font-extrabold text-forest">aplicación web progresiva (PWA)</strong>, según el dispositivo.
           </p>
         </header>
 
         <div className="mt-6 rounded-[22px] border border-black/[0.06] bg-cta-yellow/90 px-5 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
           <p className="text-sm font-extrabold text-forest">Importante</p>
           <p className="mt-2 text-sm font-medium text-forest/85">
-            Abre primero{' '}
-            <Link
-              href="/tablero"
-              className="font-extrabold text-accent-blue underline decoration-accent-blue/50 underline-offset-2 hover:text-coral"
-            >
-              /tablero
-            </Link>{' '}
-            en el navegador (inicia sesión si te lo pide). Desde ahí sigue las instrucciones de tu dispositivo. Si instalas desde otra URL, el acceso
-            puede no comportarse como la app completa.
+            La instalación habrá de hacerse con <strong className="font-extrabold text-forest">Luma Grid abierto en el navegador</strong>, en la misma
+            dirección web desde la que se usará la herramienta en el día a día. Si se instala desde otra página del sitio, la experiencia puede no ser la
+            completa.
           </p>
         </div>
 
@@ -79,11 +109,8 @@ export default function InstalarPageContent() {
           <Section id="ios" title="iPhone y iPad (iOS)" titleIcon={<InstallIconApple />}>
             <ol className="list-decimal space-y-3 pl-5 marker:font-extrabold marker:text-accent-blue">
               <li>
-                Abre <strong className="text-forest">Safari</strong> o <strong className="text-forest">Chrome</strong> y entra en{' '}
-                <Link href="/tablero" className="font-extrabold text-accent-blue underline hover:text-coral">
-                  /tablero
-                </Link>
-                .
+                Abre <strong className="text-forest">Safari</strong> o <strong className="text-forest">Chrome</strong> y accede a Luma Grid usando la
+                dirección web de trabajo (donde la aplicación estará en uso).
               </li>
               <li>
                 Pulsa el menú de los <strong className="text-forest">tres puntos</strong> (⋮), suele estar arriba a la derecha en Chrome; en Safari usa
@@ -102,10 +129,7 @@ export default function InstalarPageContent() {
               </li>
             </ol>
             <p className="mt-4 text-sm text-forest/65">
-              Los textos exactos pueden variar según la versión de iOS y el navegador. Lo esencial es estar en{' '}
-              <Link href="/tablero" className="font-semibold text-accent-blue underline hover:text-coral">
-                /tablero
-              </Link>{' '}
+              Los textos exactos pueden variar según la versión de iOS y el navegador. Lo esencial es tener Luma Grid abierto en la dirección correcta
               antes de instalar.
             </p>
           </Section>
@@ -113,19 +137,16 @@ export default function InstalarPageContent() {
           <Section id="android" title="Android" titleIcon={<InstallIconAndroid />}>
             <ol className="list-decimal space-y-3 pl-5 marker:font-extrabold marker:text-accent-blue">
               <li>
-                Abre <strong className="text-forest">Chrome</strong> (recomendado) u otro navegador compatible y entra en{' '}
-                <Link href="/tablero" className="font-extrabold text-accent-blue underline hover:text-coral">
-                  /tablero
-                </Link>
-                .
+                Abre <strong className="text-forest">Chrome</strong> (recomendado) u otro navegador compatible y accede a Luma Grid en la dirección web
+                donde utilizarás la aplicación.
               </li>
               <li>
                 Pulsa el menú de los <strong className="text-forest">tres puntos</strong> (⋮) arriba a la derecha.
               </li>
               <li>
                 Elige <strong className="text-forest">Instalar aplicación</strong>,{' '}
-                <strong className="text-forest">Añadir a la pantalla de inicio</strong> o la opción equivalente que muestre tu móvil (puede decir
-                “Instalar app” o el nombre “Luma Grid”).
+                <strong className="text-forest">Añadir a la pantalla de inicio</strong> o la opción equivalente que muestre tu móvil (puede decir “Instalar
+                app” o el nombre “Luma Grid”).
               </li>
               <li>Confirma la instalación. El icono aparecerá en el cajón o en el escritorio según tu lanzador.</li>
             </ol>
@@ -135,11 +156,7 @@ export default function InstalarPageContent() {
             <ol className="list-decimal space-y-3 pl-5 marker:font-extrabold marker:text-accent-blue">
               <li>
                 Abre <strong className="text-forest">Chrome</strong>, <strong className="text-forest">Edge</strong> u otro navegador basado en Chromium y
-                entra en{' '}
-                <Link href="/tablero" className="font-extrabold text-accent-blue underline hover:text-coral">
-                  /tablero
-                </Link>
-                .
+                accede a Luma Grid en la dirección web desde la que usarás la herramienta.
               </li>
               <li>
                 Mira la <strong className="text-forest">barra de direcciones</strong>: si aparece un icono de instalar (⊕, monitor con flecha o
@@ -160,26 +177,16 @@ export default function InstalarPageContent() {
           </Section>
         </div>
 
-        <div className="mt-14 rounded-[22px] border border-black/[0.06] bg-white p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
-          <p className="text-sm font-extrabold text-forest">¿Listo?</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link
-              href="/tablero"
-              className="inline-flex rounded-full bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
-            >
-              Ir al tablero
-            </Link>
-            <Link
-              href="/#inicio"
-              className="inline-flex rounded-full border border-black/15 bg-canvas px-6 py-3 text-sm font-bold text-forest transition hover:border-forest/30"
-            >
-              Volver al inicio
-            </Link>
-          </div>
+        <div className="mt-14 mb-10 rounded-[22px] border border-black/[0.06] bg-white p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] sm:mb-14">
+          <p className="text-sm font-extrabold text-forest">Resumen</p>
+          <p className="mt-3 text-sm font-medium leading-relaxed text-forest/85">
+            Cuando Luma Grid esté disponible para quienes la vayan a usar, abre siempre la aplicación en el navegador en la dirección indicada para tu caso
+            y, desde ahí, sigue los pasos que muestre tu sistema operativo o navegador para añadirla al inicio o instalarla como app.
+          </p>
         </div>
       </article>
 
-      <MarketingFooter />
+      <InstalarFooterSinEnlaces />
     </main>
   )
 }

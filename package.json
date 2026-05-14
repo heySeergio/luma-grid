@@ -26,11 +26,13 @@
     "lexicon:validate-phase3": "node scripts/validate-phase3-staging.mjs",
     "lexicon:import-phase3": "node scripts/import-phase3-lexemes.mjs",
     "db:migrate": "node scripts/prisma-migrate-envlocal.mjs",
+    "db:migrate:dev": "node scripts/prisma-env.mjs migrate dev",
     "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs",
     "test:lexicon-detection": "node scripts/test-lexicon-detection.mjs",
     "test:mejora-plan": "node scripts/test-mejora-plan.mjs",
     "repair:demo-email": "node scripts/repair-demo-by-email.mjs",
     "reset:demo-board": "npx tsx --tsconfig tsconfig.json scripts/reset-demo-board-by-email.ts",
+    "arasaac:download-main-grid": "npx tsx --tsconfig tsconfig.json scripts/download-arasaac-main-grid-pngs.ts",
     "test:admin-move": "npx tsx --test lib/admin/applyAdminSymbolGridMove.test.ts"
   },
   "prisma": {

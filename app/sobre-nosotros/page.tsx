@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Handshake, Volume2, Wrench, type LucideIcon } from 'lucide-react'
 
+import { MarketingFooter } from '@/components/landing/MarketingFooter'
 import { FeedbackOpinionCta } from '@/components/sobre-nosotros/FeedbackOpinionCta'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
@@ -162,6 +163,16 @@ Si quieres contarnos algo, escríbenos: en Casa Numa leemos los mensajes
 con calma.`}
             </p>
 
+            <p className="mt-6 text-sm font-semibold text-white/90 sm:text-base">
+              ¿Tienes dudas? Escríbenos a{' '}
+              <a
+                href="mailto:lumagrid@casanuma.biz"
+                className="font-extrabold text-[#FCE855] underline-offset-4 transition hover:underline hover:brightness-110"
+              >
+                lumagrid@casanuma.biz
+              </a>
+            </p>
+
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <FeedbackOpinionCta />
               <Link
@@ -174,6 +185,7 @@ con calma.`}
           </section>
         </article>
       </main>
+      <MarketingFooter />
     </MarketingSiteShell>
   )
 }

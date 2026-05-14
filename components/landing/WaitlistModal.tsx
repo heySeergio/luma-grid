@@ -95,7 +95,7 @@ export function WaitlistModal({ open, onClose }: WaitlistModalProps) {
       {open ? (
         <div
           key="waitlist-modal"
-          className="luma-marketing-portal tk-bricolage-grotesque-36 fixed inset-0 z-[200] flex items-end justify-center p-4 font-bricolage sm:items-center sm:p-6"
+          className="luma-marketing-portal tk-bricolage-grotesque-extralig fixed inset-0 z-[200] flex items-end justify-center p-4 font-bricolage sm:items-center sm:p-6"
         >
           <motion.button
             type="button"
@@ -144,6 +144,10 @@ export function WaitlistModal({ open, onClose }: WaitlistModalProps) {
                 >
                   Déjanos tu nombre y correo y te avisamos cuando Luma Grid esté
                   disponible.
+                </p>
+                <p className="mt-3 text-xs font-medium leading-relaxed text-neutral-500">
+                  *Tranquilo, no te enviaremos correos de spam, solo te
+                  notificaremos para que seas el primero en utilizarla!
                 </p>
               </div>
               <button

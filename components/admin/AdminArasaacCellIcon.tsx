@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import PictoEmoji from '@/components/ui/PictoEmoji'
-import { shouldAutoloadArasaacForSymbol, fetchFirstArasaacImage } from '@/lib/arasaac'
+import {
+  FRASES_HECHAS_CATEGORY,
+  fetchFirstArasaacImage,
+  shouldAutoloadArasaacForSymbol,
+} from '@/lib/arasaac'
 
 interface Props {
   symbol: {
@@ -12,6 +16,7 @@ interface Props {
     image_url?: string | null
     label: string
     emoji?: string | null
+    category?: string | null
   }
   className?: string
 }
@@ -33,6 +38,7 @@ export default function AdminArasaacCellIcon({ symbol, className = 'h-8 w-8 obje
         gridId: symbol.gridId,
         imageUrl: symbol.imageUrl,
         image_url: symbol.image_url,
+        category: symbol.category,
       })
     )
       return
@@ -42,13 +48,20 @@ export default function AdminArasaacCellIcon({ symbol, className = 'h-8 w-8 obje
     return () => {
       cancelled = true
     }
-  }, [symbol.id, symbol.gridId, symbol.imageUrl, symbol.image_url, symbol.label])
+  }, [symbol.id, symbol.gridId, symbol.imageUrl, symbol.image_url, symbol.label, symbol.category])
 
-  const resolvedUrl =
-    (typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) ||
-    (typeof symbol.image_url === 'string' && symbol.image_url.trim()) ||
-    arasaacUrl ||
-    ''
+  const isFrasesHechas = symbol.category?.trim() === FRASES_HECHAS_CATEGORY
+
+  const resolvedUrl = isFrasesHechas
+    ? ''
+    : (typeof symbol.imageUrl === 'string' && symbol.imageUrl.trim()) ||
+      (typeof symbol.image_url === 'string' && symbol.image_url.trim()) ||
+      arasaacUrl ||
+      ''
+
+  if (isFrasesHechas) {
+    return <span className={`${className} rounded-md bg-black/5 dark:bg-white/10`} aria-hidden />
+  }
 
   if (resolvedUrl) {
     return (

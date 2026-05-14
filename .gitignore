@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# docs subproject (Next.js propio en /docs)
+docs/.next/
+docs/out/
+docs/node_modules/
+docs/.vercel
+
 # local snapshots (git bundle / tar backups)
 /backups/
 

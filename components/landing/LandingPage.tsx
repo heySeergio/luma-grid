@@ -11,9 +11,11 @@ import {
   FeaturesFluyeEntrance,
   type FeaturesFluyeListItem,
 } from "@/components/landing/FeaturesFluyeEntrance";
+import { SHOW_LANDING_PRICING_SECTION } from "@/components/landing/landingFlags";
 import { PricingEntrance } from "@/components/landing/PricingEntrance";
 import { HeroDraggableDecors } from "@/components/landing/HeroDraggableDecors";
 import { HeroHeadline } from "@/components/landing/HeroHeadline";
+import { useWaitlistModal } from "@/components/landing/WaitlistModalProvider";
 
 const moverSvgOn = false;
 
@@ -79,18 +81,24 @@ const heroFeatureIcons = {
   ),
 } as const;
 
-function Hero({ comingSoon }: { comingSoon: boolean }) {
+function Hero({
+  comingSoon,
+  onOpenWaitlist,
+}: {
+  comingSoon: boolean
+  onOpenWaitlist: () => void
+}) {
   return (
     <AnimatedSection
       id="inicio"
-      className="mt-2 overflow-visible border-b border-black/5 sm:mt-3"
+      className="relative z-0 mt-2 overflow-visible border-b border-black/5 sm:mt-3"
       enableLoop={false}
     >
-      <div className="relative min-h-[min(26vh,220px)] overflow-visible bg-canvas px-4 pb-8 pt-7 sm:min-h-[min(34vh,320px)] sm:px-6 sm:pb-10 sm:pt-9 md:min-h-[min(38vh,360px)] md:pb-12 md:pt-10 lg:min-h-[min(44vh,420px)] lg:px-6 lg:pb-14 lg:pt-11">
+      <div className="relative overflow-visible bg-canvas px-4 pb-10 pt-6 sm:px-6 sm:pb-10 sm:pt-8 md:min-h-[min(38vh,360px)] md:pb-12 md:pt-10 lg:min-h-[min(44vh,420px)] lg:px-6 lg:pb-14 lg:pt-11">
         <HeroDraggableDecors moverEnabled={moverSvgOn} />
-        <div className="relative z-10 mx-auto mt-2 w-full max-w-6xl sm:mt-3 lg:mt-4">
+        <div className="relative z-10 mx-auto mt-1 w-full max-w-6xl sm:mt-3 lg:mt-4">
           <HeroHeadline />
-          <div className="mt-10 w-full sm:mt-16 md:mt-20 lg:mt-24">
+          <div className="mt-8 w-full sm:mt-16 md:mt-20 lg:mt-24">
             <p className="max-w-2xl whitespace-pre-line text-base leading-snug text-[#042D22] sm:text-lg sm:leading-snug">
               {`Luma Grid es un tablero de comunicación
 aumentativa y alternativa.
@@ -100,12 +108,14 @@ con el mundo.`}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-4 sm:gap-4">
               {comingSoon ? (
-                <Link
-                  href="/#recursos"
+                <button
+                  type="button"
+                  onClick={onOpenWaitlist}
                   className="inline-flex rounded-full border border-black/10 bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                  aria-haspopup="dialog"
                 >
                   Avísame cuando esté disponible
-                </Link>
+                </button>
               ) : (
                 <Link
                   href="/tablero"
@@ -116,7 +126,7 @@ con el mundo.`}
               )}
               {comingSoon ? (
                 <Link
-                  href="/#funciones"
+                  href="/#comunicacion-fluye"
                   className="text-sm font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
                 >
                   Ver cómo funciona →
@@ -150,7 +160,7 @@ con el mundo.`}
                 <span className="min-w-0 leading-tight">100% personalizable</span>
               </li>
               <li className="flex min-w-0 items-center gap-2.5">
-                <span className="shrink-0 text-[#042D22]" aria-hidden>
+                <span className="shrink-0 text-[#FE6B45]" aria-hidden>
                   {heroFeatureIcons.shield}
                 </span>
                 <span className="min-w-0 leading-tight">Seguro y privado</span>
@@ -194,7 +204,7 @@ function Audience() {
   return (
     <AnimatedSection
       id="para-quien"
-      className="border-b border-black/5 px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
+      className="relative z-10 hidden scroll-mt-28 border-b border-black/5 px-4 py-14 sm:px-6 sm:py-20 md:block lg:px-8"
       enableLoop={false}
     >
       <div className="mx-auto max-w-6xl">
@@ -251,6 +261,7 @@ function Features() {
 }
 
 function Pricing() {
+  if (!SHOW_LANDING_PRICING_SECTION) return null;
   return (
     <AnimatedSection
       id="planes"
@@ -279,10 +290,11 @@ type LandingPageProps = {
 }
 
 export function LandingPage({ comingSoon = true }: LandingPageProps) {
+  const { openWaitlist } = useWaitlistModal()
   return (
     <>
-      <main className="pt-40 sm:pt-32">
-        <Hero comingSoon={comingSoon} />
+      <main className="pt-36 sm:pt-32">
+        <Hero comingSoon={comingSoon} onOpenWaitlist={openWaitlist} />
         <Audience />
         <Features />
         <Pricing />

@@ -25,9 +25,16 @@ type AudienceStampGridProps = {
 
 export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
   const containerRef = useRef(null);
-  const { revealed: isInView } = useDelayedSectionReveal(containerRef);
   const reduceMotion = useReducedMotion();
   const isMobileLayout = useIsMobileLayout();
+  /** En viewport estrecho el umbral de scroll + margen suele no disparar `inView` y el grid queda invisible (opacity 0). */
+  const showWithoutScrollReveal = Boolean(reduceMotion) || isMobileLayout;
+  const { revealed: isInView } = useDelayedSectionReveal(
+    containerRef,
+    isMobileLayout
+      ? { amount: 0.05, margin: "0px 0px 0px 0px" }
+      : undefined,
+  );
 
   return (
     <div
@@ -40,40 +47,29 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
         const restRotate = tiltLeft ? -TILT_DEG : TILT_DEG;
 
         const stampDelay = isMobileLayout ? 0 : index * STAGGER_S;
+        const visibleState = {
+          opacity: 1,
+          scale: 1,
+          rotate: restRotate,
+          y: 0,
+        } as const;
+        const hiddenState = {
+          opacity: 0,
+          scale: 1.22,
+          rotate: 0,
+          y: 10,
+        } as const;
 
         return (
           <motion.article
             key={card.title}
             className="flex flex-col gap-3 sm:gap-4"
-            initial={
-              reduceMotion
-                ? { opacity: 1, scale: 1, rotate: restRotate, y: 0 }
-                : {
-                    opacity: 0,
-                    scale: 1.22,
-                    rotate: 0,
-                    y: 10,
-                  }
-            }
+            initial={showWithoutScrollReveal ? visibleState : hiddenState}
             animate={
-              reduceMotion
-                ? { opacity: 1, scale: 1, rotate: restRotate, y: 0 }
-                : isInView
-                  ? {
-                      opacity: 1,
-                      scale: 1,
-                      rotate: restRotate,
-                      y: 0,
-                    }
-                  : {
-                      opacity: 0,
-                      scale: 1.22,
-                      rotate: 0,
-                      y: 10,
-                    }
+              showWithoutScrollReveal ? visibleState : isInView ? visibleState : hiddenState
             }
             transition={
-              reduceMotion
+              showWithoutScrollReveal
                 ? { duration: 0 }
                 : {
                     delay: stampDelay,

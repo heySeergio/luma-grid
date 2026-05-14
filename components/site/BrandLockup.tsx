@@ -27,7 +27,8 @@ export default function BrandLockup({
   variant = 'default',
 }: BrandLockupProps) {
   if (variant === 'marketing') {
-    const rowClass = `flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-forest sm:text-lg ${className}`.trim()
+    const rowClass =
+      `flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-forest dark:text-white sm:text-lg ${className}`.trim()
     const logoClass = `h-8 w-8 shrink-0 object-cover shadow-[0_2px_8px_rgba(0,0,0,0.08)] sm:h-9 sm:w-9 rounded-none ${iconClassName}`.trim()
     const inner = (
       <div className={rowClass}>

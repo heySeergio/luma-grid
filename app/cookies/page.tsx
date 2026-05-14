@@ -6,7 +6,7 @@ import { isLandingComingSoon } from '@/lib/site/comingSoon'
 export const metadata: Metadata = {
   title: 'Política de cookies',
   description:
-    'Información sobre el uso de cookies, sesión NextAuth, almacenamiento local (localStorage, IndexedDB), PWA con service worker y relación con pagos Stripe en Luma Grid.',
+    'Información sobre el uso de cookies, sesión NextAuth, almacenamiento local (localStorage, IndexedDB) y PWA con service worker en Luma Grid.',
   alternates: { canonical: '/cookies' },
   robots: { index: true, follow: true },
 }
@@ -46,11 +46,6 @@ const sections = [
           dispositivo para, entre otras cosas: mantener una <strong className="text-[var(--app-foreground)]">cola de eventos de uso</strong> pendientes de
           envío al servidor cuando compartes datos para predicción y la conexión falla; almacenar <strong className="text-[var(--app-foreground)]">caché</strong>{' '}
           de contenidos o audio; y datos de configuración de acceso. Así se mejora la continuidad con red intermitente hasta sincronizar.
-        </p>
-        <p>
-          <strong className="text-[var(--app-foreground)]">Pagos (Stripe):</strong> si completas un pago o gestionas la suscripción a través de Stripe,
-          Stripe puede establecer sus propias cookies o tecnologías cuando cargas sus páginas o el portal de cliente; rige la política de cookies y
-          privacidad de Stripe en ese contexto.
         </p>
       </>
     ),
@@ -103,7 +98,7 @@ const sections = [
     content: (
       <>
         <p>
-          Esta política podrá actualizarse si cambian los mecanismos de almacenamiento, se incorporan nuevas integraciones (pagos, voz, identidad social,
+          Esta política podrá actualizarse si cambian los mecanismos de almacenamiento, se incorporan nuevas integraciones (voz, identidad social,
           modelos de IA) o funciones que utilicen cookies o almacenamiento local de forma distinta.
         </p>
       </>
@@ -118,7 +113,7 @@ export default function CookiesPage() {
         variant="marketing"
         eyebrow="Cookies"
         title="Política de cookies"
-        intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google, PWA con service worker y relación con pagos Stripe."
+        intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google y PWA con service worker."
         sections={sections}
       />
     </MarketingSiteShell>

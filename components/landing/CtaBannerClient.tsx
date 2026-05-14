@@ -9,6 +9,7 @@ import {
   CTA_ENTRANCE_DURATION,
   CTA_GLOBAL_OFFSET_SEC,
 } from '@/components/landing/CtaBannerDecors'
+import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 import { useDelayedSectionReveal } from '@/components/landing/useDelayedSectionReveal'
 import { useIsMobileLayout } from '@/lib/hooks/useIsMobileLayout'
 
@@ -20,6 +21,7 @@ type CtaBannerClientProps = {
 }
 
 export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerClientProps) {
+  const { openWaitlist } = useWaitlistModal()
   const rootRef = useRef<HTMLDivElement>(null)
 
   const reduceMotion = useReducedMotion()
@@ -65,12 +67,14 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-4">
           {comingSoon ? (
-            <Link
-              href="/#recursos"
+            <button
+              type="button"
+              onClick={openWaitlist}
               className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
+              aria-haspopup="dialog"
             >
               Únete a la lista de espera
-            </Link>
+            </button>
           ) : (
             <Link
               href="/tablero"

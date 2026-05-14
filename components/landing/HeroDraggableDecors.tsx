@@ -58,7 +58,7 @@ const DECORS: {
     width: 255,
     height: 260,
     wrapClass:
-      "right-[4%] top-[6.5rem] z-10 w-[min(42vw,7.25rem)] sm:right-[6%] sm:top-[7.25rem] md:left-[64%] md:right-auto md:top-2 md:w-[5.4rem] sm:left-auto lg:left-[78.5%] lg:top-[1.1rem]",
+      "left-[64%] top-2 z-10 w-[5.4rem] sm:left-[69%] sm:top-3 sm:w-[6rem] lg:left-[78.5%] lg:top-[1.1rem]",
   },
   {
     id: "nina",
@@ -116,7 +116,6 @@ function innerMotionFor(
   id: DecorId,
   positionsReady: boolean,
   reduceMotion: boolean,
-  mobileHeroOnlyCara: boolean,
 ): {
   animate: Record<string, number | number[]>;
   transition: Record<string, unknown>;
@@ -165,9 +164,7 @@ function innerMotionFor(
           },
         },
       };
-    case "cara": {
-      const popDelay = mobileHeroOnlyCara ? 0 : HERO.cara.pop.delay;
-      const loopDelay = mobileHeroOnlyCara ? 0.35 : HERO.cara.loopRotateAfter;
+    case "cara":
       return {
         animate: {
           scale: 1,
@@ -176,28 +173,27 @@ function innerMotionFor(
         },
         transition: {
           scale: {
-            delay: popDelay,
+            delay: HERO.cara.pop.delay,
             type: "spring",
             stiffness: HERO.cara.pop.stiffness,
             damping: HERO.cara.pop.damping,
             mass: HERO.cara.pop.mass,
           },
           y: {
-            delay: popDelay,
+            delay: HERO.cara.pop.delay,
             type: "spring",
             stiffness: HERO.cara.pop.stiffness,
             damping: HERO.cara.pop.damping,
             mass: HERO.cara.pop.mass,
           },
           rotate: {
-            delay: loopDelay,
+            delay: HERO.cara.loopRotateAfter,
             duration: 3.6,
             repeat: Infinity,
             ease: "easeInOut",
           },
         },
       };
-    }
     case "nina":
       return {
         animate: {
@@ -249,7 +245,6 @@ function outerFadeFor(
   id: DecorId,
   positionsReady: boolean,
   reduceMotion: boolean,
-  mobileHeroOnlyCara: boolean,
 ) {
   if (reduceMotion) {
     return {
@@ -266,14 +261,11 @@ function outerFadeFor(
           ? HERO.nina.fadeIn
           : HERO.speech.fadeIn;
 
-  const entranceDelay =
-    mobileHeroOnlyCara && id === "cara" ? 0 : cfg.delay;
-
   return {
     animate: { opacity: positionsReady ? 1 : 0 },
     transition: {
       duration: positionsReady ? cfg.duration : 0,
-      delay: positionsReady ? entranceDelay : 0,
+      delay: positionsReady ? cfg.delay : 0,
       ease: easeOut,
     },
   };
@@ -288,7 +280,7 @@ export function HeroDraggableDecors({ moverEnabled }: HeroDraggableDecorsProps) 
   const [positionsReady, setPositionsReady] = useState(false);
   const [tabletFrame, setTabletFrame] = useState(0);
   const prefersReducedMotion = useReducedMotion();
-  const mobileHeroOnlyCara = useIsMobileLayout();
+  const hideHeroDecorsOnMobile = useIsMobileLayout();
 
   useEffect(() => {
     startTransition(() => {
@@ -298,12 +290,12 @@ export function HeroDraggableDecors({ moverEnabled }: HeroDraggableDecorsProps) 
   }, []);
 
   useEffect(() => {
-    if (prefersReducedMotion || mobileHeroOnlyCara) return;
+    if (prefersReducedMotion || hideHeroDecorsOnMobile) return;
     const id = window.setTimeout(() => {
       setTabletFrame((f) => (f + 1) % TABLET_FRAME_COUNT);
     }, TABLET_FRAME_MS[tabletFrame]);
     return () => window.clearTimeout(id);
-  }, [tabletFrame, prefersReducedMotion, mobileHeroOnlyCara]);
+  }, [tabletFrame, prefersReducedMotion, hideHeroDecorsOnMobile]);
 
   const persist = useCallback((next: DecorPositions) => {
     try {
@@ -330,6 +322,10 @@ export function HeroDraggableDecors({ moverEnabled }: HeroDraggableDecorsProps) 
     [persist],
   );
 
+  if (hideHeroDecorsOnMobile) {
+    return null;
+  }
+
   return (
     <div
       className={`pointer-events-none absolute bottom-0 left-0 right-0 top-3 sm:top-4 ${
@@ -338,23 +334,10 @@ export function HeroDraggableDecors({ moverEnabled }: HeroDraggableDecorsProps) 
       aria-hidden
     >
       {DECORS.map((decor) => {
-        if (mobileHeroOnlyCara && decor.id !== "cara") {
-          return null;
-        }
         const pos = positions[decor.id];
         const reduceMotion = Boolean(prefersReducedMotion);
-        const outer = outerFadeFor(
-          decor.id,
-          positionsReady,
-          reduceMotion,
-          mobileHeroOnlyCara,
-        );
-        const inner = innerMotionFor(
-          decor.id,
-          positionsReady,
-          reduceMotion,
-          mobileHeroOnlyCara,
-        );
+        const outer = outerFadeFor(decor.id, positionsReady, reduceMotion);
+        const inner = innerMotionFor(decor.id, positionsReady, reduceMotion);
 
         const moverClass = moverEnabled
           ? "pointer-events-auto cursor-grab touch-none select-none active:cursor-grabbing"
@@ -383,11 +366,7 @@ export function HeroDraggableDecors({ moverEnabled }: HeroDraggableDecorsProps) 
               fill
               draggable={false}
               className="pointer-events-none object-contain select-none"
-              sizes={
-                decor.id === "cara"
-                  ? "(max-width: 767px) 34vw, 7rem"
-                  : "(max-width: 768px) 40vw, 34rem"
-              }
+              sizes="(max-width: 768px) 40vw, 34rem"
               unoptimized
               priority={decor.id === "tablet"}
             />
