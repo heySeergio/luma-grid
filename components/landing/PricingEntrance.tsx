@@ -22,6 +22,7 @@ const CARD_DURATION = 0.46;
 /** Naranja CTA marketing (cabecera, hero, acentos) */
 const BRAND_ORANGE = "#FE6B45";
 
+/** Tarifas en la home; visibilidad: `SHOW_LANDING_PRICING_SECTION` en `landingFlags.ts`. */
 export function PricingEntrance() {
   const rootRef = useRef(null);
   const { revealed } = useDelayedSectionReveal(rootRef);

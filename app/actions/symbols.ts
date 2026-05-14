@@ -12,7 +12,6 @@ import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { isMissingDatabaseColumnError, isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 import { findManySymbolsByProfileId } from '@/lib/prisma/symbolsForProfile'
-import { effectiveSubscriptionPlan, FREE_MAX_TOTAL_SYMBOLS } from '@/lib/subscription/plans'
 import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeLabelForLexicalMatch } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
@@ -801,30 +800,6 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
         throw new Error(
             `Hay símbolos que se solapan en el tablero (celda ${first.cell}: «${first.a}» y «${first.b}»). Ajusta posiciones antes de guardar.`,
         )
-    }
-
-    const owner = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { email: true, plan: true },
-    })
-    const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
-    // Cuota Plan Libre: solo al añadir botones/carpetas nuevos (ids new- / template / fixed-left).
-    // Cambiar imagen, texto, posición, etc. en símbolos ya guardados no aplica límite.
-    if (plan === 'free' && !profile.isDemo && symbolsInBounds.some(isPersistCreate)) {
-        const symbolsOnOtherNonDemoProfiles = await prisma.symbol.count({
-            where: {
-                profile: {
-                    userId: session.user.id,
-                    id: { not: profileId },
-                    isDemo: false,
-                },
-            },
-        })
-        if (symbolsOnOtherNonDemoProfiles + symbolsInBounds.length > FREE_MAX_TOTAL_SYMBOLS) {
-            throw new Error(
-                `Plan Libre: máximo ${FREE_MAX_TOTAL_SYMBOLS} botones en total en tus tableros (el tablero Demo no cuenta). Incluye carpetas. Visita /plan para ampliar el plan o reduce símbolos.`,
-            )
-        }
     }
 
     const existingRows = await loadSymbolRowsForSaveDiff(profileId)

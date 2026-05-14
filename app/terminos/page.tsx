@@ -6,7 +6,7 @@ import { isLandingComingSoon } from '@/lib/site/comingSoon'
 export const metadata: Metadata = {
   title: 'Términos y condiciones',
   description:
-    'Condiciones de uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, autenticación con correo o Google, pagos con Stripe, voz con ElevenLabs, predicción AAC y uso como PWA.',
+    'Condiciones de uso de Luma Grid: comunicador AAC, autenticación con correo o Google, voz con ElevenLabs, predicción AAC y uso como PWA.',
   alternates: { canonical: '/terminos' },
   robots: { index: true, follow: true },
 }
@@ -55,36 +55,15 @@ const sections = [
           social aceptas también las condiciones aplicables de ese proveedor en lo que corresponda.
         </p>
         <p>
-          Tras el registro o el inicio de sesión puede solicitarse la elección de un plan de uso (incluido un plan gratuito sin obligación de pago);
-          hasta completar ese paso, el acceso a determinadas áreas puede estar condicionado según la configuración del producto.
+          El acceso a determinadas funciones o áreas puede depender de la{' '}
+          <strong className="text-[var(--app-foreground)]">configuración del producto</strong> en cada despliegue (por
+          ejemplo permisos del perfil, políticas del titular de la cuenta o ajustes del entorno).
         </p>
       </>
     ),
   },
   {
-    title: '4. Planes de suscripción y pagos',
-    content: (
-      <>
-        <p>
-          Luma Grid puede ofrecer distintos planes (por ejemplo, uso gratuito con límites y planes de pago con mayores prestaciones). Las
-          condiciones comerciales, precios y límites aplicables se muestran en el sitio y pueden actualizarse; el uso continuado tras un cambio
-          notificado puede implicar su aceptación.
-        </p>
-        <p>
-          Los pagos y la gestión de suscripciones (incluidos cargo recurrente, cambio de plan, método de pago y facturación cuando proceda) pueden
-          tramitarse a través de <strong className="text-[var(--app-foreground)]">Stripe</strong> u otro proveedor de pagos integrado. Al contratar
-          un plan de pago, el usuario acepta que los datos necesarios para la transacción sean tratados por dicho proveedor según sus propias
-          condiciones y política de privacidad.
-        </p>
-        <p>
-          El incumplimiento del pago, la cancelación o el impago pueden conllevar la limitación o el cese de las prestaciones asociadas al plan
-          de pago, sin perjuicio de lo establecido en la normativa de consumo aplicable.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: '5. Voz sintética y clonación (ElevenLabs)',
+    title: '4. Voz sintética y clonación (ElevenLabs)',
     content: (
       <>
         <p>
@@ -93,14 +72,15 @@ const sections = [
           de esos datos por parte del proveedor conforme a sus términos y políticas.
         </p>
         <p>
-          Los límites de uso (por ejemplo, caracteres de síntesis de voz al mes según facturación, voces disponibles o funciones del plan) dependen del
-          plan contratado y de la configuración técnica del servicio en cada momento.
+          Los límites de uso (por ejemplo, volumen de síntesis, voces disponibles o funciones habilitadas) dependen de la{' '}
+          <strong className="text-[var(--app-foreground)]">configuración técnica del servicio</strong>, de los ajustes de cuenta o del criterio del
+          titular de la instalación en cada momento.
         </p>
       </>
     ),
   },
   {
-    title: '6. Predicción AAC y datos de uso',
+    title: '5. Predicción AAC y datos de uso',
     content: (
       <>
         <p>
@@ -118,7 +98,7 @@ const sections = [
     ),
   },
   {
-    title: '7. Propiedad intelectual',
+    title: '6. Propiedad intelectual',
     content: (
       <>
         <p>
@@ -131,7 +111,7 @@ const sections = [
     ),
   },
   {
-    title: '8. Limitación de responsabilidad',
+    title: '7. Limitación de responsabilidad',
     content: (
       <>
         <p>
@@ -139,13 +119,13 @@ const sections = [
         </p>
         <p>
           Aunque se trabaja para mantener la herramienta disponible y fiable, no se garantiza la ausencia total de errores, interrupciones o incidencias técnicas,
-          ni el funcionamiento ininterrumpido de integraciones de terceros (pagos, voz, alojamiento).
+          ni el funcionamiento ininterrumpido de integraciones de terceros (voz, alojamiento).
         </p>
       </>
     ),
   },
   {
-    title: '9. Modificaciones',
+    title: '8. Modificaciones',
     content: (
       <>
         <p>
@@ -163,7 +143,7 @@ export default function TermsPage() {
         variant="marketing"
         eyebrow="Términos y condiciones"
         title="Términos y condiciones de uso"
-        intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, planes gratuitos y de pago, inicio de sesión con correo o Google, integración con pagos (Stripe), voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."
+        intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, inicio de sesión con correo o Google, voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."
         sections={sections}
       />
     </MarketingSiteShell>

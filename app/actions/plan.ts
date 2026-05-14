@@ -8,11 +8,7 @@ import { getStripe } from '@/lib/stripe/server'
 import { priceIdForCheckout } from '@/lib/stripe/plan-mapping'
 import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
 import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
-import {
-  effectiveSubscriptionPlan,
-  hasActivePaidSubscription,
-  type SubscriptionPlan,
-} from '@/lib/subscription/plans'
+import { effectiveSubscriptionPlan, type SubscriptionPlan } from '@/lib/subscription/plans'
 
 export type SubscriptionGateState =
   | { signedIn: false }
@@ -49,8 +45,7 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
 
   return {
     signedIn: true,
-    needsPlanSelection:
-      user.planSelectionCompletedAt == null && !hasActivePaidSubscription(user, user.email),
+    needsPlanSelection: false,
     plan: effectiveSubscriptionPlan(user.email, user.plan),
     stripeCustomerId: user.stripeCustomerId,
   }

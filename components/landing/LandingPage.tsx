@@ -11,6 +11,7 @@ import {
   FeaturesFluyeEntrance,
   type FeaturesFluyeListItem,
 } from "@/components/landing/FeaturesFluyeEntrance";
+import { SHOW_LANDING_PRICING_SECTION } from "@/components/landing/landingFlags";
 import { PricingEntrance } from "@/components/landing/PricingEntrance";
 import { HeroDraggableDecors } from "@/components/landing/HeroDraggableDecors";
 import { HeroHeadline } from "@/components/landing/HeroHeadline";
@@ -260,6 +261,7 @@ function Features() {
 }
 
 function Pricing() {
+  if (!SHOW_LANDING_PRICING_SECTION) return null;
   return (
     <AnimatedSection
       id="planes"

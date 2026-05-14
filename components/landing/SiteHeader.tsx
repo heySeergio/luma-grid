@@ -6,18 +6,20 @@ import { Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
+import { SHOW_LANDING_PRICING_SECTION } from '@/components/landing/landingFlags'
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
 import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 
 const nav = [
   { href: '#inicio', label: 'Inicio' },
   { href: '#funciones', label: 'Funciones' },
-  { href: '#planes', label: 'Planes' },
+  ...(SHOW_LANDING_PRICING_SECTION ? [{ href: '#planes' as const, label: 'Planes' as const }] : []),
   { href: 'instalar', label: 'Instalar' },
   { href: 'sobre-nosotros', label: 'Sobre nosotros' },
 ] as const
 
-const navBeforeSeparator = 3
+/** Separador antes de «Instalar» (índice del primer enlace tras Inicio/Funciones[/Planes]). */
+const navBeforeSeparator = SHOW_LANDING_PRICING_SECTION ? 3 : 2
 
 function navHref(href: string) {
   return href.startsWith('#') ? `/${href}` : `/${href}`

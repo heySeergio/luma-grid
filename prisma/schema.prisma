@@ -22,6 +22,10 @@ model User {
   showPhraseCompletionSection Boolean @default(true) @map("show_phrase_completion_section")
   /// Iluminar celdas del grid con predicciones (siguiente palabra probable).
   showGridCellPredictions Boolean @default(true) @map("show_grid_cell_predictions")
+  /// Si al escribir con el teclado se rellenan pictos desde el tablero cuando hay coincidencia léxica o de etiqueta.
+  keyboardPictoAutocomplete Boolean @default(true) @map("keyboard_picto_autocomplete")
+  /// Si al escribir con el teclado se intenta mostrar un pictograma ARASAAC para cada palabra (por API / caché).
+  keyboardArasaacPictograms Boolean @default(true) @map("keyboard_arasaac_pictograms")
   /// Vista inicial en /tablero: "grid" | "keyboard"
   defaultTableroTab String @default("grid") @map("default_tablero_tab")
   /// Guardar pulsaciones y transiciones para mejorar predicciones (el usuario puede desactivarlo).

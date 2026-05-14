@@ -82,6 +82,7 @@ export default function Keyboard({
     setCurrentText(prev => prev.slice(0, -1))
   }
 
+  /** Enter: envía todo el borrador (última palabra sin espacio final). */
   const handleAddWord = async () => {
     if (!currentText.trim() || isSubmitting) return
 
@@ -89,6 +90,48 @@ export default function Keyboard({
     try {
       await onTextAdd(currentText.trim())
       setCurrentText('')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  /**
+   * Tecla Espacio: sube la palabra recién terminada a la frase (sin botón enviar).
+   * Sin espacios internos en el borrador → se envía todo el texto; con espacios → solo el último segmento.
+   * @param bufferOverride p. ej. sugerencia léxica sin esperar al siguiente render de `currentText`.
+   */
+  const handleSpaceCommit = async (bufferOverride?: string) => {
+    if (pickMode) {
+      onKeyPick?.(KB_SPECIAL_IDS.space)
+      return
+    }
+    if (isSubmitting) return
+
+    const buf = bufferOverride ?? currentText
+    const trimmedRight = buf.replace(/\s+$/, '')
+    if (!trimmedRight) {
+      if (bufferOverride === undefined) {
+        setCurrentText((prev) => prev + ' ')
+      }
+      return
+    }
+
+    const lastSp = trimmedRight.lastIndexOf(' ')
+    const wordToCommit =
+      lastSp === -1 ? trimmedRight : trimmedRight.slice(lastSp + 1).trim()
+    const nextComposer = lastSp === -1 ? '' : trimmedRight.slice(0, lastSp + 1)
+
+    if (!wordToCommit) {
+      if (bufferOverride === undefined) {
+        setCurrentText((prev) => prev + ' ')
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await onTextAdd(wordToCommit)
+      setCurrentText(nextComposer)
     } finally {
       setIsSubmitting(false)
     }
@@ -115,20 +158,25 @@ export default function Keyboard({
         ) : (
           <div
             style={keyStyle(KB_SPECIAL_IDS.composer)}
-            className="kb-composer-input app-panel col-span-10 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2"
+            className="kb-composer-input app-panel col-span-11 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2"
           >
             <input
               type="text"
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
-              aria-label="Borrador de escritura antes de enviar a la frase"
+              aria-label="Borrador: Espacio envía la palabra a la frase; Intro envía todo el texto"
               value={currentText}
               onChange={(e) => setCurrentText(e.target.value)}
               onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
                   void handleAddWord()
+                  return
+                }
+                if (e.key === ' ') {
+                  e.preventDefault()
+                  void handleSpaceCommit()
                 }
               }}
               placeholder="Escribe aquí..."
@@ -136,22 +184,17 @@ export default function Keyboard({
             />
           </div>
         )}
-        <button
-          onClick={() => {
-            if (pickMode) {
-              onKeyPick?.(KB_SPECIAL_IDS.send)
-              return
-            }
-            void handleAddWord()
-          }}
-          disabled={pickMode ? false : !currentText.trim() || isSubmitting}
-          style={keyStyle(KB_SPECIAL_IDS.send)}
-          className={`ui-icon-button ui-key-button col-span-1 grid place-items-center rounded-[1.3rem] disabled:opacity-40 ${keyRing(KB_SPECIAL_IDS.send)}`}
-          aria-label="Agregar palabra"
-          type="button"
-        >
-          <CornerDownLeft size={24} />
-        </button>
+        {pickMode ? (
+          <button
+            type="button"
+            onClick={() => onKeyPick?.(KB_SPECIAL_IDS.send)}
+            style={keyStyle(KB_SPECIAL_IDS.send)}
+            className={`ui-icon-button ui-key-button col-span-1 grid place-items-center rounded-[1.3rem] ${keyRing(KB_SPECIAL_IDS.send)}`}
+            aria-label="Tecla enviar (modo editor)"
+          >
+            <CornerDownLeft size={24} />
+          </button>
+        ) : null}
         <button
           onClick={() => {
             if (pickMode) {
@@ -168,6 +211,34 @@ export default function Keyboard({
           <Delete size={24} />
         </button>
       </div>
+
+      {/* Autocompletar léxico: siempre visible (altura reservada) salvo en modo editor */}
+      {!pickMode ? (
+        <div
+          className="app-panel flex min-h-[106px] shrink-0 flex-col justify-start rounded-[1rem] border px-1.5 py-1.5"
+          aria-label="Sugerencias de palabras"
+        >
+          <div
+            className="grid min-h-0 w-full grid-cols-4 gap-1.5"
+            style={{ gridAutoRows: 'minmax(48px, auto)' }}
+          >
+            {predictions.map((pred, idx) => (
+              <button
+                key={`pred-${idx}-${pred}`}
+                type="button"
+                onClick={() => {
+                  const newWords = [...words]
+                  newWords[newWords.length - 1] = pred
+                  void handleSpaceCommit(newWords.join(' '))
+                }}
+                className="ui-soft-badge min-h-[48px] rounded-[1.25rem] px-2 py-1 text-center text-xl font-semibold shadow-sm transition hover:brightness-105"
+              >
+                {pred}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <div className="grid min-h-0 flex-1 grid-rows-5 gap-1.5">
@@ -250,7 +321,7 @@ export default function Keyboard({
                   onKeyPick?.(KB_SPECIAL_IDS.space)
                   return
                 }
-                setCurrentText(prev => prev + ' ')
+                void handleSpaceCommit()
               }}
               style={keyStyle(KB_SPECIAL_IDS.space)}
               className={`ui-key-button col-span-6 h-full rounded-[1.25rem] text-3xl font-semibold ${keyRing(KB_SPECIAL_IDS.space)}`}
@@ -279,25 +350,6 @@ export default function Keyboard({
             })}
           </div>
         </div>
-
-        {!pickMode && predictions.length > 0 ? (
-          <div className="grid shrink-0 grid-cols-4 gap-1.5" style={{ gridAutoRows: 'minmax(48px, auto)' }}>
-            {predictions.map((pred, idx) => (
-              <button
-                key={`pred-${idx}`}
-                type="button"
-                onClick={() => {
-                  const newWords = [...words]
-                  newWords[newWords.length - 1] = pred
-                  setCurrentText(newWords.join(' ') + ' ')
-                }}
-                className="ui-soft-badge min-h-[48px] rounded-[1.25rem] px-2 py-1 text-center text-xl font-semibold shadow-sm transition hover:brightness-105"
-              >
-                {pred}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   )

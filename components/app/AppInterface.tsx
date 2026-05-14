@@ -15,6 +15,8 @@ import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymb
 import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
 import { detectQuestionType } from '@/lib/lexicon/questions'
 import { getAccountSettings } from '@/app/actions/account'
+import { pickBoardGlyphForKeyboardToken } from '@/lib/tablero/keyboardPictoAutocomplete'
+import { fetchFirstArasaacImage } from '@/lib/arasaac'
 import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
@@ -139,6 +141,14 @@ export default function AppInterface({
   /** Guardar pulsaciones para aprendizaje de predicciones (preferencia de privacidad en cuenta). */
   const [shareUsageForPredictions, setShareUsageForPredictions] = useState(
     () => tableroInitial?.accountSettings?.shareUsageForPredictions !== false,
+  )
+  /** Si la palabra del teclado coincide con un símbolo del tablero, mostrar su picto (por defecto activo). */
+  const [keyboardPictoAutocomplete, setKeyboardPictoAutocomplete] = useState(
+    () => tableroInitial?.accountSettings?.keyboardPictoAutocomplete ?? true,
+  )
+  /** Pictograma ARASAAC por palabra escrita con teclado (búsqueda vía API, con caché). */
+  const [keyboardArasaacPictograms, setKeyboardArasaacPictograms] = useState(
+    () => tableroInitial?.accountSettings?.keyboardArasaacPictograms ?? true,
   )
   /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
   const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
@@ -399,6 +409,12 @@ export default function AppInterface({
       const share = s.shareUsageForPredictions !== false
       setShareUsageForPredictions(share)
       if (!share) void clearPendingUsageEvents()
+      if (typeof s.keyboardPictoAutocomplete === 'boolean') {
+        setKeyboardPictoAutocomplete(s.keyboardPictoAutocomplete)
+      }
+      if (typeof s.keyboardArasaacPictograms === 'boolean') {
+        setKeyboardArasaacPictograms(s.keyboardArasaacPictograms)
+      }
     })
   }, [hydratedFromServer])
 
@@ -672,6 +688,11 @@ export default function AppInterface({
       return
     }
 
+    if (activeTab === 'keyboard') {
+      setCompletionChips([])
+      return
+    }
+
     const candidates = mainOrderedSymbols.map((c) => ({
       id: c.id,
       label: c.label,
@@ -719,6 +740,7 @@ export default function AppInterface({
     mainOrderedSymbols,
     toPredictionFromPhraseSelection,
     showPhraseCompletionSection,
+    activeTab,
   ])
 
   const handleDeleteLast = () => {
@@ -877,7 +899,7 @@ export default function AppInterface({
           speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
           externalCompositionReset={phraseCompositionReset}
         />
-        {showPhraseCompletionSection ? (
+        {showPhraseCompletionSection && activeTab !== 'keyboard' ? (
           <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
         ) : null}
       </div>
@@ -903,27 +925,56 @@ export default function AppInterface({
 
               const batchId = Date.now()
               const timestamp = new Date().toISOString()
-              const pseudoSymbols = analyzedTokens.map((token, index) => ({
-                id: `text-${batchId}-${index}`,
-                sourceSymbolId: `text-${batchId}-${index}`,
-                gridId: '',
-                label: token.label,
-                normalizedLabel: token.normalizedLabel,
-                emoji: undefined,
-                imageUrl: undefined,
-                category: 'Texto',
-                posType: token.symbolPosType,
-                posConfidence: token.confidence,
-                manualGrammarOverride: false,
-                lexemeId: token.lexemeId ?? null,
-                positionX: 0,
-                positionY: 0,
-                color: '#f3f4f6',
-                hidden: false,
-                state: 'visible',
-                createdAt: timestamp,
-                updatedAt: timestamp,
-              } as Symbol))
+              const pseudoSymbols = await Promise.all(
+                analyzedTokens.map(async (token, index) => {
+                  const id = `text-${batchId}-${index}`
+                  const glyph =
+                    keyboardPictoAutocomplete && symbols.length > 0
+                      ? pickBoardGlyphForKeyboardToken(symbols, {
+                          label: token.label,
+                          normalizedLabel: token.normalizedLabel,
+                          lexemeId: token.lexemeId ?? null,
+                        })
+                      : null
+
+                  let imageUrl: string | undefined = glyph?.imageUrl
+                  let emoji: string | undefined = glyph?.emoji
+                  let sourceSymbolId = glyph?.sourceSymbolId ?? id
+                  let category: string = glyph?.category ?? 'Texto'
+
+                  if (keyboardArasaacPictograms) {
+                    const arUrl = await fetchFirstArasaacImage(token.label)
+                    if (arUrl) {
+                      imageUrl = arUrl
+                      emoji = undefined
+                      sourceSymbolId = id
+                      category = 'Texto'
+                    }
+                  }
+
+                  return {
+                    id,
+                    sourceSymbolId,
+                    gridId: '',
+                    label: token.label,
+                    normalizedLabel: token.normalizedLabel,
+                    emoji,
+                    imageUrl,
+                    category,
+                    posType: token.symbolPosType,
+                    posConfidence: token.confidence,
+                    manualGrammarOverride: false,
+                    lexemeId: token.lexemeId ?? null,
+                    positionX: 0,
+                    positionY: 0,
+                    color: '#f3f4f6',
+                    hidden: false,
+                    state: 'visible',
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                  } as Symbol
+                }),
+              )
 
               setSelectedSymbols(prev => [...prev, ...pseudoSymbols])
 

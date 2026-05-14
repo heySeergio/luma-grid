@@ -27,6 +27,8 @@ export type PublicAccountSettings = {
     showFrequentPhrasesSection: boolean
     showPhraseCompletionSection: boolean
     showGridCellPredictions: boolean
+    keyboardPictoAutocomplete: boolean
+    keyboardArasaacPictograms: boolean
     defaultTableroTab: DefaultTableroTab
     shareUsageForPredictions: boolean
     hasLocalPassword: boolean
@@ -80,6 +82,8 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
                 showFrequentPhrasesSection: true,
                 showPhraseCompletionSection: true,
                 showGridCellPredictions: true,
+                keyboardPictoAutocomplete: true,
+                keyboardArasaacPictograms: true,
                 password: true,
             } as any,
         })
@@ -92,6 +96,12 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
             ...rest,
             hasLocalPassword: Boolean(_pw),
             showGridCellPredictions: Boolean((rest as { showGridCellPredictions?: boolean }).showGridCellPredictions ?? true),
+            keyboardPictoAutocomplete: Boolean(
+                (rest as { keyboardPictoAutocomplete?: boolean }).keyboardPictoAutocomplete ?? true,
+            ),
+            keyboardArasaacPictograms: Boolean(
+                (rest as { keyboardArasaacPictograms?: boolean }).keyboardArasaacPictograms ?? true,
+            ),
             defaultTableroTab: prefs.defaultTableroTab,
             shareUsageForPredictions: prefs.shareUsageForPredictions,
         } as PublicAccountSettings
@@ -102,6 +112,8 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
                 'showFrequentPhrasesSection',
                 'showPhraseCompletionSection',
                 'showGridCellPredictions',
+                'keyboardPictoAutocomplete',
+                'keyboardArasaacPictograms',
             ])
         ) {
             throw error
@@ -129,6 +141,8 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
             showFrequentPhrasesSection: true,
             showPhraseCompletionSection: true,
             showGridCellPredictions: true,
+            keyboardPictoAutocomplete: true,
+            keyboardArasaacPictograms: true,
             defaultTableroTab: prefs.defaultTableroTab,
             shareUsageForPredictions: prefs.shareUsageForPredictions,
             hasLocalPassword: Boolean(_pw),
@@ -144,6 +158,8 @@ export async function updateAccountSettings(data: {
     showFrequentPhrasesSection: boolean
     showPhraseCompletionSection: boolean
     showGridCellPredictions: boolean
+    keyboardPictoAutocomplete: boolean
+    keyboardArasaacPictograms: boolean
     defaultTableroTab: DefaultTableroTab
     shareUsageForPredictions: boolean
     currentPassword?: string
@@ -159,6 +175,8 @@ export async function updateAccountSettings(data: {
     const showFrequentPhrasesSection = Boolean(data.showFrequentPhrasesSection)
     const showPhraseCompletionSection = Boolean(data.showPhraseCompletionSection)
     const showGridCellPredictions = Boolean(data.showGridCellPredictions)
+    const keyboardPictoAutocomplete = Boolean(data.keyboardPictoAutocomplete)
+    const keyboardArasaacPictograms = Boolean(data.keyboardArasaacPictograms)
     const defaultTableroTab = parseDefaultTableroTab(data.defaultTableroTab)
     const shareUsageForPredictions = Boolean(data.shareUsageForPredictions)
     const currentPassword = data.currentPassword?.trim() ?? ''
@@ -211,6 +229,8 @@ export async function updateAccountSettings(data: {
                 showFrequentPhrasesSection,
                 showPhraseCompletionSection,
                 showGridCellPredictions,
+                keyboardPictoAutocomplete,
+                keyboardArasaacPictograms,
                 defaultTableroTab,
                 shareUsageForPredictions,
                 ...(password ? { password } : {}),
@@ -224,6 +244,8 @@ export async function updateAccountSettings(data: {
                 showFrequentPhrasesSection: true,
                 showPhraseCompletionSection: true,
                 showGridCellPredictions: true,
+                keyboardPictoAutocomplete: true,
+                keyboardArasaacPictograms: true,
                 password: true,
             } as any,
         })
@@ -235,6 +257,12 @@ export async function updateAccountSettings(data: {
             ...rest,
             hasLocalPassword: Boolean(pw),
             showGridCellPredictions: Boolean((rest as { showGridCellPredictions?: boolean }).showGridCellPredictions ?? true),
+            keyboardPictoAutocomplete: Boolean(
+                (rest as { keyboardPictoAutocomplete?: boolean }).keyboardPictoAutocomplete ?? true,
+            ),
+            keyboardArasaacPictograms: Boolean(
+                (rest as { keyboardArasaacPictograms?: boolean }).keyboardArasaacPictograms ?? true,
+            ),
             defaultTableroTab: prefs.defaultTableroTab,
             shareUsageForPredictions: prefs.shareUsageForPredictions,
         } as PublicAccountSettings
@@ -245,6 +273,8 @@ export async function updateAccountSettings(data: {
                 'showFrequentPhrasesSection',
                 'showPhraseCompletionSection',
                 'showGridCellPredictions',
+                'keyboardPictoAutocomplete',
+                'keyboardArasaacPictograms',
             ])
         ) {
             throw error
@@ -280,6 +310,8 @@ export async function updateAccountSettings(data: {
         showFrequentPhrasesSection: true,
         showPhraseCompletionSection: true,
         showGridCellPredictions: true,
+        keyboardPictoAutocomplete: true,
+        keyboardArasaacPictograms: true,
         defaultTableroTab: prefs.defaultTableroTab,
         shareUsageForPredictions: prefs.shareUsageForPredictions,
         hasLocalPassword: Boolean(pw),
