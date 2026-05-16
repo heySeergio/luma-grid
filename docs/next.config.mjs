@@ -1,14 +1,20 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+/** Directorio del sitio de documentación (no la raíz del monorepo). */
+const docsDir = path.dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  /** Evita que Next infiera la raíz del repo padre al haber otro `package-lock.json` arriba. */
+  /**
+   * Monorepo con dos package-lock: sin esto Next/Vercel infieren la raíz del repo,
+   * compilan `middleware.ts` de la app principal (next-auth) y chocan
+   * `outputFileTracingRoot` con `turbopack.root`.
+   */
+  outputFileTracingRoot: docsDir,
   turbopack: {
-    root: __dirname,
+    root: docsDir,
   },
 }
 
