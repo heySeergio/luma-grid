@@ -13,11 +13,9 @@ import {
 } from "@/components/landing/FeaturesFluyeEntrance";
 import { SHOW_LANDING_PRICING_SECTION } from "@/components/landing/landingFlags";
 import { PricingEntrance } from "@/components/landing/PricingEntrance";
-import { HeroDraggableDecors } from "@/components/landing/HeroDraggableDecors";
+import { HeroComposition } from "@/components/landing/HeroComposition";
 import { HeroHeadline } from "@/components/landing/HeroHeadline";
 import { useWaitlistModal } from "@/components/landing/WaitlistModalProvider";
-
-const moverSvgOn = false;
 
 /**
  * Arrastre de planta y niño (misma idea que `moverSvgOn` en el hero).
@@ -95,10 +93,23 @@ function Hero({
       enableLoop={false}
     >
       <div className="relative overflow-visible bg-canvas px-4 pb-10 pt-6 sm:px-6 sm:pb-10 sm:pt-8 md:min-h-[min(38vh,360px)] md:pb-12 md:pt-10 lg:min-h-[min(44vh,420px)] lg:px-6 lg:pb-14 lg:pt-11">
-        <HeroDraggableDecors moverEnabled={moverSvgOn} />
-        <div className="relative z-10 mx-auto mt-1 w-full max-w-6xl sm:mt-3 lg:mt-4">
+        <div
+          className="pointer-events-none absolute bottom-0 left-0 right-0 top-3 z-[5] hidden sm:top-4 md:block"
+          aria-hidden
+        >
+          <div className="absolute bottom-[5.5rem] right-40 w-[min(42vw,32rem)] max-w-[512px] sm:bottom-[6.5rem] sm:right-48 lg:bottom-[9.65rem] lg:right-56 xl:right-64">
+            <HeroComposition className="w-full" />
+          </div>
+        </div>
+        <div className="relative z-10 mx-auto mt-1 flex w-full max-w-6xl flex-col items-center text-center md:items-start md:text-left sm:mt-3 lg:mt-4">
           <HeroHeadline />
-          <div className="mt-8 w-full sm:mt-16 md:mt-20 lg:mt-24">
+          <div
+            className="relative z-[5] mx-auto mt-6 flex w-full max-w-[min(88vw,20rem)] justify-center md:hidden"
+            aria-hidden
+          >
+            <HeroComposition className="w-full" />
+          </div>
+          <div className="mt-6 flex w-full flex-col items-center sm:mt-16 md:mt-20 md:items-start lg:mt-24">
             <p className="max-w-2xl whitespace-pre-line text-base leading-snug text-[#042D22] sm:text-lg sm:leading-snug">
               {`Luma Grid es un tablero de comunicación
 aumentativa y alternativa.
@@ -106,7 +117,7 @@ Frases, pictogramas, voz e inteligencia
 artificial para expresarte y conectar
 con el mundo.`}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-4 sm:gap-4">
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-3 sm:mt-4 sm:gap-4 md:justify-start">
               {comingSoon ? (
                 <button
                   type="button"
@@ -140,7 +151,7 @@ con el mundo.`}
                 </Link>
               )}
             </div>
-            <ul className="mt-8 grid w-full grid-cols-2 gap-x-6 gap-y-4 text-sm font-bold text-[#042D22] sm:mt-10 sm:grid-cols-4 sm:gap-x-8 sm:gap-y-3 lg:mt-11 lg:gap-x-10">
+            <ul className="mt-8 grid w-full max-w-sm grid-cols-2 justify-items-center gap-x-6 gap-y-4 text-sm font-bold text-[#042D22] sm:mt-10 sm:max-w-none sm:grid-cols-4 sm:justify-items-stretch sm:gap-x-8 sm:gap-y-3 lg:mt-11 lg:gap-x-10">
               <li className="flex min-w-0 items-center gap-2.5">
                 <span className="shrink-0 text-[#35AA63]" aria-hidden>
                   {heroFeatureIcons.wifi}

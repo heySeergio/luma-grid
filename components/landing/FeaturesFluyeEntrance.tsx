@@ -38,6 +38,23 @@ const headlineBlock = {
   enter: { opacity: 1, y: 0, scale: 1 },
 };
 
+const DOCS_URL = "https://docs.lumagrid.app";
+
+function FeaturesFluyeDocsLink({ className }: { className?: string }) {
+  return (
+    <p className={className ?? "mt-3 sm:mt-4"}>
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm font-semibold text-[#1C2B24]/72 underline-offset-4 transition hover:text-[#FE6B45] hover:underline"
+      >
+        Ver documentación completa
+      </a>
+    </p>
+  );
+}
+
 export type FeaturesFluyeListItem = {
   title: string;
   body: string;
@@ -68,7 +85,8 @@ export function FeaturesFluyeEntrance({
   if (reduceMotion) {
     return (
       <div ref={rootRef} className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:items-center lg:gap-16 xl:gap-20">
-        <div className="relative min-w-0 overflow-visible">
+        <div className="relative isolate min-w-0 overflow-visible">
+          <div className="relative z-20 max-md:bg-[#FFF9F2]">
           <h2
             id="comunicacion-fluye"
             className="max-w-xl scroll-mt-40 text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:scroll-mt-32 sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]"
@@ -104,9 +122,11 @@ export function FeaturesFluyeEntrance({
               </span>
             </span>
           </h2>
+          <FeaturesFluyeDocsLink />
+          </div>
 
           <FeaturesDriftShell
-            className="relative mx-auto mt-10 block min-h-[min(52dvh,360px)] w-full max-w-lg sm:mt-12 sm:min-h-[380px] lg:mx-0 lg:max-w-none lg:min-h-[420px]"
+            className="relative z-0 mx-auto mt-10 block min-h-[min(52dvh,360px)] w-full max-w-lg sm:mt-12 sm:min-h-[380px] max-md:mt-8 lg:mx-0 lg:max-w-none lg:min-h-[420px]"
             driftDelaySec={0}
           >
             <FeaturesFluyeDecors
@@ -148,7 +168,8 @@ export function FeaturesFluyeEntrance({
       ref={rootRef}
       className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:items-center lg:gap-16 xl:gap-20"
     >
-      <div className="relative min-w-0 overflow-visible">
+      <div className="relative isolate min-w-0 overflow-visible">
+        <div className="relative z-20 max-md:bg-[#FFF9F2]">
         <h2
           id="comunicacion-fluye"
           className="max-w-xl scroll-mt-40 text-3xl font-extrabold leading-[1.12] tracking-tight text-[#1C2B24] sm:scroll-mt-32 sm:text-4xl lg:text-[2.5rem] lg:leading-[1.1]"
@@ -204,9 +225,21 @@ export function FeaturesFluyeEntrance({
             </span>
           </motion.span>
         </h2>
+        <motion.div
+          initial={headlineBlock.initial}
+          animate={reveal ? headlineBlock.enter : headlineBlock.initial}
+          transition={{
+            duration: ENTRANCE_DURATION,
+            ease: easeOut,
+            delay: headlineLine2Delay + 0.08,
+          }}
+        >
+          <FeaturesFluyeDocsLink className="relative z-20 mt-3 sm:mt-4" />
+        </motion.div>
+        </div>
 
         <FeaturesDriftShell
-          className="relative mx-auto mt-10 block min-h-[min(52dvh,360px)] w-full max-w-lg sm:mt-12 sm:min-h-[380px] lg:mx-0 lg:max-w-none lg:min-h-[420px]"
+          className="relative z-0 mx-auto mt-10 block min-h-[min(52dvh,360px)] w-full max-w-lg sm:mt-12 sm:min-h-[380px] max-md:mt-8 lg:mx-0 lg:max-w-none lg:min-h-[420px]"
           driftDelaySec={driftDelaySec}
         >
           <FeaturesFluyeDecors
