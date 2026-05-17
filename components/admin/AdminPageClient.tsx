@@ -566,6 +566,7 @@ export default function AdminPageClient() {
     keyboardArasaacPictograms?: boolean
     defaultTableroTab?: DefaultTableroTab
     shareUsageForPredictions?: boolean
+    adminGettingStartedDismissed?: boolean
     hasLocalPassword?: boolean
   } | null>(null)
   const [accountName, setAccountName] = useState('')
@@ -2735,9 +2736,14 @@ export default function AdminPageClient() {
         </div>
       </header>
 
-      <AdminGettingStartedBanner />
+      <AdminGettingStartedBanner
+        serverDismissed={Boolean(accountSettings?.adminGettingStartedDismissed)}
+      />
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <motion.div
+          data-admin-scroll-root
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
         <div className="flex min-h-min flex-col lg:flex-row lg:items-stretch">
             {/* Sidebar */}
             <aside
@@ -4572,7 +4578,7 @@ export default function AdminPageClient() {
               </div>
             </main>
           </div>
-        </div>
+        </motion.div>
 
       {/* Modern Editing Modal */}
       <AnimatePresence>
