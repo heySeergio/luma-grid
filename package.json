@@ -28,7 +28,7 @@
     "db:migrate": "node scripts/prisma-migrate-envlocal.mjs",
     "db:migrate:dev": "node scripts/prisma-env.mjs migrate dev",
     "migrate:sqlite-user": "node scripts/migrate-sqlite-user-to-neon.mjs",
-    "test:lexicon-detection": "node scripts/test-lexicon-detection.mjs",
+    "test:lexicon-detection": "npx tsx scripts/test-lexicon-detection.mjs",
     "test:mejora-plan": "node scripts/test-mejora-plan.mjs",
     "repair:demo-email": "node scripts/repair-demo-by-email.mjs",
     "reset:demo-board": "npx tsx --tsconfig tsconfig.json scripts/reset-demo-board-by-email.ts",
