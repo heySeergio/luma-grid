@@ -1,6 +1,10 @@
 import { db } from '@/lib/dexie/db'
 import { recordSymbolUsage } from '@/app/actions/predictions'
+import { recordUtterance } from '@/app/actions/utterances'
+import { recordNavigation } from '@/app/actions/navigation'
 import type { PosType } from '@/lib/supabase/types'
+import type { RecordUtterancePayload } from '@/lib/usageEvaluation/utteranceTypes'
+import type { RecordNavigationPayload } from '@/lib/usageEvaluation/navigationTypes'
 
 export type PendingUsageEventPayload = {
   profileId: string
@@ -24,6 +28,8 @@ export type PendingUsageEventPayload = {
   sequenceIndex: number
 }
 
+export type PendingSyncType = 'usage_event' | 'utterance_event' | 'navigation_event'
+
 export async function enqueuePendingUsageEvent(payload: PendingUsageEventPayload) {
   await db.pendingSync.add({
     type: 'usage_event',
@@ -32,14 +38,48 @@ export async function enqueuePendingUsageEvent(payload: PendingUsageEventPayload
   })
 }
 
-/** Reintenta enviar eventos de uso guardados en Dexie (p. ej. tras recuperar red). */
+export async function enqueuePendingUtteranceEvent(payload: RecordUtterancePayload) {
+  await db.pendingSync.add({
+    type: 'utterance_event',
+    data: { ...payload } as Record<string, unknown>,
+    createdAt: Date.now(),
+  })
+}
+
+export async function enqueuePendingNavigationEvent(payload: RecordNavigationPayload) {
+  await db.pendingSync.add({
+    type: 'navigation_event',
+    data: { ...payload } as Record<string, unknown>,
+    createdAt: Date.now(),
+  })
+}
+
+async function flushRow(row: { id?: number; type: string; data: Record<string, unknown> }): Promise<boolean> {
+  if (row.type === 'usage_event') {
+    await recordSymbolUsage(row.data as unknown as PendingUsageEventPayload)
+    return true
+  }
+  if (row.type === 'utterance_event') {
+    await recordUtterance(row.data as unknown as RecordUtterancePayload)
+    return true
+  }
+  if (row.type === 'navigation_event') {
+    await recordNavigation(row.data as unknown as RecordNavigationPayload)
+    return true
+  }
+  return false
+}
+
+/** Reintenta enviar eventos de uso/enunciados/navegación guardados en Dexie (p. ej. tras recuperar red). */
 export async function flushPendingUsageEvents(): Promise<number> {
-  const rows = await db.pendingSync.where('type').equals('usage_event').toArray()
+  const types: PendingSyncType[] = ['usage_event', 'utterance_event', 'navigation_event']
+  const rows = await db.pendingSync.where('type').anyOf(types).toArray()
   rows.sort((a, b) => a.createdAt - b.createdAt)
   let flushed = 0
   for (const row of rows) {
     try {
-      await recordSymbolUsage(row.data as unknown as PendingUsageEventPayload)
+      const ok = await flushRow(row)
+      if (!ok) continue
       if (row.id != null) await db.pendingSync.delete(row.id)
       flushed += 1
     } catch {
@@ -49,14 +89,14 @@ export async function flushPendingUsageEvents(): Promise<number> {
   return flushed
 }
 
-/** Número de eventos de uso pendientes de envío al servidor (p. ej. tras cortes de red). */
+/** Número de eventos de telemetría pendientes de envío al servidor. */
 export async function getPendingUsageEventCount(): Promise<number> {
-  return db.pendingSync.where('type').equals('usage_event').count()
+  return db.pendingSync.where('type').anyOf(['usage_event', 'utterance_event', 'navigation_event']).count()
 }
 
-/** Elimina eventos de uso pendientes (p. ej. al desactivar la preferencia de privacidad). */
+/** Elimina eventos de telemetría pendientes (p. ej. al desactivar la preferencia de privacidad). */
 export async function clearPendingUsageEvents(): Promise<number> {
-  const rows = await db.pendingSync.where('type').equals('usage_event').toArray()
+  const rows = await db.pendingSync.where('type').anyOf(['usage_event', 'utterance_event', 'navigation_event']).toArray()
   let cleared = 0
   for (const row of rows) {
     if (row.id != null) {

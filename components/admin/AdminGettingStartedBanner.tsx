@@ -1,9 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compass, X } from 'lucide-react'
+import { dismissAdminGettingStartedBanner } from '@/app/actions/account'
 
 const STORAGE_KEY = 'luma-admin-getting-started-dismissed-v1'
+const AUTO_DISMISS_MS = 25_000
 
 const steps = [
   'Crea un tablero o elige uno en la lista y usa el icono del ojo para marcar cuál se abre al entrar al comunicador.',
@@ -13,30 +15,68 @@ const steps = [
   'En el panel, abre Cuenta y luego «Léxico y Evaluación» para ver cobertura y símbolos pendientes de revisión.',
 ]
 
-export default function AdminGettingStartedBanner() {
-  const [visible, setVisible] = useState(false)
+function readLocalDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return
-      if (window.localStorage.getItem(STORAGE_KEY) === '1') {
-        setVisible(false)
-        return
-      }
-      setVisible(true)
-    } catch {
-      setVisible(true)
-    }
-  }, [])
+function persistLocalDismissed() {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+type AdminGettingStartedBannerProps = {
+  /** Preferencia en cuenta (servidor); si es true, no se muestra nunca más. */
+  serverDismissed?: boolean
+}
+
+export default function AdminGettingStartedBanner({ serverDismissed = false }: AdminGettingStartedBannerProps) {
+  const [visible, setVisible] = useState(() => {
+    if (serverDismissed || readLocalDismissed()) return false
+    return true
+  })
+  const dismissedRef = useRef(serverDismissed || readLocalDismissed())
 
   const dismiss = useCallback(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, '1')
-    } catch {
-      /* ignore */
-    }
+    if (dismissedRef.current) return
+    dismissedRef.current = true
+    persistLocalDismissed()
     setVisible(false)
+    void dismissAdminGettingStartedBanner()
   }, [])
+
+  useEffect(() => {
+    if (!serverDismissed) return
+    dismissedRef.current = true
+    persistLocalDismissed()
+    setVisible(false)
+  }, [serverDismissed])
+
+  useEffect(() => {
+    if (!visible) return
+    const timer = window.setTimeout(dismiss, AUTO_DISMISS_MS)
+    return () => window.clearTimeout(timer)
+  }, [visible, dismiss])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const onScroll = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (!target.closest('.theme-page-shell')) return
+      dismiss()
+    }
+
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [visible, dismiss])
 
   if (!visible) return null
 

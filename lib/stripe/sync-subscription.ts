@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
 import { resolveDbPlanFromSubscriptionItems } from '@/lib/stripe/plan-mapping'
@@ -5,6 +6,21 @@ import { periodEndFromSubscription } from '@/lib/stripe/subscription-helpers'
 import { shouldSkipStripeSubscriptionPull } from '@/lib/stripe/sync-bypass'
 import { hasActivePaidSubscription } from '@/lib/subscription/plans'
 import type Stripe from 'stripe'
+
+/** Campos de User usados en lectura/escritura de voz TTS. */
+export const voiceOpsUserSelect = {
+  id: true,
+  email: true,
+  plan: true,
+  voiceId: true,
+  ttsMode: true,
+  charactersUsed: true,
+  ttsBillingMonth: true,
+  stripeSubscriptionId: true,
+  planExpiresAt: true,
+} satisfies Prisma.UserSelect
+
+export type VoiceOpsUser = Prisma.UserGetPayload<{ select: typeof voiceOpsUserSelect }>
 
 function planRank(plan: 'voz' | 'identidad'): number {
   return plan === 'identidad' ? 2 : 1
@@ -98,26 +114,33 @@ const lastStripeSyncByUser = new Map<string, number>()
 const STRIPE_SYNC_COOLDOWN_MS = 120_000
 
 /**
- * Si la BD no refleja una suscripción activa, intenta alinear con Stripe (como mucho cada ~2 min por usuario e instancia).
+ * Lee el usuario para operaciones TTS y, si hace falta, alinea plan con Stripe (cooldown ~2 min).
+ * Una sola consulta inicial cuando la suscripción ya está activa en BD.
  */
-export async function maybeSyncStripeSubscriptionFromStripe(userId: string): Promise<void> {
-  const user = await prisma.user.findUnique({
+export async function fetchUserForVoiceOps(userId: string): Promise<VoiceOpsUser | null> {
+  let user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      email: true,
-      plan: true,
-      stripeSubscriptionId: true,
-      planExpiresAt: true,
-    },
+    select: voiceOpsUserSelect,
   })
-  if (!user) return
-  if (shouldSkipStripeSubscriptionPull(user.email)) return
-  if (hasActivePaidSubscription(user, user.email)) return
+  if (!user) return null
+  if (shouldSkipStripeSubscriptionPull(user.email)) return user
+  if (hasActivePaidSubscription(user, user.email)) return user
 
   const now = Date.now()
   const last = lastStripeSyncByUser.get(userId) ?? 0
-  if (now - last < STRIPE_SYNC_COOLDOWN_MS) return
+  if (now - last < STRIPE_SYNC_COOLDOWN_MS) return user
 
   lastStripeSyncByUser.set(userId, now)
   await syncStripeSubscriptionForUser(userId)
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: voiceOpsUserSelect,
+  })
+}
+
+/**
+ * Si la BD no refleja una suscripción activa, intenta alinear con Stripe (como mucho cada ~2 min por usuario e instancia).
+ */
+export async function maybeSyncStripeSubscriptionFromStripe(userId: string): Promise<void> {
+  await fetchUserForVoiceOps(userId)
 }

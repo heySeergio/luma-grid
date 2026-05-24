@@ -1,5 +1,7 @@
+import type { TapAudioMeta } from '@/lib/symbolTapAudio'
 import type { WordVariantsConfig } from '@/lib/symbolWordVariants'
 
+export type { TapAudioMeta } from '@/lib/symbolTapAudio'
 export type { WordVariantsConfig } from '@/lib/symbolWordVariants'
 
 export type PosType = 'pronoun' | 'verb' | 'noun' | 'adj' | 'adverb' | 'prep' | 'other'
@@ -53,6 +55,9 @@ export interface Symbol {
   wordVariants?: WordVariantsConfig
   /** Si es true y el símbolo está en el grid principal, la celda se muestra también al abrir una carpeta. */
   fixedCell?: boolean
+  /** Audio al pulsar la celda (no al leer la frase). */
+  tapAudioUrl?: string
+  tapAudioMeta?: TapAudioMeta
   arasaacId?: number
   createdAt: string
   updatedAt: string

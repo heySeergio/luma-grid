@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { elevenLabsAddVoiceFromFiles } from '@/lib/elevenlabs/server'
-import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
+import { fetchUserForVoiceOps } from '@/lib/stripe/sync-subscription'
 import { canUseVoiceCloning, effectiveSubscriptionPlan, hasActivePaidSubscription } from '@/lib/subscription/plans'
 
 export const dynamic = 'force-dynamic'
@@ -27,12 +27,7 @@ export async function POST(req: Request) {
       )
     }
 
-    await maybeSyncStripeSubscriptionFromStripe(session.user.id)
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, email: true, plan: true, stripeSubscriptionId: true, planExpiresAt: true },
-    })
+    const user = await fetchUserForVoiceOps(session.user.id)
 
     if (!user) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })

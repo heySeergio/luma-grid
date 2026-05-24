@@ -5,6 +5,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { findOrCreateUserFromOAuth } from '@/lib/auth/oauthUser'
+import { sessionUserSelect } from '@/lib/auth/sessionUserSelect'
 import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
@@ -42,6 +43,10 @@ export const authOptions: NextAuthOptions = {
         const email = normalizeAuthEmail(emailRaw)
         const user = await prisma.user.findUnique({
           where: { email },
+          select: {
+            ...sessionUserSelect,
+            password: true,
+          },
         })
         if (!user?.password) return null
         const match = await bcrypt.compare(passwordRaw, user.password)
@@ -80,7 +85,10 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user, account, trigger, session }) {
       if (account?.provider === 'credentials' && user?.id) {
-        const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: sessionUserSelect,
+        })
         if (dbUser) {
           token.sub = dbUser.id
           token.email = dbUser.email

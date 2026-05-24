@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, type CSSProperties, type KeyboardEvent } from 'react'
 import { Delete, CornerDownLeft } from 'lucide-react'
 import { SPANISH_DICTIONARY } from '@/lib/data/spanishDictionary'
+import { getKeyboardLexiconSuggestions } from '@/lib/keyboard/lexiconSuggestions'
 import { keyboardThemeToCssVars, type KeyboardThemeColors } from '@/lib/keyboard/theme'
 import {
   LETTER_ROWS,
@@ -26,6 +27,13 @@ interface Props {
   selectedKeyId?: string | null
 }
 
+/** Otro campo editable (p. ej. búsqueda); no redirigir teclado físico al compositor. */
+function isForeignEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable
+}
+
 export default function Keyboard({
   onTextAdd,
   theme,
@@ -35,6 +43,15 @@ export default function Keyboard({
 }: Props) {
   const [currentText, setCurrentText] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const composerInputRef = useRef<HTMLInputElement>(null)
+  const keyboardHandlersRef = useRef({
+    pickMode,
+    isSubmitting,
+    handleKey: (_key: string) => {},
+    handleDelete: () => {},
+    handleAddWord: async () => {},
+    handleSpaceCommit: async (_bufferOverride?: string) => {},
+  })
 
   const words = currentText.split(' ')
   const lastWord = words[words.length - 1].toLowerCase()
@@ -42,7 +59,7 @@ export default function Keyboard({
   const predictions =
     pickMode || !lastWord
       ? []
-      : SPANISH_DICTIONARY.filter(w => w.startsWith(lastWord) && w !== lastWord).slice(0, 8)
+      : getKeyboardLexiconSuggestions(lastWord, SPANISH_DICTIONARY)
 
   const keyColors = theme?.keyColors
   const keyTextColors = theme?.keyTextColors
@@ -137,6 +154,53 @@ export default function Keyboard({
     }
   }
 
+  keyboardHandlersRef.current = {
+    pickMode,
+    isSubmitting,
+    handleKey,
+    handleDelete,
+    handleAddWord,
+    handleSpaceCommit,
+  }
+
+  /** Teclado físico: mismo borrador que las teclas en pantalla, sin exigir foco en el input. */
+  useEffect(() => {
+    const onWindowKeyDown = (e: globalThis.KeyboardEvent) => {
+      const h = keyboardHandlersRef.current
+      if (h.pickMode || h.isSubmitting) return
+
+      const composer = composerInputRef.current
+      const target = e.target
+      if (composer && target instanceof Node && composer.contains(target)) return
+      if (isForeignEditableTarget(target)) return
+
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+
+      if (e.key === 'Backspace') {
+        e.preventDefault()
+        h.handleDelete()
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        void h.handleAddWord()
+        return
+      }
+      if (e.key === ' ') {
+        e.preventDefault()
+        void h.handleSpaceCommit()
+        return
+      }
+      if (e.key.length === 1) {
+        e.preventDefault()
+        h.handleKey(e.key)
+      }
+    }
+
+    window.addEventListener('keydown', onWindowKeyDown)
+    return () => window.removeEventListener('keydown', onWindowKeyDown)
+  }, [])
+
   const cssVars = keyboardThemeToCssVars(theme ?? null)
 
   return (
@@ -161,6 +225,7 @@ export default function Keyboard({
             className="kb-composer-input app-panel col-span-11 flex min-h-[68px] items-center rounded-[1.4rem] border px-4 py-2"
           >
             <input
+              ref={composerInputRef}
               type="text"
               autoComplete="off"
               autoCorrect="off"

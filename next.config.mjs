@@ -1,7 +1,11 @@
 import { createRequire } from 'node:module'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import withPWA from 'next-pwa'
 
 const require = createRequire(import.meta.url)
+/** Raíz de esta app (evita que Next infiera mal el monorepo por `docs/package-lock.json`). */
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 /** Cachés por defecto de next-pwa (añadimos regla previa para NextAuth). */
 const pwaDefaultRuntimeCaching = require('next-pwa/cache.js')
 
@@ -31,6 +35,10 @@ const withPwaWrapped = withPWA({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: projectRoot,
+  turbopack: {
+    root: projectRoot,
+  },
   /**
    * En dev con Webpack (`next dev --webpack`), la caché en disco bajo `.next/dev/cache/webpack`
    * a veces genera ENOENT (*.pack.gz, routes-manifest) en Windows si la carpeta se toca con el servidor en marcha.
