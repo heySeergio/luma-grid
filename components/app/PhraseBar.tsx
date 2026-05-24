@@ -90,6 +90,22 @@ interface Props {
   speakPhrase?: (phrase: string) => Promise<void>
   /** Al cambiar (p. ej. frase rápida inyectada), limpia la línea de conjugación previa. */
   externalCompositionReset?: number
+  /** Modo descanso: el tablero no acepta pulsaciones (p. ej. mirada accidental). */
+  restMode?: boolean
+  onRestModeToggle?: () => void
+}
+
+function RestModeZzzIcon({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-end gap-px font-black leading-none tracking-tighter ${className}`}
+      aria-hidden
+    >
+      <span className="text-[0.55em] opacity-50 -rotate-12 translate-y-px">z</span>
+      <span className="text-[0.72em] opacity-75 -translate-y-0.5">z</span>
+      <span className="text-[0.95em]">z</span>
+    </span>
+  )
 }
 
 export default function PhraseBar({
@@ -105,6 +121,8 @@ export default function PhraseBar({
   onAfterSpeak,
   speakPhrase,
   externalCompositionReset = 0,
+  restMode = false,
+  onRestModeToggle,
 }: Props) {
   const router = useRouter()
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -301,6 +319,24 @@ export default function PhraseBar({
         >
           <RotateCcw className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8" />
         </button>
+
+        {onRestModeToggle ? (
+          <button
+            onClick={onRestModeToggle}
+            disabled={!phraseChromeReady}
+            type="button"
+            aria-pressed={restMode}
+            aria-label={restMode ? 'Salir del modo descanso' : 'Modo descanso (pausar símbolos)'}
+            title={restMode ? 'Salir del modo descanso' : 'Modo descanso'}
+            className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-[1.35rem] transition-all disabled:opacity-40 sm:h-16 sm:w-16 sm:text-[1.5rem] md:h-[4.5rem] md:w-[4.5rem] md:text-[1.65rem] lg:h-20 lg:w-20 lg:text-[1.85rem] ${
+              restMode
+                ? 'ui-primary-button text-[var(--app-primary-button-foreground)] ring-2 ring-[#fe6b45]/55'
+                : 'ui-icon-button'
+            }`}
+          >
+            <RestModeZzzIcon />
+          </button>
+        ) : null}
 
         <button
           onClick={handleClearAllClick}

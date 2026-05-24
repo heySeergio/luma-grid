@@ -16,6 +16,12 @@ import { detectLexemeForLabel } from '@/lib/lexicon/detect'
 import { normalizeLabelForLexicalMatch } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOL_COLOR, normalizeSymbolColor } from '@/lib/ui/symbolColors'
 import {
+    normalizeTapAudioMeta,
+    normalizeTapAudioUrl,
+    parseTapAudioMetaForClient,
+    tapAudioMetaCanonical,
+} from '@/lib/symbolTapAudio'
+import {
     normalizeWordVariantsInput,
     parseWordVariantsForClient,
     wordVariantsCanonical,
@@ -65,6 +71,8 @@ function mapPrismaSymbolToClient(
         opensKeyboard?: boolean
         wordVariants?: unknown | null
         fixedCell?: boolean | null
+        tapAudioUrl?: string | null
+        tapAudioMeta?: unknown | null
         createdAt: Date
         updatedAt: Date
     },
@@ -93,6 +101,8 @@ function mapPrismaSymbolToClient(
             return DEFAULT_BOARD_WORD_VARIANTS_BY_LABEL[s.label.trim()]
         })(),
         fixedCell: Boolean(s.fixedCell),
+        tapAudioUrl: normalizeTapAudioUrl(s.tapAudioUrl) ?? undefined,
+        tapAudioMeta: parseTapAudioMetaForClient(s.tapAudioMeta),
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
     }
@@ -127,6 +137,10 @@ type SymbolInput = {
     word_variants?: unknown
     fixedCell?: boolean | null
     fixed_cell?: boolean | null
+    tapAudioUrl?: string | null
+    tap_audio_url?: string | null
+    tapAudioMeta?: unknown
+    tap_audio_meta?: unknown
 }
 
 function effectiveGridDimensions(profile: { gridCols: number; gridRows: number }) {
@@ -185,6 +199,8 @@ function stableSymbolInputFingerprint(sym: SymbolInput): string {
         opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
         wordVariants: wordVariantsCanonical(sym.wordVariants ?? sym.word_variants),
         fixedCell: Boolean(sym.fixedCell ?? sym.fixed_cell),
+        tapAudioUrl: normalizeTapAudioUrl(sym.tapAudioUrl ?? sym.tap_audio_url),
+        tapAudioMeta: tapAudioMetaCanonical(sym.tapAudioMeta ?? sym.tap_audio_meta),
     })
 }
 
@@ -255,6 +271,8 @@ type SymbolRowForDiff = {
     opensKeyboard: boolean
     wordVariants: unknown | null
     fixedCell: boolean
+    tapAudioUrl: string | null
+    tapAudioMeta: unknown | null
 }
 
 /** Si devuelve true, el payload coincide con la fila: no hace falta enrich ni UPDATE. */
@@ -294,6 +312,16 @@ function symbolInputMatchesDb(sym: SymbolInput, db: SymbolRowForDiff): boolean {
 
     const fixedCell = Boolean(sym.fixedCell ?? sym.fixed_cell)
     if (fixedCell !== db.fixedCell) return false
+
+    const tapUrl = normalizeTapAudioUrl(sym.tapAudioUrl ?? sym.tap_audio_url)
+    if (tapUrl !== db.tapAudioUrl) return false
+
+    if (
+        tapAudioMetaCanonical(sym.tapAudioMeta ?? sym.tap_audio_meta) !==
+        tapAudioMetaCanonical(db.tapAudioMeta)
+    ) {
+        return false
+    }
 
     const manual = Boolean(sym.manualGrammarOverride ?? sym.manual_grammar_override)
     if (manual !== db.manualGrammarOverride) return false
@@ -431,6 +459,8 @@ async function enrichSymbolInput(sym: SymbolInput) {
         opensKeyboard: Boolean(sym.opensKeyboard ?? sym.opens_keyboard),
         wordVariants: normalizeWordVariantsInput(sym.wordVariants ?? sym.word_variants),
         fixedCell: Boolean(sym.fixedCell ?? sym.fixed_cell),
+        tapAudioUrl: normalizeTapAudioUrl(sym.tapAudioUrl ?? sym.tap_audio_url),
+        tapAudioMeta: normalizeTapAudioMeta(sym.tapAudioMeta ?? sym.tap_audio_meta),
     }
 }
 
@@ -490,6 +520,7 @@ export async function backfillProfileSymbolLexicon(profileId: string, userId: st
                             lexemeId: enriched.lexemeId,
                             color: enriched.color,
                         },
+                        select: { id: true },
                     })
                 }
             }, SYMBOL_PERSIST_TX)
@@ -502,7 +533,11 @@ export async function backfillProfileSymbolLexicon(profileId: string, userId: st
                 'manualGrammarOverride',
                 'lexemeId',
                 'opensKeyboard',
-            ])
+                'tapAudioUrl',
+                'tapAudioMeta',
+            ]) ||
+            isMissingDatabaseColumnError(error, 'tap_audio_url') ||
+            isMissingDatabaseColumnError(error, 'tap_audio_meta')
         ) {
             return
         }
@@ -515,6 +550,7 @@ function buildSymbolWriteData(
     includeLexicalFields: boolean,
     includeWordVariants = true,
     includeFixedCell = true,
+    includeTapAudio = true,
 ) {
     return {
         label: enriched.label,
@@ -529,6 +565,15 @@ function buildSymbolWriteData(
         gridId: enriched.gridId,
         opensKeyboard: enriched.opensKeyboard,
         ...(includeFixedCell ? { fixedCell: enriched.fixedCell } : {}),
+        ...(includeTapAudio
+            ? {
+                tapAudioUrl: enriched.tapAudioUrl,
+                tapAudioMeta:
+                    enriched.tapAudioMeta === null
+                        ? Prisma.JsonNull
+                        : (JSON.parse(JSON.stringify(enriched.tapAudioMeta)) as Prisma.InputJsonValue),
+            }
+            : {}),
         ...(includeWordVariants
             ? {
                 wordVariants:
@@ -555,6 +600,7 @@ async function persistSymbols(
     includeLexicalFields: boolean,
     includeWordVariants = true,
     includeFixedCell = true,
+    includeTapAudio = true,
 ) {
     await prisma.$transaction(async (tx) => {
         for (let index = 0; index < symbols.length; index += 1) {
@@ -567,6 +613,7 @@ async function persistSymbols(
                 includeLexicalFields,
                 includeWordVariants,
                 includeFixedCell,
+                includeTapAudio,
             )
 
             if (sym.id && !sym.id.startsWith('new-') && !sym.id.startsWith('template') && !sym.id.startsWith('fixed-left')) {
@@ -614,62 +661,103 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
                 opensKeyboard: true,
                 wordVariants: true,
                 fixedCell: true,
+                tapAudioUrl: true,
+                tapAudioMeta: true,
             },
         })
         return rows as SymbolRowForDiff[]
     } catch (error) {
         if (
-            !isUnknownPrismaFieldError(error, ['opensKeyboard', 'wordVariants', 'fixedCell']) &&
+            !isUnknownPrismaFieldError(error, [
+                'opensKeyboard',
+                'wordVariants',
+                'fixedCell',
+                'tapAudioUrl',
+                'tapAudioMeta',
+            ]) &&
             !isMissingDatabaseColumnError(error, 'word_variants') &&
             !isMissingDatabaseColumnError(error, 'opens_keyboard') &&
-            !isMissingDatabaseColumnError(error, 'fixed_cell')
+            !isMissingDatabaseColumnError(error, 'fixed_cell') &&
+            !isMissingDatabaseColumnError(error, 'tap_audio_url') &&
+            !isMissingDatabaseColumnError(error, 'tap_audio_meta')
         ) {
             throw error
         }
         try {
             const rows = await prisma.symbol.findMany({
                 where: { profileId },
-                select: { ...selectBase, opensKeyboard: true, wordVariants: true },
+                select: {
+                    ...selectBase,
+                    opensKeyboard: true,
+                    wordVariants: true,
+                    fixedCell: true,
+                },
             })
             return rows.map((r) => ({
                 ...r,
-                fixedCell: false,
+                tapAudioUrl: null,
+                tapAudioMeta: null,
             })) as SymbolRowForDiff[]
         } catch (e2) {
             if (
-                !isUnknownPrismaFieldError(e2, ['opensKeyboard', 'wordVariants']) &&
+                !isUnknownPrismaFieldError(e2, ['opensKeyboard', 'wordVariants', 'fixedCell']) &&
                 !isMissingDatabaseColumnError(e2, 'word_variants') &&
-                !isMissingDatabaseColumnError(e2, 'opens_keyboard')
+                !isMissingDatabaseColumnError(e2, 'opens_keyboard') &&
+                !isMissingDatabaseColumnError(e2, 'fixed_cell')
             ) {
                 throw e2
             }
             try {
                 const rows = await prisma.symbol.findMany({
                     where: { profileId },
-                    select: { ...selectBase, opensKeyboard: true },
+                    select: { ...selectBase, opensKeyboard: true, wordVariants: true },
                 })
                 return rows.map((r) => ({
                     ...r,
-                    wordVariants: null,
                     fixedCell: false,
+                    tapAudioUrl: null,
+                    tapAudioMeta: null,
                 })) as SymbolRowForDiff[]
             } catch (e3) {
                 if (
-                    !isUnknownPrismaFieldError(e3, ['opensKeyboard']) &&
+                    !isUnknownPrismaFieldError(e3, ['opensKeyboard', 'wordVariants']) &&
+                    !isMissingDatabaseColumnError(e3, 'word_variants') &&
                     !isMissingDatabaseColumnError(e3, 'opens_keyboard')
                 ) {
                     throw e3
                 }
-                const rows = await prisma.symbol.findMany({
-                    where: { profileId },
-                    select: selectBase,
-                })
-                return rows.map((r) => ({
-                    ...r,
-                    opensKeyboard: false,
-                    wordVariants: null,
-                    fixedCell: false,
-                })) as SymbolRowForDiff[]
+                try {
+                    const rows = await prisma.symbol.findMany({
+                        where: { profileId },
+                        select: { ...selectBase, opensKeyboard: true },
+                    })
+                    return rows.map((r) => ({
+                        ...r,
+                        wordVariants: null,
+                        fixedCell: false,
+                        tapAudioUrl: null,
+                        tapAudioMeta: null,
+                    })) as SymbolRowForDiff[]
+                } catch (e4) {
+                    if (
+                        !isUnknownPrismaFieldError(e4, ['opensKeyboard']) &&
+                        !isMissingDatabaseColumnError(e4, 'opens_keyboard')
+                    ) {
+                        throw e4
+                    }
+                    const rows = await prisma.symbol.findMany({
+                        where: { profileId },
+                        select: selectBase,
+                    })
+                    return rows.map((r) => ({
+                        ...r,
+                        opensKeyboard: false,
+                        wordVariants: null,
+                        fixedCell: false,
+                        tapAudioUrl: null,
+                        tapAudioMeta: null,
+                    })) as SymbolRowForDiff[]
+                }
             }
         }
     }
@@ -716,7 +804,7 @@ export async function getProfileSymbols(profileId: string) {
     return inBounds.map((row) => mapPrismaSymbolToClient(row))
 }
 
-export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
+export async function saveSymbols(profileId: string, symbols: SymbolInput[]): Promise<AppSymbol[]> {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) throw new Error('No autorizado')
 
@@ -821,27 +909,36 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
             'opensKeyboard',
             'wordVariants',
             'fixedCell',
+            'tapAudioUrl',
+            'tapAudioMeta',
         ]) ||
         isMissingDatabaseColumnError(err, 'word_variants') ||
-        isMissingDatabaseColumnError(err, 'fixed_cell')
+        isMissingDatabaseColumnError(err, 'fixed_cell') ||
+        isMissingDatabaseColumnError(err, 'tap_audio_url') ||
+        isMissingDatabaseColumnError(err, 'tap_audio_meta')
 
     try {
-        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, true, true, true)
+        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, true, true, true, true)
     } catch (error) {
         if (!persistErrorRetriable(error)) throw error
         try {
-            await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, true, true)
+            await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, true, true, true)
         } catch (e2) {
             if (!persistErrorRetriable(e2)) throw e2
             try {
-                await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, true)
+                await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, true, true)
             } catch (e3) {
                 if (!persistErrorRetriable(e3)) throw e3
                 try {
-                    await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false)
+                    await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false, true)
                 } catch (e4) {
                     if (!persistErrorRetriable(e4)) throw e4
-                    await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false)
+                    try {
+                        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false, false)
+                    } catch (e5) {
+                        if (!persistErrorRetriable(e5)) throw e5
+                        await persistSymbols(profileId, symbolsInBounds, enrichedSymbols, false, false, false, false)
+                    }
                 }
             }
         }
@@ -869,6 +966,7 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]) {
 
     revalidatePath('/admin')
     revalidatePath('/tablero')
+    return getProfileSymbols(profileId)
 }
 
 export async function deleteSymbolAction(profileId: string, symbolId: string) {

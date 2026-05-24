@@ -9,7 +9,10 @@ import { ELEVENLABS_PRESET_VOICES } from '@/lib/voice/elevenlabsPresets'
 import { getMonthlyCharLimit } from '@/lib/tts/limits'
 import type { TtsMode } from '@/lib/tts/types'
 import type { SubscriptionPlan } from '@/lib/subscription/plans'
-import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
+import {
+  fetchUserForVoiceOps,
+  type VoiceOpsUser,
+} from '@/lib/stripe/sync-subscription'
 import { hasComplimentaryUnlimitedPlan } from '@/lib/subscription/complimentary'
 import {
   canUseElevenLabsPresets,
@@ -47,27 +50,89 @@ function normalizeTtsMode(value: string | null | undefined): TtsMode {
   return 'browser'
 }
 
+function assertValidTtsMode(ttsMode: string): asserts ttsMode is TtsMode {
+  if (ttsMode !== 'browser' && ttsMode !== 'preset' && ttsMode !== 'custom') {
+    throw new Error('Modo de voz no válido')
+  }
+}
+
+function resolveVoiceUpdate(
+  user: VoiceOpsUser,
+  data: { ttsMode: TtsMode; voiceId?: string | null },
+): { ttsMode: TtsMode; nextVoiceId: string | null } {
+  const plan = effectiveSubscriptionPlan(user.email, user.plan)
+  const activePaid = hasActivePaidSubscription(user, user.email)
+
+  if (!activePaid) {
+    if (data.ttsMode !== 'browser') {
+      throw new Error('Necesitas una suscripción activa para usar voces de ElevenLabs.')
+    }
+    return { ttsMode: 'browser', nextVoiceId: null }
+  }
+
+  if (data.ttsMode === 'preset' && !canUseElevenLabsPresets(plan)) {
+    throw new Error('Las voces naturales requieren plan Voz o Identidad.')
+  }
+
+  if (data.ttsMode === 'custom' && !canUseVoiceCloning(plan)) {
+    throw new Error('La voz clonada requiere plan Identidad.')
+  }
+
+  let nextVoiceId: string | null = data.voiceId === undefined ? user.voiceId : data.voiceId
+
+  if (data.ttsMode === 'browser') {
+    nextVoiceId = null
+  }
+
+  if (data.ttsMode === 'preset') {
+    if (!nextVoiceId) {
+      nextVoiceId = ELEVENLABS_PRESET_VOICES[0]?.elevenVoiceId ?? null
+    }
+    const validPreset = ELEVENLABS_PRESET_VOICES.some((v) => v.elevenVoiceId === nextVoiceId)
+    if (!validPreset) {
+      throw new Error('Voz preset no válida.')
+    }
+  }
+
+  if (data.ttsMode === 'custom' && !nextVoiceId) {
+    throw new Error('Primero crea o selecciona una voz clonada.')
+  }
+
+  return { ttsMode: data.ttsMode, nextVoiceId }
+}
+
+async function persistVoiceUpdate(
+  userId: string,
+  ttsMode: TtsMode,
+  nextVoiceId: string | null,
+): Promise<void> {
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ttsMode,
+        voiceId: nextVoiceId,
+      },
+    })
+  } catch (error) {
+    if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId'])) {
+      throw error
+    }
+    throw new Error('La base de datos no tiene columnas TTS. Ejecuta migraciones.')
+  }
+}
+
+function revalidateVoicePaths() {
+  revalidatePath('/admin')
+  revalidatePath('/tablero')
+}
+
 export async function getVoiceSettings(): Promise<VoiceSettingsDto | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return null
 
   try {
-    await maybeSyncStripeSubscriptionFromStripe(session.user.id)
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        email: true,
-        ttsMode: true,
-        voiceId: true,
-        plan: true,
-        charactersUsed: true,
-        ttsBillingMonth: true,
-        stripeSubscriptionId: true,
-        planExpiresAt: true,
-      },
-    })
-
+    const user = await fetchUserForVoiceOps(session.user.id)
     if (!user) return null
 
     const plan = effectiveSubscriptionPlan(user.email, user.plan)
@@ -100,38 +165,42 @@ export async function updateVoiceSettings(data: {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) throw new Error('No autorizado')
 
-  const ttsMode = data.ttsMode
-  if (ttsMode !== 'browser' && ttsMode !== 'preset' && ttsMode !== 'custom') {
-    throw new Error('Modo de voz no válido')
-  }
+  assertValidTtsMode(data.ttsMode)
 
-  await maybeSyncStripeSubscriptionFromStripe(session.user.id)
-
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      email: true,
-      plan: true,
-      voiceId: true,
-      stripeSubscriptionId: true,
-      planExpiresAt: true,
-    },
-  })
-
+  const user = await fetchUserForVoiceOps(session.user.id)
   if (!user) throw new Error('Usuario no encontrado')
 
-  const plan = effectiveSubscriptionPlan(user.email, user.plan)
-  const activePaid = hasActivePaidSubscription(user, user.email)
+  const { ttsMode, nextVoiceId } = resolveVoiceUpdate(user, data)
+  await persistVoiceUpdate(user.id, ttsMode, nextVoiceId)
+  revalidateVoicePaths()
+}
 
-  if (!activePaid) {
-    if (ttsMode !== 'browser') {
-      throw new Error('Necesitas una suscripción activa para usar voces de ElevenLabs.')
-    }
+/** Voz + género del perfil en una sola ida al servidor (modal Luma). */
+export async function updateLumaVoicePreferences(data: {
+  ttsMode: TtsMode
+  voiceId?: string | null
+  profileId?: string | null
+  profileGender?: 'male' | 'female'
+}): Promise<{ ttsMode: TtsMode; voiceId: string | null }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) throw new Error('No autorizado')
+
+  assertValidTtsMode(data.ttsMode)
+
+  if (data.profileGender && data.profileGender !== 'male' && data.profileGender !== 'female') {
+    throw new Error('Género no válido')
+  }
+
+  const user = await fetchUserForVoiceOps(session.user.id)
+  if (!user) throw new Error('Usuario no encontrado')
+
+  const { ttsMode, nextVoiceId } = resolveVoiceUpdate(user, data)
+
+  await prisma.$transaction(async (tx) => {
     try {
-      await prisma.user.update({
+      await tx.user.update({
         where: { id: user.id },
-        data: { ttsMode: 'browser', voiceId: null },
+        data: { ttsMode, voiceId: nextVoiceId },
       })
     } catch (error) {
       if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId'])) {
@@ -139,55 +208,15 @@ export async function updateVoiceSettings(data: {
       }
       throw new Error('La base de datos no tiene columnas TTS. Ejecuta migraciones.')
     }
-    revalidatePath('/admin')
-    revalidatePath('/tablero')
-    return
-  }
 
-  if (ttsMode === 'preset' && !canUseElevenLabsPresets(plan)) {
-    throw new Error('Las voces naturales requieren plan Voz o Identidad.')
-  }
-
-  if (ttsMode === 'custom' && !canUseVoiceCloning(plan)) {
-    throw new Error('La voz clonada requiere plan Identidad.')
-  }
-
-  let nextVoiceId: string | null =
-    data.voiceId === undefined ? user.voiceId : data.voiceId
-
-  if (ttsMode === 'browser') {
-    nextVoiceId = null
-  }
-
-  if (ttsMode === 'preset') {
-    if (!nextVoiceId) {
-      nextVoiceId = ELEVENLABS_PRESET_VOICES[0]?.elevenVoiceId ?? null
+    if (data.profileId && data.profileGender) {
+      await tx.profile.update({
+        where: { id: data.profileId, userId: user.id },
+        data: { gender: data.profileGender },
+      })
     }
-    const validPreset = ELEVENLABS_PRESET_VOICES.some((v) => v.elevenVoiceId === nextVoiceId)
-    if (!validPreset) {
-      throw new Error('Voz preset no válida.')
-    }
-  }
+  })
 
-  if (ttsMode === 'custom' && !nextVoiceId) {
-    throw new Error('Primero crea o selecciona una voz clonada.')
-  }
-
-  try {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        ttsMode,
-        voiceId: nextVoiceId,
-      },
-    })
-  } catch (error) {
-    if (!isUnknownPrismaFieldError(error, ['ttsMode', 'voiceId'])) {
-      throw error
-    }
-    throw new Error('La base de datos no tiene columnas TTS. Ejecuta migraciones.')
-  }
-
-  revalidatePath('/admin')
-  revalidatePath('/tablero')
+  revalidateVoicePaths()
+  return { ttsMode, voiceId: nextVoiceId }
 }

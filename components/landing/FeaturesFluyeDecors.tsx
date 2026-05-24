@@ -140,8 +140,8 @@ export function FeaturesFluyeDecors({
 
   return (
     <div
-      className={`pointer-events-none absolute inset-0 overflow-visible ${
-        moverEnabled ? "z-[18]" : "z-[8]"
+      className={`pointer-events-none absolute inset-0 z-0 overflow-visible ${
+        moverEnabled ? "md:z-[18]" : "md:z-[8]"
       }`}
       aria-hidden
     >

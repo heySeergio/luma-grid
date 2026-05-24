@@ -8,8 +8,8 @@
     "dev:turbo": "next dev",
     "clean": "node scripts/clean-next.js",
     "dev:clean": "npm run clean && npm run dev",
-    "build": "node scripts/prisma-env.mjs generate && next build --webpack",
-    "build:with-migrate": "node scripts/prisma-env.mjs migrate deploy && node scripts/prisma-env.mjs generate && next build --webpack",
+    "build": "node scripts/prisma-env.mjs generate && next build --webpack && node scripts/write-routes-manifest-deterministic.mjs",
+    "build:with-migrate": "node scripts/prisma-env.mjs migrate deploy && node scripts/prisma-env.mjs generate && next build --webpack && node scripts/write-routes-manifest-deterministic.mjs",
     "migrate:deploy": "node scripts/prisma-env.mjs migrate deploy",
     "migrate:resolve": "node scripts/prisma-env.mjs migrate resolve",
     "prisma:generate": "node scripts/prisma-env.mjs generate",
@@ -33,7 +33,12 @@
     "repair:demo-email": "node scripts/repair-demo-by-email.mjs",
     "reset:demo-board": "npx tsx --tsconfig tsconfig.json scripts/reset-demo-board-by-email.ts",
     "arasaac:download-main-grid": "npx tsx --tsconfig tsconfig.json scripts/download-arasaac-main-grid-pngs.ts",
-    "test:admin-move": "npx tsx --test lib/admin/applyAdminSymbolGridMove.test.ts"
+    "test:admin-move": "npx tsx --test lib/admin/applyAdminSymbolGridMove.test.ts",
+    "test:utterance-metrics": "npx tsx --test lib/usageEvaluation/utteranceMetrics.test.ts",
+    "test:lexicon-usage": "npx tsx --test lib/usageEvaluation/aggregates/lexiconUsage.test.ts",
+    "test:communication-eval": "npx tsx --test lib/usageEvaluation/aggregates/communicationEvaluation.test.ts",
+    "test:vocabulary-adoption": "npx tsx --test lib/usageEvaluation/aggregates/vocabularyAdoption.test.ts",
+    "test:navigation-friction": "npx tsx --test lib/usageEvaluation/aggregates/navigationFriction.test.ts"
   },
   "prisma": {
     "seed": "node prisma/seed-lexicon.mjs"

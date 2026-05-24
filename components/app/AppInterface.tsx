@@ -25,12 +25,19 @@ import { getPhraseCompletionSuggestions, type PhraseCompletionChip } from '@/app
 import { getPredictionCandidates, recordSymbolUsage } from '@/app/actions/predictions'
 import {
   clearPendingUsageEvents,
+  enqueuePendingNavigationEvent,
   enqueuePendingUsageEvent,
+  enqueuePendingUtteranceEvent,
   flushPendingUsageEvents,
   type PendingUsageEventPayload,
 } from '@/lib/dexie/usageSyncQueue'
+import { recordUtterance } from '@/app/actions/utterances'
+import { recordNavigation } from '@/app/actions/navigation'
+import type { RecordUtterancePayload } from '@/lib/usageEvaluation/utteranceTypes'
+import type { NavigationAction, RecordNavigationPayload } from '@/lib/usageEvaluation/navigationTypes'
 import { getVoiceSettings } from '@/app/actions/voiceSettings'
 import { applyProfileGenders } from '@/lib/profileGender'
+import { playSymbolTapAudio } from '@/lib/voice/playSymbolTapAudio'
 import { speakText } from '@/lib/voice/speakClient'
 import type { SpeakVoicePrefs } from '@/lib/voice/speakClient'
 import type { Symbol, Profile, Phrase, AccessConfig } from '@/lib/supabase/types'
@@ -134,6 +141,9 @@ export default function AppInterface({
   const [showPhraseCompletionSection, setShowPhraseCompletionSection] = useState(
     () => tableroInitial?.accountSettings?.showPhraseCompletionSection ?? true,
   )
+  const [showRestModeButton, setShowRestModeButton] = useState(
+    () => tableroInitial?.accountSettings?.showRestModeButton ?? true,
+  )
   /** Iluminación predictiva en celdas del grid (independiente de la franja «Siguiente»). */
   const [showGridCellPredictions, setShowGridCellPredictions] = useState(
     () => tableroInitial?.accountSettings?.showGridCellPredictions ?? true,
@@ -152,16 +162,25 @@ export default function AppInterface({
   )
   /** Incrementa al inyectar una frase rápida/frecuente para limpiar conjugación en PhraseBar. */
   const [phraseCompositionReset, setPhraseCompositionReset] = useState(0)
+  /** Pausa selección en el grid (mirada / descanso sin borrar la frase). */
+  const [restMode, setRestMode] = useState(false)
   const [completionChips, setCompletionChips] = useState<PhraseCompletionChip[]>([])
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null)
   const [activeTab, setActiveTab] = useState<TabMode>(initialDefaultTableroTab)
   const [isOnline, setIsOnline] = useState(true)
   const [predictedIds, setPredictedIds] = useState<string[]>([])
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
-  const [, setFolderHistory] = useState<string[]>([])
+  const [folderHistory, setFolderHistory] = useState<string[]>([])
   const [showProfileSelector, setShowProfileSelector] = useState(false)
   const phraseSessionIdRef = useRef<string | null>(null)
   const phraseSequenceRef = useRef(0)
+  /** Timestamp del primer tap de la composición actual (para durationMs en UtteranceEvent). */
+  const compositionStartedAtRef = useRef<number | null>(null)
+  const navContextRef = useRef({
+    activeFolder: null as string | null,
+    folderHistory: [] as string[],
+    phraseLength: 0,
+  })
   /** Snapshot SSR para omitir la primera recarga; el cleanup restaura en Strict Mode. */
   const tableroBootstrapRef = useRef(tableroInitial)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
@@ -247,6 +266,7 @@ export default function AppInterface({
   const resetPhraseTracking = useCallback(() => {
     phraseSessionIdRef.current = null
     phraseSequenceRef.current = 0
+    compositionStartedAtRef.current = null
   }, [])
 
   const ensurePhraseSessionId = useCallback((profileId: string) => {
@@ -292,6 +312,70 @@ export default function AppInterface({
       }
     })()
   }, [shareUsageForPredictions])
+
+  const persistUtterance = useCallback((payload: RecordUtterancePayload) => {
+    if (!shareUsageForPredictions) return
+    void (async () => {
+      try {
+        await recordUtterance(payload)
+      } catch {
+        try {
+          await enqueuePendingUtteranceEvent(payload)
+        } catch {
+          /* sin red o Dexie no disponible */
+        }
+      }
+    })()
+  }, [shareUsageForPredictions])
+
+  const persistNavigation = useCallback((payload: RecordNavigationPayload) => {
+    if (!shareUsageForPredictions) return
+    void (async () => {
+      try {
+        await recordNavigation(payload)
+      } catch {
+        try {
+          await enqueuePendingNavigationEvent(payload)
+        } catch {
+          /* sin red o Dexie no disponible */
+        }
+      }
+    })()
+  }, [shareUsageForPredictions])
+
+  useEffect(() => {
+    navContextRef.current = {
+      activeFolder,
+      folderHistory,
+      phraseLength: selectedSymbols.length,
+    }
+  }, [activeFolder, folderHistory, selectedSymbols.length])
+
+  const recordNav = useCallback(
+    (action: NavigationAction, opts?: { folderTarget?: string | null }) => {
+      if (!profile?.id) return
+      const ctx = navContextRef.current
+      const folderDepth = ctx.folderHistory.length + (ctx.activeFolder ? 1 : 0)
+      persistNavigation({
+        profileId: profile.id,
+        action,
+        folderTarget: opts?.folderTarget ?? null,
+        phraseLength: ctx.phraseLength,
+        folderDepth,
+      })
+    },
+    [profile?.id, persistNavigation],
+  )
+
+  const enterFolder = useCallback(
+    (target: string, pushHistoryFrom: string | null) => {
+      recordNav('folder_enter', { folderTarget: target })
+      setFolderHistory((prev) => (pushHistoryFrom ? [...prev, pushHistoryFrom] : prev))
+      setActiveFolder(target)
+      setPredictedIds([])
+    },
+    [recordNav],
+  )
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -376,47 +460,58 @@ export default function AppInterface({
     setAccessConfig(null)
   }, [])
 
+  const hydratedFromServer = tableroInitial != null
+
+  const applyAccountSettings = useCallback((s: NonNullable<Awaited<ReturnType<typeof getAccountSettings>>>) => {
+    if (typeof s.showFrequentPhrasesSection === 'boolean') {
+      setShowFrequentPhrasesSection(s.showFrequentPhrasesSection)
+    }
+    if (typeof s.showPhraseCompletionSection === 'boolean') {
+      setShowPhraseCompletionSection(s.showPhraseCompletionSection)
+    }
+    if (typeof s.showRestModeButton === 'boolean') {
+      setShowRestModeButton(s.showRestModeButton)
+    }
+    if (typeof s.showGridCellPredictions === 'boolean') {
+      setShowGridCellPredictions(s.showGridCellPredictions)
+    }
+    setActiveTab(parseDefaultTableroTab(s.defaultTableroTab))
+    const share = s.shareUsageForPredictions !== false
+    setShareUsageForPredictions(share)
+    if (!share) void clearPendingUsageEvents()
+    if (typeof s.keyboardPictoAutocomplete === 'boolean') {
+      setKeyboardPictoAutocomplete(s.keyboardPictoAutocomplete)
+    }
+    if (typeof s.keyboardArasaacPictograms === 'boolean') {
+      setKeyboardArasaacPictograms(s.keyboardArasaacPictograms)
+    }
+  }, [])
+
+  const loadAccountSettings = useCallback(() => {
+    void getAccountSettings().then((s) => {
+      if (!s) return
+      applyAccountSettings(s)
+    })
+  }, [applyAccountSettings])
+
   const subscribeToChanges = useCallback(() => {
-    const onStorage = () => {
-      void loadProfiles()
-      void loadSymbols()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'luma.account.sync') {
+        loadAccountSettings()
+      }
+      if (e.key === 'luma.grid.sync') {
+        void loadProfiles()
+        void loadSymbols()
+      }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [loadProfiles, loadSymbols])
-
-  const hydratedFromServer = tableroInitial != null
+  }, [loadAccountSettings, loadProfiles, loadSymbols])
 
   useEffect(() => {
     if (hydratedFromServer) return
-    void loadProfiles()
-  }, [loadProfiles, hydratedFromServer])
-
-  useEffect(() => {
-    if (hydratedFromServer) return
-    void getAccountSettings().then((s) => {
-      if (!s) return
-      if (typeof s.showFrequentPhrasesSection === 'boolean') {
-        setShowFrequentPhrasesSection(s.showFrequentPhrasesSection)
-      }
-      if (typeof s.showPhraseCompletionSection === 'boolean') {
-        setShowPhraseCompletionSection(s.showPhraseCompletionSection)
-      }
-      if (typeof s.showGridCellPredictions === 'boolean') {
-        setShowGridCellPredictions(s.showGridCellPredictions)
-      }
-      setActiveTab(parseDefaultTableroTab(s.defaultTableroTab))
-      const share = s.shareUsageForPredictions !== false
-      setShareUsageForPredictions(share)
-      if (!share) void clearPendingUsageEvents()
-      if (typeof s.keyboardPictoAutocomplete === 'boolean') {
-        setKeyboardPictoAutocomplete(s.keyboardPictoAutocomplete)
-      }
-      if (typeof s.keyboardArasaacPictograms === 'boolean') {
-        setKeyboardArasaacPictograms(s.keyboardArasaacPictograms)
-      }
-    })
-  }, [hydratedFromServer])
+    loadAccountSettings()
+  }, [hydratedFromServer, loadAccountSettings])
 
   useEffect(() => {
     if (!hydratedFromServer) return
@@ -424,6 +519,10 @@ export default function AppInterface({
       void clearPendingUsageEvents()
     }
   }, [hydratedFromServer, tableroInitial?.accountSettings?.shareUsageForPredictions])
+
+  useEffect(() => {
+    if (!showRestModeButton) setRestMode(false)
+  }, [showRestModeButton])
 
   useEffect(() => {
     if (!showGridCellPredictions) {
@@ -479,37 +578,29 @@ export default function AppInterface({
   ])
 
   const handleSymbolSelect = useCallback(async (symbol: Symbol, choice?: SymbolSelectChoice) => {
+    if (showRestModeButton && restMode) return
+
     const normalizedLabel = symbol.label.toLowerCase()
 
     if (shouldUseDefaultGridTemplate) {
       if (activeFolder === 'Más verbos' && normalizedLabel === 'más') {
-        setFolderHistory(prev => [...(prev ?? []), 'Más verbos'])
-        setActiveFolder('Más verbos · página 2')
-        setPredictedIds([])
+        enterFolder('Más verbos · página 2', 'Más verbos')
         return
       }
       if (activeFolder === 'Más verbos · página 2' && normalizedLabel === 'más') {
-        setFolderHistory(prev => [...(prev ?? []), 'Más verbos · página 2'])
-        setActiveFolder('Más verbos · página 3')
-        setPredictedIds([])
+        enterFolder('Más verbos · página 3', 'Más verbos · página 2')
         return
       }
       if (activeFolder === 'Alimentos' && normalizedLabel === 'más') {
-        setFolderHistory(prev => [...(prev ?? []), 'Alimentos'])
-        setActiveFolder('Alimentos · página 2')
-        setPredictedIds([])
+        enterFolder('Alimentos · página 2', 'Alimentos')
         return
       }
       if (activeFolder === 'Animales' && normalizedLabel === 'más') {
-        setFolderHistory(prev => [...(prev ?? []), 'Animales'])
-        setActiveFolder('Animales · página 2')
-        setPredictedIds([])
+        enterFolder('Animales · página 2', 'Animales')
         return
       }
       if (DEFAULT_FOLDER_CONTENTS[symbol.label] && symbol.label !== activeFolder) {
-        setFolderHistory(prev => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
-        setActiveFolder(symbol.label)
-        setPredictedIds([])
+        enterFolder(symbol.label, activeFolder)
         return
       }
     } else if (
@@ -517,9 +608,7 @@ export default function AppInterface({
       symbol.id &&
       !String(symbol.id).startsWith('folder-')
     ) {
-      setFolderHistory((prev) => (activeFolder ? [...(prev ?? []), activeFolder] : (prev ?? [])))
-      setActiveFolder(symbol.id)
-      setPredictedIds([])
+      enterFolder(symbol.id, activeFolder)
       return
     }
 
@@ -578,7 +667,15 @@ export default function AppInterface({
         id: `${symbol.id}-sel-${Date.now()}-${prev.length}`,
       },
     ])
-    speakSelectedWord(normalizedTokenLabel)
+    const sourceSymbol = symbols.find((s) => s.id === symbol.id) ?? symbol
+    const tapUrl = sourceSymbol.tapAudioUrl?.trim()
+    if (tapUrl) {
+      void playSymbolTapAudio(tapUrl).catch(() => {
+        speakSelectedWord(normalizedTokenLabel)
+      })
+    } else {
+      speakSelectedWord(normalizedTokenLabel)
+    }
 
     if (!profile || !symbol.id || String(symbol.id).startsWith('folder-')) {
       setPredictedIds([])
@@ -592,6 +689,9 @@ export default function AppInterface({
       : null
     const phraseSessionId = ensurePhraseSessionId(profile.id)
     const sequenceIndex = phraseSequenceRef.current
+    if (sequenceIndex === 0) {
+      compositionStartedAtRef.current = Date.now()
+    }
     phraseSequenceRef.current += 1
 
     persistSymbolUsage({
@@ -667,11 +767,13 @@ export default function AppInterface({
       setPredictedIds([])
     }
   }, [
-    activeFolder,
+    enterFolder,
     ensurePhraseSessionId,
     mainOrderedSymbols,
     persistSymbolUsage,
     profile,
+    restMode,
+    showRestModeButton,
     selectedSymbols,
     shouldUseDefaultGridTemplate,
     showGridCellPredictions,
@@ -744,6 +846,7 @@ export default function AppInterface({
   ])
 
   const handleDeleteLast = () => {
+    recordNav('delete_last')
     setSelectedSymbols(prev => prev.slice(0, -1))
     setPredictedIds([])
     if (selectedSymbols.length <= 1) {
@@ -752,6 +855,7 @@ export default function AppInterface({
   }
 
   const handleClearAll = () => {
+    recordNav('clear_phrase')
     setSelectedSymbols([])
     setPredictedIds([])
     resetPhraseTracking()
@@ -764,15 +868,29 @@ export default function AppInterface({
 
   const handleCompletionChipPick = useCallback(
     (symbolId: string) => {
+      if (showRestModeButton && restMode) return
       const sym = mainOrderedSymbols.find((s) => s.id === symbolId)
       if (sym) void handleSymbolSelect(sym)
     },
-    [mainOrderedSymbols, handleSymbolSelect],
+    [mainOrderedSymbols, handleSymbolSelect, restMode, showRestModeButton],
   )
 
   const handleAfterSpeak = useCallback(
     async (payload: { text: string; symbolsUsed: { id: string; label: string }[] }) => {
       if (!profile) return
+      const startedAt = compositionStartedAtRef.current
+      const durationMs = startedAt != null ? Date.now() - startedAt : null
+
+      persistUtterance({
+        profileId: profile.id,
+        text: payload.text,
+        symbolCount: payload.symbolsUsed.length,
+        durationMs,
+        source: 'speak',
+        symbolsUsed: payload.symbolsUsed.map((s) => ({ id: s.id, label: s.label })),
+      })
+      resetPhraseTracking()
+
       try {
         await saveQuickPhrase(profile.id, payload.text, payload.symbolsUsed)
         if (showFrequentPhrasesSection) {
@@ -782,7 +900,7 @@ export default function AppInterface({
         console.error('Error saving phrase after speak', err)
       }
     },
-    [profile, loadFrequentPhrases, showFrequentPhrasesSection],
+    [profile, loadFrequentPhrases, showFrequentPhrasesSection, persistUtterance, resetPhraseTracking],
   )
 
   const buildSelectionFromPhrase = useCallback(
@@ -830,6 +948,15 @@ export default function AppInterface({
       setPhraseCompositionReset((k) => k + 1)
       try {
         await speakText(t, profile.id, voicePrefs)
+        persistUtterance({
+          profileId: profile.id,
+          text: t,
+          symbolCount: phrase.symbolsUsed?.length ?? 0,
+          durationMs: null,
+          source: 'quick_phrase',
+          symbolsUsed: (phrase.symbolsUsed ?? []).map((s) => ({ id: s.id, label: s.label })),
+        })
+        resetPhraseTracking()
         await saveQuickPhrase(profile.id, phrase.text, phrase.symbolsUsed)
         if (showFrequentPhrasesSection) {
           await loadFrequentPhrases()
@@ -844,6 +971,7 @@ export default function AppInterface({
       voicePrefs,
       loadFrequentPhrases,
       resetPhraseTracking,
+      persistUtterance,
       showFrequentPhrasesSection,
     ],
   )
@@ -874,6 +1002,7 @@ export default function AppInterface({
           voiceConfig={null}
           canGoBackFolder={activeFolder !== null}
           onGoBackFolder={() => {
+            recordNav('folder_back', { folderTarget: activeFolder })
             setFolderHistory(prev => {
               const stack = prev ?? []
               if (stack.length === 0) {
@@ -887,6 +1016,7 @@ export default function AppInterface({
             })
           }}
           onGoHome={() => {
+            recordNav('home', { folderTarget: activeFolder })
             setActiveFolder(null)
             setFolderHistory([])
             setActiveTab('grid')
@@ -898,6 +1028,10 @@ export default function AppInterface({
           onAfterSpeak={handleAfterSpeak}
           speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
           externalCompositionReset={phraseCompositionReset}
+          restMode={restMode}
+          onRestModeToggle={
+            showRestModeButton ? () => setRestMode((prev) => !prev) : undefined
+          }
         />
         {showPhraseCompletionSection && activeTab !== 'keyboard' ? (
           <PhraseCompletionChips chips={completionChips} onPick={handleCompletionChipPick} />
@@ -915,11 +1049,13 @@ export default function AppInterface({
             folders={[]}
             gridCols={profile?.gridCols || 14}
             gridRows={profile?.gridRows || 8}
+            symbolsPaused={showRestModeButton && restMode}
           />
         ) : (
           <Keyboard
             theme={profile?.keyboardTheme ?? null}
             onTextAdd={async (text) => {
+              if (showRestModeButton && restMode) return
               const analyzedTokens = await analyzeLexicalTextInput(text)
               if (analyzedTokens.length === 0) return
 
@@ -934,6 +1070,7 @@ export default function AppInterface({
                           label: token.label,
                           normalizedLabel: token.normalizedLabel,
                           lexemeId: token.lexemeId ?? null,
+                          detectedLemma: token.detectedLemma,
                         })
                       : null
 
@@ -943,7 +1080,9 @@ export default function AppInterface({
                   let category: string = glyph?.category ?? 'Texto'
 
                   if (keyboardArasaacPictograms) {
-                    const arUrl = await fetchFirstArasaacImage(token.label)
+                    const arUrl = await fetchFirstArasaacImage(token.label, {
+                      detectedLemma: token.detectedLemma,
+                    })
                     if (arUrl) {
                       imageUrl = arUrl
                       emoji = undefined
@@ -1043,7 +1182,9 @@ export default function AppInterface({
             pattern={scannerPattern}
             speed={scannerSpeed}
             scanKey={accessConfig?.scan_key || 'Space'}
-            onSelect={handleSymbolSelect}
+            onSelect={(symbol) => {
+              if (!(showRestModeButton && restMode)) handleSymbolSelect(symbol)
+            }}
           />
         )}
       </div>

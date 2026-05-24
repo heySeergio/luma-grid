@@ -67,8 +67,8 @@ export function HeroHeadline() {
 
   return (
     <h1 className="text-balance subpixel-antialiased">
-      <div className="flex flex-col gap-1 sm:gap-2 lg:gap-1">
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-1 sm:gap-x-5">
+      <div className="flex flex-col items-center gap-1 sm:gap-2 md:items-start lg:gap-1">
+        <div className="flex flex-wrap items-end justify-center gap-x-3 gap-y-1 sm:gap-x-5 md:justify-start">
           <MessyLine
             rotation={-6}
             className="text-[#042D22] text-[clamp(2.5rem,8vw,4.75rem)] leading-[0.95]"
@@ -106,7 +106,7 @@ export function HeroHeadline() {
         </div>
         <MessyLine
           rotation={-2}
-          className="text-[#FE6B45] text-[clamp(2.75rem,9vw,5.5rem)] leading-[0.92]"
+          className="text-[#FE6B45] text-[clamp(2.75rem,9vw,5.5rem)] leading-[0.92] max-md:justify-center"
         >
           <FadeWord delay={d(0.52)}>
             <LevitatingMessyLetters

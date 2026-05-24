@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { Apple, BookOpen, Heart, MapPin, Sparkles, Users } from 'lucide-react'
 import SymbolCell, { type SymbolGridDensity, type SymbolSelectChoice } from './SymbolCell'
 import WordVariantsRadialOverlay from '@/components/app/WordVariantsRadialOverlay'
@@ -29,6 +29,8 @@ interface Props {
   onFolderSelect?: (folderName: string) => void
   gridCols?: number
   gridRows?: number
+  /** Pausa pulsaciones en celdas (modo descanso / mirada). */
+  symbolsPaused?: boolean
 }
 
 export default function SymbolGrid({
@@ -40,11 +42,16 @@ export default function SymbolGrid({
   onFolderSelect,
   gridCols = 14,
   gridRows = 8,
+  symbolsPaused = false,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
   const [radialSymbol, setRadialSymbol] = useState<Symbol | null>(null)
 
   const closeRadial = useCallback(() => setRadialSymbol(null), [])
+
+  useEffect(() => {
+    if (symbolsPaused) setRadialSymbol(null)
+  }, [symbolsPaused])
   const handleVariantRadialOpen = useCallback((symbol: Symbol) => {
     setRadialSymbol(symbol)
   }, [])
@@ -123,11 +130,12 @@ export default function SymbolGrid({
     <div className="relative h-full min-h-0 w-full min-w-0">
     <div
       ref={gridRef}
-      className={`aac-grid-surface grid h-full min-h-0 content-stretch overflow-hidden ${gapPad}`}
+      className={`aac-grid-surface grid h-full min-h-0 content-stretch overflow-hidden ${gapPad} ${symbolsPaused ? 'pointer-events-none' : ''}`}
       style={{
         gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${Math.max(maxRow, 1)}, minmax(0, 1fr))`
       }}
+      aria-hidden={symbolsPaused ? true : undefined}
     >
       {folders.map(folder => {
         const FolderIcon = folderIconMap[folder.name] || Users
@@ -197,6 +205,17 @@ export default function SymbolGrid({
           aria-hidden
         />
       )}
+      {symbolsPaused ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-slate-900/25 backdrop-blur-[2px] dark:bg-slate-950/45"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="rounded-2xl bg-white/95 px-5 py-2.5 text-base font-bold text-[#c44d2e] shadow-md ring-1 ring-[#fe6b45]/35 sm:text-lg">
+            Modo descanso
+          </span>
+        </div>
+      ) : null}
     </div>
     {radialSymbol?.wordVariants && symbolHasVariantMenu(radialSymbol.wordVariants) && (
       <WordVariantsRadialOverlay

@@ -15,7 +15,7 @@ export interface AudioCacheEntry {
 
 export interface PendingSync {
   id?: number
-  type: 'phrase' | 'usage_event'
+  type: 'phrase' | 'usage_event' | 'utterance_event'
   data: Record<string, unknown>
   createdAt: number
 }

@@ -78,6 +78,10 @@ export async function exportProfileBoardJson(profileId: string): Promise<
     if (s.opensKeyboard) compact.k = true
     if ((s as { fixedCell?: boolean }).fixedCell) compact.f = true
     if (s.wordVariants !== null) compact.wv = s.wordVariants
+    const tapUrl = (s as { tapAudioUrl?: string | null }).tapAudioUrl
+    if (tapUrl) compact.tau = tapUrl
+    const tapMeta = (s as { tapAudioMeta?: unknown }).tapAudioMeta
+    if (tapMeta != null) compact.tam = tapMeta
     return compact
   })
 

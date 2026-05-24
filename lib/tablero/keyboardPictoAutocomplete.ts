@@ -24,11 +24,17 @@ export type KeyboardTokenGlyph = {
  */
 export function pickBoardGlyphForKeyboardToken(
   boardSymbols: Symbol[],
-  token: { label: string; normalizedLabel: string; lexemeId: string | null },
+  token: {
+    label: string
+    normalizedLabel: string
+    lexemeId: string | null
+    detectedLemma?: string | null
+  },
 ): KeyboardTokenGlyph | null {
   const usable = boardSymbols.filter((s) => !s.opensKeyboard && s.category !== 'Carpetas')
   const tokenNorm = normLabel(token.normalizedLabel) || normLabel(token.label)
   const tokenPlain = normLabel(token.label)
+  const lemmaNorm = normLabel(token.detectedLemma)
 
   const pickBest = (candidates: Symbol[]): Symbol | null => {
     let best: Symbol | null = null
@@ -53,6 +59,22 @@ export function pickBoardGlyphForKeyboardToken(
         emoji: bestLex.emoji,
         sourceSymbolId: bestLex.id,
         category: bestLex.category ?? null,
+      }
+    }
+  }
+
+  if (lemmaNorm && lemmaNorm !== tokenNorm && lemmaNorm !== tokenPlain) {
+    const lemmaMatches = usable.filter((s) => {
+      const sn = normLabel(s.normalizedLabel) || normLabel(s.label)
+      return sn === lemmaNorm
+    })
+    const bestLemma = pickBest(lemmaMatches)
+    if (bestLemma) {
+      return {
+        imageUrl: bestLemma.imageUrl,
+        emoji: bestLemma.emoji,
+        sourceSymbolId: bestLemma.id,
+        category: bestLemma.category ?? null,
       }
     }
   }

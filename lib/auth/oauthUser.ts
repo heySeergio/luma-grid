@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeLabelForLexicalMatch } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOLS, DEFAULT_FOLDER_TILES } from '@/lib/data/defaultSymbols'
-import { Prisma, type User } from '@prisma/client'
+import { sessionUserSelect, type SessionUserRecord } from '@/lib/auth/sessionUserSelect'
+import { Prisma } from '@prisma/client'
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
@@ -40,9 +41,12 @@ export async function createUserWithPasswordAndDemo(opts: {
   email: string
   passwordHash: string
   name?: string | null
-}): Promise<User> {
+}): Promise<SessionUserRecord> {
   const email = normalizeEmail(opts.email)
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  })
   if (existing) {
     const err = new Error('EMAIL_IN_USE')
     throw err
@@ -63,7 +67,10 @@ export async function createUserWithPasswordAndDemo(opts: {
           },
         },
       },
-      include: { profiles: { select: { id: true } } },
+      select: {
+        ...sessionUserSelect,
+        profiles: { select: { id: true } },
+      },
     })
 
     const profileId = created.profiles[0]?.id
@@ -80,7 +87,8 @@ export async function createUserWithPasswordAndDemo(opts: {
       data: { defaultProfileId: profileId },
     })
 
-    return created
+    const { profiles: _profiles, ...user } = created
+    return user
   })
 }
 
@@ -90,9 +98,12 @@ export async function createUserWithPasswordAndDemo(opts: {
 export async function findOrCreateUserFromOAuth(opts: {
   email: string
   name: string | null | undefined
-}): Promise<User> {
+}): Promise<SessionUserRecord> {
   const email = normalizeEmail(opts.email)
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: sessionUserSelect,
+  })
   if (existing) {
     return existing
   }
@@ -112,7 +123,10 @@ export async function findOrCreateUserFromOAuth(opts: {
           },
         },
       },
-      include: { profiles: { select: { id: true } } },
+      select: {
+        ...sessionUserSelect,
+        profiles: { select: { id: true } },
+      },
     })
 
     const profileId = created.profiles[0]?.id
@@ -129,7 +143,8 @@ export async function findOrCreateUserFromOAuth(opts: {
       data: { defaultProfileId: profileId },
     })
 
-    return created
+    const { profiles: _profiles, ...user } = created
+    return user
   })
 }
 
@@ -169,7 +184,10 @@ export async function resetDemoBoardByUserEmail(email: string): Promise<{
   inserted: number
 }> {
   const normalized = normalizeEmail(email)
-  const user = await prisma.user.findUnique({ where: { email: normalized } })
+  const user = await prisma.user.findUnique({
+    where: { email: normalized },
+    select: { id: true },
+  })
   if (!user) {
     throw new Error(`No existe usuario con email: ${normalized}`)
   }

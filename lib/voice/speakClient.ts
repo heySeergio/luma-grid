@@ -2,6 +2,7 @@
 
 import type { TtsMode } from '@/lib/tts/types'
 import { closeAudioContextSafe, connectAudioElementGain } from '@/lib/voice/audioGain'
+import { stopTapAudioElement } from '@/lib/voice/tapAudioElement'
 import { getPresetPlaybackGain } from '@/lib/voice/elevenlabsPresets'
 import { WebSpeechAdapter } from '@/lib/voice/WebSpeechAdapter'
 
@@ -73,6 +74,7 @@ async function speakWithWebSpeech(
 
 export function stopAllTtsPlayback(): void {
   speakSessionId++
+  stopTapAudioElement()
   closeAudioContextSafe(currentGainContext)
   currentGainContext = null
   if (currentAudio) {

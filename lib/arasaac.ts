@@ -42,18 +42,31 @@ export function shouldAutoloadArasaacForSymbol(symbol: {
 }
 
 /** Busca la primera imagen ARASAAC para una etiqueta. Cachea resultados y deduplica peticiones en vuelo. */
-export async function fetchFirstArasaacImage(label: string): Promise<string | null> {
-  const key = label.trim().toLowerCase()
-  if (!key) return null
-  if (arasaacFirstImageCache.has(key)) {
-    return arasaacFirstImageCache.get(key) ?? null
+export async function fetchFirstArasaacImage(
+  label: string,
+  options?: { detectedLemma?: string | null },
+): Promise<string | null> {
+  const trimmedLabel = label.trim()
+  const lemma = options?.detectedLemma?.trim() ?? ''
+  const cacheKey =
+    lemma && lemma.toLowerCase() !== trimmedLabel.toLowerCase()
+      ? `${trimmedLabel.toLowerCase()}|${lemma.toLowerCase()}`
+      : trimmedLabel.toLowerCase()
+  if (!cacheKey) return null
+  if (arasaacFirstImageCache.has(cacheKey)) {
+    return arasaacFirstImageCache.get(cacheKey) ?? null
   }
-  const running = arasaacInFlight.get(key)
+  const running = arasaacInFlight.get(cacheKey)
   if (running) return running
 
   const request = (async () => {
     try {
-      const res = await fetch(`/api/arasaac?q=${encodeURIComponent(label)}&locale=es`)
+      const params = new URLSearchParams({
+        q: trimmedLabel,
+        locale: 'es',
+      })
+      if (lemma) params.set('lemma', lemma)
+      const res = await fetch(`/api/arasaac?${params.toString()}`)
       if (!res.ok) return null
       const data = (await res.json()) as {
         pictograms?: Array<{ imageUrl?: string | null }>
@@ -62,16 +75,16 @@ export async function fetchFirstArasaacImage(label: string): Promise<string | nu
         ? data.pictograms.find((p) => typeof p.imageUrl === 'string' && p.imageUrl.trim().length > 0)
         : null
       const imageUrl = first?.imageUrl?.trim() || null
-      arasaacFirstImageCache.set(key, imageUrl)
+      arasaacFirstImageCache.set(cacheKey, imageUrl)
       return imageUrl
     } catch {
-      arasaacFirstImageCache.set(key, null)
+      arasaacFirstImageCache.set(cacheKey, null)
       return null
     } finally {
-      arasaacInFlight.delete(key)
+      arasaacInFlight.delete(cacheKey)
     }
   })()
 
-  arasaacInFlight.set(key, request)
+  arasaacInFlight.set(cacheKey, request)
   return request
 }

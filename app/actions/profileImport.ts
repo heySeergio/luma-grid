@@ -225,6 +225,19 @@ export async function importProfileBoardFromLuma(
       wordVariants = s.wv as Prisma.InputJsonValue
     }
 
+    const tapAudioUrl =
+      typeof s.tapAudioUrl === 'string'
+        ? s.tapAudioUrl
+        : typeof s.tau === 'string'
+          ? s.tau
+          : null
+    let tapAudioMeta: Prisma.InputJsonValue | typeof Prisma.JsonNull = Prisma.JsonNull
+    if (s.tapAudioMeta !== undefined && s.tapAudioMeta !== null) {
+      tapAudioMeta = s.tapAudioMeta as Prisma.InputJsonValue
+    } else if (s.tam !== undefined && s.tam !== null) {
+      tapAudioMeta = s.tam as Prisma.InputJsonValue
+    }
+
     symbolRows.push({
       id: newId,
       profileId: '', // se rellena en transacción
@@ -246,6 +259,8 @@ export async function importProfileBoardFromLuma(
       opensKeyboard,
       fixedCell,
       wordVariants,
+      tapAudioUrl,
+      tapAudioMeta,
     })
   }
 

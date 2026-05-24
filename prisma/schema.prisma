@@ -20,6 +20,8 @@ model User {
   showFrequentPhrasesSection Boolean @default(true) @map("show_frequent_phrases_section")
   /// Mostrar la franja «Siguiente» (chips de completado bajo la barra de frase). Las predicciones en celdas siguen activas.
   showPhraseCompletionSection Boolean @default(true) @map("show_phrase_completion_section")
+  /// Mostrar el botón de modo descanso (zzz) en la barra del comunicador /tablero.
+  showRestModeButton Boolean @default(true) @map("show_rest_mode_button")
   /// Iluminar celdas del grid con predicciones (siguiente palabra probable).
   showGridCellPredictions Boolean @default(true) @map("show_grid_cell_predictions")
   /// Si al escribir con el teclado se rellenan pictos desde el tablero cuando hay coincidencia léxica o de etiqueta.
@@ -30,6 +32,8 @@ model User {
   defaultTableroTab String @default("grid") @map("default_tablero_tab")
   /// Guardar pulsaciones y transiciones para mejorar predicciones (el usuario puede desactivarlo).
   shareUsageForPredictions Boolean @default(true) @map("share_usage_for_predictions")
+  /// Banner «Primeros pasos» del panel /admin: true = no volver a mostrar.
+  adminGettingStartedDismissed Boolean @default(false) @map("admin_getting_started_dismissed")
   /// "browser" | "preset" | "custom"
   ttsMode                String    @default("browser") @map("tts_mode")
   /// ElevenLabs voice_id cuando preset/custom
@@ -115,7 +119,9 @@ model Profile {
   demoSuppressedFolderItems Json? @map("demo_suppressed_folder_items")
   symbols     Symbol[]
   transitions PredictionTransition[]
-  usageEvents SymbolUsageEvent[]
+  usageEvents    SymbolUsageEvent[]
+  utteranceEvents UtteranceEvent[]
+  navigationEvents NavigationEvent[]
   createdAt   DateTime             @default(now()) @map("created_at")
   updatedAt   DateTime             @updatedAt @map("updated_at")
 
@@ -148,6 +154,10 @@ model Symbol {
   wordVariants          Json?              @map("word_variants")
   /// Celda del grid principal que permanece visible aunque el usuario abra una carpeta.
   fixedCell             Boolean            @default(false) @map("fixed_cell")
+  /// Audio que suena al pulsar la celda (no al leer la frase completa).
+  tapAudioUrl           String?            @map("tap_audio_url")
+  /// Metadatos del audio de toque (origen, atribución Freesound, etc.).
+  tapAudioMeta          Json?              @map("tap_audio_meta")
   usageEvents           SymbolUsageEvent[]
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
@@ -284,6 +294,45 @@ model SymbolUsageEvent {
   @@index([phraseSessionId, sequenceIndex])
   @@index([lexemeId])
   @@map("symbol_usage_events")
+}
+
+/// Enunciado completado (hablar o frase rápida) para informes clínicos (LME, funciones comunicativas).
+model UtteranceEvent {
+  id             String   @id @default(cuid())
+  profileId      String   @map("profile_id")
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  text           String
+  symbolCount    Int      @map("symbol_count")
+  durationMs     Int?     @map("duration_ms")
+  /// speak | quick_phrase
+  source         String   @default("speak")
+  symbolsUsed    Json     @map("symbols_used")
+  /// Función comunicativa heurística (request, reject, question, greet, comment, other).
+  inferredIntent String?  @map("inferred_intent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([profileId, createdAt])
+  @@map("utterance_events")
+}
+
+/// Acciones de navegación y corrección en el tablero (fricción de uso).
+model NavigationEvent {
+  id           String   @id @default(cuid())
+  profileId    String   @map("profile_id")
+  profile      Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  /// folder_enter | folder_back | home | delete_last | clear_phrase
+  action       String
+  /// Carpeta destino u origen (etiqueta o id), si aplica.
+  folderTarget String?  @map("folder_target")
+  /// Símbolos en la frase en el momento de la acción.
+  phraseLength Int      @default(0) @map("phrase_length")
+  /// Profundidad de carpeta (0 = grid principal).
+  folderDepth  Int      @default(0) @map("folder_depth")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([profileId, createdAt])
+  @@index([profileId, action, createdAt])
+  @@map("navigation_events")
 }
 
 /// Opiniones enviadas desde la landing / sobre nosotros (modal de feedback).

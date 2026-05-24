@@ -84,7 +84,7 @@ export default function PendingSyncStatus({ isOnline, shareUsageForPredictions }
       <div className="pointer-events-auto flex max-w-md items-center gap-2 rounded-xl border border-sky-300/80 bg-sky-50/95 px-3 py-2 text-xs text-sky-950 shadow-md backdrop-blur-sm dark:border-sky-500/35 dark:bg-sky-950/90 dark:text-sky-100">
         <p className="min-w-0 flex-1">
           <span className="font-semibold">Sincronizando aprendizaje:</span>{' '}
-          {pending === 1 ? '1 toque pendiente' : `${pending} toques pendientes`} para mejorar predicciones.
+          {pending === 1 ? '1 evento pendiente' : `${pending} eventos pendientes`} para sincronizar con el servidor.
         </p>
         <button
           type="button"

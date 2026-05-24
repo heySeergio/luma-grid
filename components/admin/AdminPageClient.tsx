@@ -7,7 +7,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
 import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
-import { getVoiceSettings, updateVoiceSettings } from '@/app/actions/voiceSettings'
+import { getVoiceSettings, updateLumaVoicePreferences } from '@/app/actions/voiceSettings'
 import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { getProfileLexiconObservability, previewLexemeDetection } from '@/app/actions/lexicon'
 import FixedZoneEditIntroModal, {
@@ -41,7 +41,6 @@ import {
   updateProfileFixedZone,
   setDefaultOpeningProfile,
   updateProfile,
-  updateProfileGender,
   updateProfileGridSize,
   updateProfileKeyboardTheme,
 } from '@/app/actions/profiles'
@@ -76,7 +75,9 @@ import PictoEmoji from '@/components/ui/PictoEmoji'
 import AdminArasaacCellIcon from '@/components/admin/AdminArasaacCellIcon'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
 import { FeedbackModal } from '@/components/sobre-nosotros/FeedbackModal'
-import BoardUsageEvaluation from '@/components/admin/BoardUsageEvaluation'
+import BoardCommunicationEvaluation from '@/components/admin/BoardCommunicationEvaluation'
+import BoardNavigationEfficiency from '@/components/admin/BoardNavigationEfficiency'
+import BoardLexiconUsage from '@/components/admin/BoardLexiconUsage'
 import AdminAccessBoardDemo from '@/components/admin/AdminAccessBoardDemo'
 import { VoiceCloneLiveWaveform, VoiceCloneSamplePreview } from '@/components/admin/VoiceCloneAudioStrip'
 import AdminGridContextMenu, {
@@ -88,6 +89,7 @@ import {
   PROFILE_GRID_PICKER_MAX_ROWS,
 } from '@/components/admin/ProfileGridDimensionPicker'
 import { SymbolColorPicker } from '@/components/admin/SymbolColorPicker'
+import SymbolTapAudioSection from '@/components/admin/SymbolTapAudioSection'
 import BrandLockup from '@/components/site/BrandLockup'
 import KeyboardThemeModal from '@/components/app/KeyboardThemeModal'
 import WordVariantsSchematic from '@/components/app/WordVariantsSchematic'
@@ -99,6 +101,7 @@ import {
   symbolHasVariantMenu,
   type WordVariantsEdit,
 } from '@/lib/symbolWordVariants'
+import type { TapAudioMeta } from '@/lib/symbolTapAudio'
 import {
   DEFAULT_SYMBOL_COLOR,
   getSymbolTextColor,
@@ -190,6 +193,10 @@ type AdminSymbol = {
   advancedUnlockedForEdit?: boolean
   /** Celda del grid principal visible también dentro de carpetas (persistido en BD). */
   fixedCell?: boolean
+  tapAudioUrl?: string | null
+  tap_audio_url?: string | null
+  tapAudioMeta?: TapAudioMeta | null
+  tap_audio_meta?: TapAudioMeta | null
   createdAt?: Date | string
   updatedAt?: Date | string
   created_at?: string
@@ -561,11 +568,13 @@ export default function AdminPageClient() {
     preferredDyslexiaFont: boolean
     showFrequentPhrasesSection?: boolean
     showPhraseCompletionSection?: boolean
+    showRestModeButton?: boolean
     showGridCellPredictions?: boolean
     keyboardPictoAutocomplete?: boolean
     keyboardArasaacPictograms?: boolean
     defaultTableroTab?: DefaultTableroTab
     shareUsageForPredictions?: boolean
+    adminGettingStartedDismissed?: boolean
     hasLocalPassword?: boolean
   } | null>(null)
   const [accountName, setAccountName] = useState('')
@@ -616,11 +625,13 @@ export default function AdminPageClient() {
   /** null = vista previa (grid/lista); en panel principal sustituyen a la vista previa */
   const [adminSettingsView, setAdminSettingsView] = useState<null | 'account' | 'luma' | 'lexicon'>(null)
   /** Subapartado dentro de «Léxico y Evaluación». */
-  const [lexiconSubTab, setLexiconSubTab] = useState<'coverage' | 'usage'>('coverage')
+  const [lexiconSubTab, setLexiconSubTab] = useState<'coverage' | 'vocabulary' | 'usage' | 'efficiency'>('coverage')
   /** Preferencia /tablero: fila «Frecuentes» (persistida en cuenta). */
   const [accountShowFrequentPhrasesSection, setAccountShowFrequentPhrasesSection] = useState(true)
   /** Preferencia /tablero: franja «Siguiente» bajo la barra de frase (persistida en cuenta). */
   const [accountShowPhraseCompletionSection, setAccountShowPhraseCompletionSection] = useState(true)
+  /** Preferencia /tablero: botón de modo descanso (zzz) en la barra del comunicador. */
+  const [accountShowRestModeButton, setAccountShowRestModeButton] = useState(true)
   /** Predicciones visuales en celdas del grid en /tablero. */
   const [accountShowGridCellPredictions, setAccountShowGridCellPredictions] = useState(true)
   /** Autocompletar pictos al escribir con el teclado en /tablero. */
@@ -733,6 +744,11 @@ export default function AdminPageClient() {
       setAccountShowPhraseCompletionSection(
         typeof normalizedAccountSettings?.showPhraseCompletionSection === 'boolean'
           ? normalizedAccountSettings.showPhraseCompletionSection
+          : true,
+      )
+      setAccountShowRestModeButton(
+        typeof normalizedAccountSettings?.showRestModeButton === 'boolean'
+          ? normalizedAccountSettings.showRestModeButton
           : true,
       )
       setAccountShowGridCellPredictions(
@@ -967,19 +983,18 @@ export default function AdminPageClient() {
         fd.append('name', cloneVoiceName || 'Mi voz AAC')
         fd.append('file', file)
         const res = await fetch('/api/voice/clone', { method: 'POST', body: fd })
-        const data = (await res.json()) as { error?: string }
+        const data = (await res.json()) as { error?: string; voiceId?: string; ttsMode?: TtsMode }
         if (!res.ok) throw new Error(data.error || 'Error al clonar voz')
-        setVoiceTtsMode('custom')
+        setVoiceTtsMode(data.ttsMode ?? 'custom')
         setClonePreviewFile(null)
         setStatus('✅ Voz clonada. Ya puedes usarla en el tablero.')
-        await loadData()
       } catch (err) {
         setStatus(err instanceof Error ? `❌ ${err.message}` : '❌ Error al clonar')
       } finally {
         setVoiceCloneBusy(false)
       }
     },
-    [cloneVoiceName, loadData],
+    [cloneVoiceName],
   )
 
   const handleVoiceCloneUpload = useCallback(
@@ -1258,10 +1273,48 @@ export default function AdminPageClient() {
     }
   }
 
+  const handleSaveLumaVoiceSettings = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    setSavingAccountSettings(true)
+    setStatus('')
+    try {
+      const saved = await updateLumaVoicePreferences({
+        ttsMode: voiceTtsMode,
+        voiceId:
+          voiceTtsMode === 'browser'
+            ? null
+            : voiceTtsMode === 'preset'
+              ? voicePresetElevenId
+              : undefined,
+        profileId: selectedProfile?.id ?? null,
+        profileGender: accountGender,
+      })
+
+      setVoiceTtsMode(saved.ttsMode)
+      if (saved.voiceId && saved.ttsMode === 'preset') {
+        setVoicePresetElevenId(saved.voiceId)
+      }
+
+      if (selectedProfile) {
+        setProfileGender(selectedProfile.id, accountGender)
+        setProfiles((prev) =>
+          prev.map((p) => (p.id === selectedProfile.id ? { ...p, gender: accountGender } : p)),
+        )
+      }
+
+      exitAdminSettingsView()
+      setStatus('✅ Voz y género de comunicación actualizados.')
+    } catch (error) {
+      console.error(error)
+      setStatus(error instanceof Error ? `❌ ${error.message}` : '❌ No se pudo guardar la voz.')
+    } finally {
+      setSavingAccountSettings(false)
+    }
+  }
+
   const handleSaveAccountSettings = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const settingsModalTarget =
-      (e.currentTarget.dataset.settingsModal as 'account' | 'luma' | undefined) ?? 'account'
 
     if (!accountName.trim() || !accountEmail.trim()) {
       setStatus('❌ El nombre y el correo electrónico son obligatorios.')
@@ -1286,6 +1339,7 @@ export default function AdminPageClient() {
         preferredDyslexiaFont: accountPreferredDyslexiaFont,
         showFrequentPhrasesSection: accountShowFrequentPhrasesSection,
         showPhraseCompletionSection: accountShowPhraseCompletionSection,
+        showRestModeButton: accountShowRestModeButton,
         showGridCellPredictions: accountShowGridCellPredictions,
         keyboardPictoAutocomplete: accountKeyboardPictoAutocomplete,
         keyboardArasaacPictograms: accountKeyboardArasaacPictograms,
@@ -1294,21 +1348,6 @@ export default function AdminPageClient() {
         currentPassword: accountCurrentPassword,
         newPassword: accountNewPassword,
       })
-
-      await updateVoiceSettings({
-        ttsMode: voiceTtsMode,
-        voiceId:
-          voiceTtsMode === 'browser'
-            ? null
-            : voiceTtsMode === 'preset'
-              ? voicePresetElevenId
-              : undefined,
-      })
-
-      if (selectedProfile) {
-        await updateProfileGender(selectedProfile.id, accountGender)
-        setProfileGender(selectedProfile.id, accountGender)
-      }
 
       const normalizedPreferredTheme = normalizeThemePreference(updatedAccount.preferredTheme)
       setAccountSettings({
@@ -1320,13 +1359,14 @@ export default function AdminPageClient() {
       setAccountEmail(updatedAccount.email)
       setAccountPreferredTheme(normalizedPreferredTheme)
       setAccountPreferredDyslexiaFont(Boolean(updatedAccount.preferredDyslexiaFont))
-      setAccountShowFrequentPhrasesSection(Boolean(updatedAccount.showFrequentPhrasesSection ?? true))
-      setAccountShowPhraseCompletionSection(Boolean(updatedAccount.showPhraseCompletionSection ?? true))
-      setAccountShowGridCellPredictions(Boolean(updatedAccount.showGridCellPredictions ?? true))
-      setAccountKeyboardPictoAutocomplete(Boolean(updatedAccount.keyboardPictoAutocomplete ?? true))
-      setAccountKeyboardArasaacPictograms(Boolean(updatedAccount.keyboardArasaacPictograms ?? true))
+      setAccountShowFrequentPhrasesSection(updatedAccount.showFrequentPhrasesSection !== false)
+      setAccountShowPhraseCompletionSection(updatedAccount.showPhraseCompletionSection !== false)
+      setAccountShowRestModeButton(updatedAccount.showRestModeButton !== false)
+      setAccountShowGridCellPredictions(updatedAccount.showGridCellPredictions !== false)
+      setAccountKeyboardPictoAutocomplete(updatedAccount.keyboardPictoAutocomplete !== false)
+      setAccountKeyboardArasaacPictograms(updatedAccount.keyboardArasaacPictograms !== false)
       setAccountDefaultTableroTab(parseDefaultTableroTab(updatedAccount.defaultTableroTab))
-      setAccountShareUsageForPredictions(Boolean(updatedAccount.shareUsageForPredictions ?? true))
+      setAccountShareUsageForPredictions(updatedAccount.shareUsageForPredictions !== false)
       resetPasswordFields()
       await updateSession({
         user: {
@@ -1342,13 +1382,12 @@ export default function AdminPageClient() {
         return
       }
       setTheme(normalizedPreferredTheme)
-      await loadData()
-      if (settingsModalTarget === 'luma') {
-        exitAdminSettingsView()
-        setStatus('✅ Voz y género de comunicación actualizados.')
-      } else {
-        exitAdminSettingsView()
-        setStatus('✅ Configuración de la cuenta actualizada correctamente.')
+      exitAdminSettingsView()
+      setStatus('✅ Configuración de la cuenta actualizada correctamente.')
+      try {
+        window.localStorage.setItem('luma.account.sync', String(Date.now()))
+      } catch {
+        /* ignore */
       }
     } catch (error) {
       console.error(error)
@@ -1407,8 +1446,7 @@ export default function AdminPageClient() {
         setPendingGridDimensions(null)
       }
       if (symbolsDirty) {
-        await saveSymbols(selectedProfileId, symbols)
-        const freshSymbols = await getProfileSymbols(selectedProfileId)
+        const freshSymbols = await saveSymbols(selectedProfileId, symbols)
         const mappedFresh = freshSymbols.map(adminSymbolFromBoard)
         setSymbols(mappedFresh)
         setSymbolsBaselineJson(stableGridSnapshot(mappedFresh))
@@ -1446,6 +1484,11 @@ export default function AdminPageClient() {
             : '✅ Cambios guardados correctamente.',
       )
       setGridSaveFeedback('saved')
+      try {
+        window.localStorage.setItem('luma.grid.sync', String(Date.now()))
+      } catch {
+        /* ignore */
+      }
     } catch (err) {
       console.error(err)
       const detail = err instanceof Error && err.message.trim() ? err.message.trim() : 'Error al guardar.'
@@ -2735,9 +2778,14 @@ export default function AdminPageClient() {
         </div>
       </header>
 
-      <AdminGettingStartedBanner />
+      <AdminGettingStartedBanner
+        serverDismissed={Boolean(accountSettings?.adminGettingStartedDismissed)}
+      />
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <motion.div
+          data-admin-scroll-root
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
         <div className="flex min-h-min flex-col lg:flex-row lg:items-stretch">
             {/* Sidebar */}
             <aside
@@ -3340,6 +3388,28 @@ export default function AdminPageClient() {
                         </li>
                         <li className="flex items-center gap-4 py-4">
                           <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                            Mostrar el botón de modo descanso en el comunicador (zzz junto a borrar frase). Pausa las
+                            pulsaciones del tablero sin borrar la frase; útil con control por mirada.
+                          </p>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={accountShowRestModeButton}
+                            aria-label="Mostrar botón de descanso en el comunicador"
+                            onClick={() => setAccountShowRestModeButton((v) => !v)}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
+                              accountShowRestModeButton ? 'bg-accent-blue' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute left-0.5 top-0.5 block h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                accountShowRestModeButton ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </li>
+                        <li className="flex items-center gap-4 py-4">
+                          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
                             Al escribir con el teclado, usar el pictograma del tablero cuando la palabra coincide con un
                             símbolo (misma palabra o mismo lexema vinculado).
                           </p>
@@ -3520,7 +3590,7 @@ export default function AdminPageClient() {
                   <form
                     data-settings-modal="luma"
                     data-voice-product-tier={voicePlan}
-                    onSubmit={handleSaveAccountSettings}
+                    onSubmit={handleSaveLumaVoiceSettings}
                     className="flex flex-col"
                   >
                     <div className="space-y-6">
@@ -3791,7 +3861,11 @@ export default function AdminPageClient() {
                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                           {lexiconSubTab === 'coverage'
                             ? 'Cobertura y revisión según el tablero seleccionado.'
-                            : 'Uso del comunicador por periodos y comparación con el tramo anterior.'}
+                            : lexiconSubTab === 'vocabulary'
+                              ? 'Vocabulario que usa el comunicador: activo, núcleo, ignorados y combinaciones.'
+                              : lexiconSubTab === 'efficiency'
+                                ? 'Navegación, correcciones y fricción al usar el tablero.'
+                                : 'LME, enunciados, funciones comunicativas y actividad del tablero por periodos.'}
                         </p>
                         {lexiconSubTab === 'coverage' && isSelectedDemoProfile ? (
                           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
@@ -3807,7 +3881,7 @@ export default function AdminPageClient() {
                         Volver a la vista previa
                       </button>
                     </div>
-                    <div className="ui-floating-panel inline-flex w-full max-w-md flex-wrap gap-1 rounded-2xl p-1 sm:w-auto">
+                    <div className="ui-floating-panel inline-flex w-full max-w-2xl flex-wrap gap-1 rounded-2xl p-1 sm:w-auto">
                       <button
                         type="button"
                         onClick={() => setLexiconSubTab('coverage')}
@@ -3821,6 +3895,17 @@ export default function AdminPageClient() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setLexiconSubTab('vocabulary')}
+                        className={`min-h-[2.5rem] flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition sm:flex-none ${
+                          lexiconSubTab === 'vocabulary'
+                            ? 'bg-accent-blue text-white shadow-sm dark:bg-accent-blue'
+                            : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                        }`}
+                      >
+                        Vocabulario en uso
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setLexiconSubTab('usage')}
                         className={`min-h-[2.5rem] flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition sm:flex-none ${
                           lexiconSubTab === 'usage'
@@ -3828,15 +3913,40 @@ export default function AdminPageClient() {
                             : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
                         }`}
                       >
-                        Evaluación de uso
+                        Evaluación comunicativa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLexiconSubTab('efficiency')}
+                        className={`min-h-[2.5rem] flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition sm:flex-none ${
+                          lexiconSubTab === 'efficiency'
+                            ? 'bg-accent-blue text-white shadow-sm dark:bg-accent-blue'
+                            : 'text-slate-600 hover:bg-[var(--app-hover)] dark:text-slate-300'
+                        }`}
+                      >
+                        Eficiencia del tablero
                       </button>
                     </div>
                   </div>
                   <div className="min-h-0 flex-1">
                     {!selectedProfileId ? (
                       <p className="text-sm text-slate-500 dark:text-slate-400">Selecciona un tablero para ver el estado del léxico.</p>
+                    ) : lexiconSubTab === 'efficiency' ? (
+                      <BoardNavigationEfficiency
+                        key={selectedProfileId}
+                        profileId={selectedProfileId}
+                        isDemo={isSelectedDemoProfile}
+                        onOpenAccountSettings={() => setAdminSettingsView('account')}
+                      />
                     ) : lexiconSubTab === 'usage' ? (
-                      <BoardUsageEvaluation
+                      <BoardCommunicationEvaluation
+                        key={selectedProfileId}
+                        profileId={selectedProfileId}
+                        isDemo={isSelectedDemoProfile}
+                        onOpenAccountSettings={() => setAdminSettingsView('account')}
+                      />
+                    ) : lexiconSubTab === 'vocabulary' ? (
+                      <BoardLexiconUsage
                         key={selectedProfileId}
                         profileId={selectedProfileId}
                         isDemo={isSelectedDemoProfile}
@@ -3860,6 +3970,43 @@ export default function AdminPageClient() {
                             <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
                               {lexiconObservability.coverage.reviewNeededCount}
                             </span>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200/60 bg-white/40 px-3 py-2.5 dark:border-slate-600/50 dark:bg-slate-900/25">
+                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--app-muted-foreground)]">
+                            Actividad últimos 7 días
+                          </p>
+                          <div className="flex flex-wrap gap-x-5 gap-y-2">
+                            <div>
+                              <span className="text-[var(--app-muted-foreground)]">Pulsaciones</span>
+                              <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                {lexiconObservability.usageSince7d.toLocaleString('es-ES')}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[var(--app-muted-foreground)]">Transiciones predicción</span>
+                              <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                {lexiconObservability.transitionSince7d.toLocaleString('es-ES')}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[var(--app-muted-foreground)]">Uso sin lexema</span>
+                              <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                {Math.round(lexiconObservability.unknownUsageRate7d * 100)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[var(--app-muted-foreground)]">Baja confianza POS</span>
+                              <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                {lexiconObservability.lowConfidenceSymbols.toLocaleString('es-ES')}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[var(--app-muted-foreground)]">Override manual</span>
+                              <span className="ml-1.5 text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                {Math.round(lexiconObservability.overrideRate * 100)}%
+                              </span>
+                            </div>
                           </div>
                         </div>
                         {lexiconObservability.coverage.reviewItems.length > 0 ? (
@@ -4509,10 +4656,7 @@ export default function AdminPageClient() {
                                       className="ui-floating-panel grid h-11 w-11 place-items-center rounded-2xl text-lg"
                                       style={{ backgroundColor: resolveSymbolColor(symbol.color) }}
                                     >
-                                      <PictoEmoji
-                                        emoji={symbolImageDisplayUrl(symbol) ? '🖼️' : symbol.emoji || '❓'}
-                                        aria-hidden
-                                      />
+                                      <AdminArasaacCellIcon symbol={symbol} />
                                     </div>
                                     <div>
                                       <p className="font-semibold text-slate-900 dark:text-slate-100">{symbol.label || 'Sin etiqueta'}</p>
@@ -4572,7 +4716,7 @@ export default function AdminPageClient() {
               </div>
             </main>
           </div>
-        </div>
+        </motion.div>
 
       {/* Modern Editing Modal */}
       <AnimatePresence>
@@ -4814,7 +4958,7 @@ export default function AdminPageClient() {
                           </span>
                           <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
                             Al activarlo se abre el panel «Opciones avanzadas» a la derecha del editor; ahí podrás
-                            configurar variantes de palabra y, más adelante, otras opciones.
+                            configurar variantes de palabra y audio personalizado al pulsar.
                           </span>
                         </span>
                       </label>
@@ -5333,11 +5477,33 @@ export default function AdminPageClient() {
                       </AnimatePresence>
                     </div>
 
-                    <div className="flex min-h-[min(160px,28vh)] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/40 px-4 py-6 dark:border-slate-700 dark:bg-slate-900/25">
-                      <p className="max-w-sm text-center text-xs text-slate-500 dark:text-slate-400">
-                        Espacio reservado para más opciones avanzadas.
-                      </p>
-                    </div>
+                    <SymbolTapAudioSection
+                      profileId={selectedProfileId}
+                      symbolId={String(editingSymbol.id ?? '')}
+                      enabled={Boolean(editingSymbol.tapAudioUrl?.trim() || editingSymbol.tap_audio_url?.trim())}
+                      tapAudioUrl={editingSymbol.tapAudioUrl ?? editingSymbol.tap_audio_url}
+                      tapAudioMeta={editingSymbol.tapAudioMeta ?? editingSymbol.tap_audio_meta ?? null}
+                      onEnabledChange={(on) => {
+                        if (!on) {
+                          setEditingSymbol({
+                            ...editingSymbol,
+                            tapAudioUrl: null,
+                            tap_audio_url: null,
+                            tapAudioMeta: null,
+                            tap_audio_meta: null,
+                          })
+                        }
+                      }}
+                      onAudioChange={(url, meta) => {
+                        setEditingSymbol({
+                          ...editingSymbol,
+                          tapAudioUrl: url,
+                          tap_audio_url: url,
+                          tapAudioMeta: meta,
+                          tap_audio_meta: meta,
+                        })
+                      }}
+                    />
                   </div>
                 </div>
                 </motion.aside>

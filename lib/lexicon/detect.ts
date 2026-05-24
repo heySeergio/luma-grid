@@ -7,6 +7,10 @@ import {
   stripOuterPunctuation,
   type LexicalPrimaryPos,
 } from '@/lib/lexicon/normalize'
+import {
+  buildSurfaceLemmaCandidates,
+  inferMorphologicalLemma,
+} from '@/lib/lexicon/surfaceLemma'
 
 type LexemeCandidate = {
   lexemeId: string
@@ -166,6 +170,30 @@ function heuristicCandidates(normalizedLabel: string, normalizedLooseLabel: stri
   }]
 }
 
+function morphologicalHeuristicCandidates(label: string): LexemeCandidate[] {
+  const inferred = inferMorphologicalLemma(label)
+  if (!inferred) return []
+
+  return [{
+    lexemeId: '',
+    lemma: inferred.lemma,
+    primaryPos: inferred.primaryPos,
+    symbolPosType: mapLexicalPosToSymbolPosType(inferred.primaryPos),
+    confidence: 0.41,
+    method: 'heuristic',
+  }]
+}
+
+function normalizedSearchValues(...values: string[]) {
+  const seen = new Set<string>()
+  return values.filter((value) => {
+    const key = value.trim()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export async function detectLexemeForLabel(label: string): Promise<DetectionResult> {
   const stripped = stripOuterPunctuation(label)
   const normalizedLabel = normalizeTextForLexicon(stripped)
@@ -231,11 +259,36 @@ export async function detectLexemeForLabel(label: string): Promise<DetectionResu
     take: 8,
   })
 
+  const morphLemmaValues = normalizedSearchValues(
+    ...buildSurfaceLemmaCandidates(stripped)
+      .slice(1)
+      .flatMap((candidate) => {
+        const normalized = normalizeTextForLexicon(candidate)
+        const loose = normalizeLooseTextForSearch(candidate)
+        return loose !== normalized ? [normalized, loose] : [normalized]
+      }),
+  )
+
+  const morphLemmaMatches =
+    formMatches.length === 0 && morphLemmaValues.length > 0
+      ? await prisma.lexeme.findMany({
+          where: { normalizedLemma: { in: morphLemmaValues } },
+          select: {
+            id: true,
+            lemma: true,
+            primaryPos: true,
+          },
+          take: 8,
+        })
+      : []
+
   const candidates = uniqueCandidates([
     ...aliasMatches.map(({ lexeme }) => buildCandidate(lexeme, 0.98, 'alias')),
     ...formMatches.map(({ lexeme }) => buildCandidate(lexeme, 0.93, 'form')),
     ...lemmaMatches.map((lexeme) => buildCandidate(lexeme, 0.89, 'lemma')),
+    ...morphLemmaMatches.map((lexeme) => buildCandidate(lexeme, 0.86, 'lemma')),
     ...heuristicCandidates(normalizedLabel, normalizedLooseLabel),
+    ...morphologicalHeuristicCandidates(stripped),
   ])
 
   if (candidates.length === 0) {
