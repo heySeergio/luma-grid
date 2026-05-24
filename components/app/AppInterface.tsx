@@ -176,11 +176,6 @@ export default function AppInterface({
   const phraseSequenceRef = useRef(0)
   /** Timestamp del primer tap de la composición actual (para durationMs en UtteranceEvent). */
   const compositionStartedAtRef = useRef<number | null>(null)
-  const navContextRef = useRef({
-    activeFolder: null as string | null,
-    folderHistory: [] as string[],
-    phraseLength: 0,
-  })
   /** Snapshot SSR para omitir la primera recarga; el cleanup restaura en Strict Mode. */
   const tableroBootstrapRef = useRef(tableroInitial)
   const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
@@ -343,28 +338,19 @@ export default function AppInterface({
     })()
   }, [shareUsageForPredictions])
 
-  useEffect(() => {
-    navContextRef.current = {
-      activeFolder,
-      folderHistory,
-      phraseLength: selectedSymbols.length,
-    }
-  }, [activeFolder, folderHistory, selectedSymbols.length])
-
   const recordNav = useCallback(
     (action: NavigationAction, opts?: { folderTarget?: string | null }) => {
       if (!profile?.id) return
-      const ctx = navContextRef.current
-      const folderDepth = ctx.folderHistory.length + (ctx.activeFolder ? 1 : 0)
+      const folderDepth = folderHistory.length + (activeFolder ? 1 : 0)
       persistNavigation({
         profileId: profile.id,
         action,
         folderTarget: opts?.folderTarget ?? null,
-        phraseLength: ctx.phraseLength,
+        phraseLength: selectedSymbols.length,
         folderDepth,
       })
     },
-    [profile?.id, persistNavigation],
+    [profile, persistNavigation, activeFolder, folderHistory, selectedSymbols.length],
   )
 
   const enterFolder = useCallback(
@@ -767,6 +753,7 @@ export default function AppInterface({
       setPredictedIds([])
     }
   }, [
+    activeFolder,
     enterFolder,
     ensurePhraseSessionId,
     mainOrderedSymbols,
