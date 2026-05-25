@@ -8,6 +8,7 @@ import { currentBillingMonth } from '@/lib/tts/billing'
 import { computeTtsPhraseKey, MAX_PHRASE_CACHE_CHARS, normalizePhraseForCache } from '@/lib/tts/phraseNormalize'
 import type { TtsMode } from '@/lib/tts/types'
 import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
+import { captureProductEvent } from '@/lib/posthog/capture'
 import {
   canUseElevenLabsPresets,
   canUseVoiceCloning,
@@ -215,6 +216,11 @@ export async function POST(req: Request) {
         },
       })
     }
+
+    void captureProductEvent('symbol_played', user.id, {
+      voice_id: voiceId,
+      char_length: trimmed.length,
+    })
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,

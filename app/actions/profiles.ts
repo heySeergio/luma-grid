@@ -154,6 +154,12 @@ export async function createProfile(data: {
         },
     })
 
+    const { captureProductEvent } = await import('@/lib/posthog/capture')
+    void captureProductEvent('board_created', session.user.id, {
+      profile_id: profile.id,
+      profile_name: profile.name,
+    })
+
     revalidatePath('/admin')
     revalidatePath('/tablero')
 

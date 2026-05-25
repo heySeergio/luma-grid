@@ -9,6 +9,8 @@ type BrandLockupProps = {
   iconSize?: number
   wordmarkWidth?: number
   subtitle?: string
+  /** Clases extra para el subtítulo (p. ej. intranet). */
+  subtitleClassName?: string
   priority?: boolean
   /** Clases del PNG del logo: nunca usar border-radius en el logo (marca con esquinas rectas). */
   iconClassName?: string
@@ -22,6 +24,7 @@ export default function BrandLockup({
   iconSize = 44,
   wordmarkWidth = 172,
   subtitle,
+  subtitleClassName = '',
   priority = false,
   iconClassName = 'rounded-none shadow-[var(--card-shadow)]',
   variant = 'default',
@@ -78,7 +81,13 @@ export default function BrandLockup({
           style={{ maxWidth: `${wordmarkWidth}px` }}
         />
         {subtitle ? (
-          <p className="mt-1 text-sm text-[var(--app-muted-foreground)]">
+          <p
+            className={
+              subtitleClassName.trim()
+                ? `mt-1 ${subtitleClassName.trim()}`
+                : 'mt-1 text-sm text-[var(--app-muted-foreground)]'
+            }
+          >
             {subtitle}
           </p>
         ) : null}

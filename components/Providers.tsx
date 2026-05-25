@@ -4,6 +4,7 @@ import type { Session } from 'next-auth'
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from 'next-themes'
 import { ThemeSync } from '@/components/ThemeSync'
+import { PostHogProvider } from '@/components/analytics/PostHogProvider'
 
 type Props = {
     children: React.ReactNode
@@ -20,7 +21,7 @@ export function Providers({ children, session }: Props) {
         >
             <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange storageKey="luma-theme">
                 <ThemeSync />
-                {children}
+                <PostHogProvider>{children}</PostHogProvider>
             </ThemeProvider>
         </SessionProvider>
     )

@@ -52,8 +52,14 @@ model User {
   defaultProfileId         String?   @map("default_profile_id")
   defaultProfile           Profile?  @relation("UserDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
   profiles                 Profile[]
+  /// Última actividad autenticada (middleware / intranet).
+  lastSeen                 DateTime? @map("last_seen")
+  feedbackEntries          FeedbackEntry[]
+  geoActivityEvents      GeoActivityEvent[]
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+
+  @@index([lastSeen])
 }
 
 /// Catálogo opcional de voces preset (también definidas en código para la UI).
@@ -338,13 +344,43 @@ model NavigationEvent {
 /// Opiniones enviadas desde la landing / sobre nosotros (modal de feedback).
 model FeedbackEntry {
   id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   anonymous Boolean  @default(false)
   email     String?
   message   String
+  /// bug | suggestion | general
+  type      String?
+  rating    Int?
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([createdAt])
+  @@index([userId])
+  @@index([type])
   @@map("feedback_entries")
+}
+
+/// Geolocalización aproximada (cabeceras Vercel) para analytics intranet.
+model GeoActivityEvent {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// page_view | symbol_tap | utterance
+  eventType  String   @map("event_type")
+  /// Ruta de la app, p. ej. /tablero
+  path       String?
+  country    String?  @db.Char(2)
+  /// Código CCAA normalizado, p. ej. ES-MD
+  regionCode String?  @map("region_code")
+  regionName String?  @map("region_name")
+  city       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([country, regionCode])
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("geo_activity_events")
 }
 
 /// Inscripciones a la waitlist (CTA de la landing).

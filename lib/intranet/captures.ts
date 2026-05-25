@@ -1,14 +1,6 @@
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
-import { cpanelCookieName, verifyCpanelToken } from '@/lib/cpanel-auth'
 import { prisma } from '@/lib/prisma'
 
-export async function GET() {
-  const token = (await cookies()).get(cpanelCookieName)?.value
-  if (!verifyCpanelToken(token)) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
+export async function getCapturesData() {
   const [feedback, waitlist] = await Promise.all([
     prisma.feedbackEntry.findMany({
       orderBy: { createdAt: 'desc' },
@@ -17,7 +9,10 @@ export async function GET() {
         anonymous: true,
         email: true,
         message: true,
+        type: true,
+        rating: true,
         createdAt: true,
+        user: { select: { name: true, email: true } },
       },
     }),
     prisma.waitlistEntry.findMany({
@@ -26,14 +21,25 @@ export async function GET() {
     }),
   ])
 
-  return NextResponse.json({
+  return {
     feedback: feedback.map((f) => ({
-      ...f,
+      id: f.id,
+      anonymous: f.anonymous,
+      email: f.email,
+      message: f.message,
+      type: f.type,
+      rating: f.rating,
       createdAt: f.createdAt.toISOString(),
+      userName: f.user?.name ?? null,
+      userEmail: f.user?.email ?? null,
     })),
     waitlist: waitlist.map((w) => ({
-      ...w,
+      id: w.id,
+      name: w.name,
+      email: w.email,
       createdAt: w.createdAt.toISOString(),
     })),
-  })
+  }
 }
+
+export type CapturesData = Awaited<ReturnType<typeof getCapturesData>>
