@@ -49,15 +49,21 @@ function touchLastSeen(request: NextRequest, response: NextResponse): void {
   const origin = request.nextUrl.origin
   const cookieHeader = request.headers.get('cookie') ?? ''
   const pathname = request.nextUrl.pathname
+  const headers = new Headers({
+    cookie: cookieHeader,
+    'x-luma-path': pathname,
+  })
+  for (const name of [
+    'x-vercel-ip-country',
+    'x-vercel-ip-country-region',
+    'x-vercel-ip-city',
+  ] as const) {
+    const value = request.headers.get(name)
+    if (value) headers.set(name, value)
+  }
   void fetch(`${origin}/api/internal/last-seen`, {
     method: 'POST',
-    headers: {
-      cookie: cookieHeader,
-      'x-luma-path': pathname,
-      'x-vercel-ip-country': request.headers.get('x-vercel-ip-country'),
-      'x-vercel-ip-country-region': request.headers.get('x-vercel-ip-country-region'),
-      'x-vercel-ip-city': request.headers.get('x-vercel-ip-city'),
-    },
+    headers,
   }).catch(() => {})
 }
 
