@@ -1,7 +1,7 @@
 import { getToken } from 'next-auth/jwt'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { isIntranetOwner } from '@/lib/intranet/auth'
+import { requestHasIntranetAccess } from '@/lib/intranet/middleware-access'
 
 const authSecret =
   process.env.NEXTAUTH_SECRET || 'luma-grids-super-secret-local-key-2026!@#'
@@ -29,6 +29,10 @@ function isIntranetPath(pathname: string): boolean {
 
 function isIntranetApiPath(pathname: string): boolean {
   return pathname.startsWith('/api/intranet')
+}
+
+function isPublicIntranetApiPath(pathname: string): boolean {
+  return pathname === '/api/intranet/login' || pathname === '/api/intranet/logout'
 }
 
 function touchLastSeen(request: NextRequest, response: NextResponse): void {
@@ -79,20 +83,34 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = await getToken({ req: request, secret: authSecret })
-  const intranetRoute = isIntranetPath(pathname) || isIntranetApiPath(pathname)
+  const intranetRoute =
+    isIntranetPath(pathname) || (isIntranetApiPath(pathname) && !isPublicIntranetApiPath(pathname))
+
+  if (isPublicIntranetApiPath(pathname)) {
+    return NextResponse.next()
+  }
 
   if (intranetRoute) {
-    if (!token) {
-      const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('callbackUrl', pathname)
+    const email = typeof token?.email === 'string' ? token.email : null
+    const hasAccess = await requestHasIntranetAccess(request, email)
+
+    if (pathname === '/intranet/login') {
+      if (hasAccess) {
+        return NextResponse.redirect(new URL('/intranet', request.url))
+      }
+      return NextResponse.next()
+    }
+
+    if (!hasAccess) {
+      const loginUrl = new URL('/intranet/login', request.url)
+      if (pathname !== '/intranet') {
+        loginUrl.searchParams.set('callbackUrl', pathname)
+      }
       return NextResponse.redirect(loginUrl)
     }
-    const email = typeof token.email === 'string' ? token.email : null
-    if (!isIntranetOwner(email)) {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
+
     const response = NextResponse.next()
-    if (token.sub && shouldUpdateLastSeen(pathname)) touchLastSeen(request, response)
+    if (token?.sub && shouldUpdateLastSeen(pathname)) touchLastSeen(request, response)
     return response
   }
 

@@ -49,12 +49,24 @@ export function IntranetSidebar() {
           )
         })}
       </nav>
-      <Link
-        href="/"
-        className="mt-4 rounded-xl px-3 py-2 text-xs font-medium text-[#042D22]/50 hover:text-[#042D22]"
-      >
-        ← Volver al sitio
-      </Link>
+      <div className="mt-4 flex flex-col gap-1">
+        <Link
+          href="/"
+          className="rounded-xl px-3 py-2 text-xs font-medium text-[#042D22]/50 hover:text-[#042D22]"
+        >
+          ← Volver al sitio
+        </Link>
+        <button
+          type="button"
+          className="rounded-xl px-3 py-2 text-left text-xs font-medium text-[#042D22]/50 hover:text-[#042D22]"
+          onClick={async () => {
+            await fetch('/api/intranet/logout', { method: 'POST' })
+            window.location.href = '/intranet/login'
+          }}
+        >
+          Cerrar sesión intranet
+        </button>
+      </div>
     </aside>
   )
 }
