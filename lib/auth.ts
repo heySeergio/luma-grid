@@ -84,6 +84,17 @@ export const authOptions: NextAuthOptions = {
       return Boolean(email)
     },
     async jwt({ token, user, account, trigger, session }) {
+      if (token.sub && !token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub as string },
+          select: { email: true, name: true },
+        })
+        if (dbUser?.email) {
+          token.email = dbUser.email
+          if (!token.name && dbUser.name) token.name = dbUser.name
+        }
+      }
+
       if (account?.provider === 'credentials' && user?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },

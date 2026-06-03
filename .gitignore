@@ -16,6 +16,9 @@
 # production
 /build
 
+# Claude worktrees (no submódulos rotos en git)
+.claude/worktrees/
+
 # misc
 .DS_Store
 *.pem

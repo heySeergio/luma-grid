@@ -70,6 +70,12 @@ export async function recordUtterance(payload: RecordUtterancePayload): Promise<
         inferredIntent,
       },
     })
+    const { recordGeoActivity } = await import('@/lib/analytics/record-geo-activity')
+    void recordGeoActivity({
+      userId: session.user.id,
+      eventType: 'utterance',
+      path: '/tablero',
+    })
     return true
   } catch {
     return false

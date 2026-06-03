@@ -70,6 +70,11 @@ const nextConfig = {
       bodySizeLimit: '4mb',
     },
   },
+  logging: {
+    incomingRequests: {
+      ignore: [/\/api\/internal\/last-seen/],
+    },
+  },
   images: {
     remotePatterns: [
       {

@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
+import { captureClientEvent } from "@/lib/posthog/client";
 
 type FeedbackModalProps = {
   open: boolean;
@@ -116,6 +117,7 @@ export function FeedbackModal({
         return;
       }
       setStatus("success");
+      captureClientEvent("feedback_submitted", { anonymous });
     } catch {
       setStatus("error");
       setErrorMessage("Error de conexión. Inténtalo más tarde.");

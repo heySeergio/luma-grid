@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { feedbackCorsHeaders } from '@/lib/feedback-cors'
 import { prisma } from '@/lib/prisma'
+import {
+  captureProductEvent,
+  parseFeedbackRating,
+  parseFeedbackType,
+} from '@/lib/posthog/capture'
 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 
@@ -12,6 +19,8 @@ export async function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   const cors = feedbackCorsHeaders(request)
+  const session = await getServerSession(authOptions)
+
   let body: unknown
   try {
     body = await request.json()
@@ -23,7 +32,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400, headers: cors })
   }
 
-  const { anonymous: rawAnon, message: rawMessage, email: rawEmail } = body as Record<string, unknown>
+  const raw = body as Record<string, unknown>
+  const { anonymous: rawAnon, message: rawMessage, email: rawEmail } = raw
 
   if (typeof rawAnon !== 'boolean' || typeof rawMessage !== 'string') {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400, headers: cors })
@@ -37,6 +47,9 @@ export async function POST(request: Request) {
     )
   }
 
+  const type = parseFeedbackType(raw.type) ?? (session?.user?.id ? 'general' : null)
+  const rating = parseFeedbackRating(raw.rating)
+
   if (rawAnon) {
     if (rawEmail != null && rawEmail !== '') {
       return NextResponse.json(
@@ -46,7 +59,7 @@ export async function POST(request: Request) {
     }
     try {
       await prisma.feedbackEntry.create({
-        data: { anonymous: true, email: null, message },
+        data: { anonymous: true, email: null, message, type, rating },
       })
     } catch (e) {
       console.error('[feedback] persist', e)
@@ -69,9 +82,18 @@ export async function POST(request: Request) {
     )
   }
 
+  const userId = session?.user?.id ?? null
+
   try {
     await prisma.feedbackEntry.create({
-      data: { anonymous: false, email, message },
+      data: {
+        anonymous: false,
+        email,
+        message,
+        userId,
+        type,
+        rating,
+      },
     })
   } catch (e) {
     console.error('[feedback] persist', e)
@@ -79,6 +101,10 @@ export async function POST(request: Request) {
       { error: 'No se pudo guardar. Inténtalo más tarde.' },
       { status: 500, headers: cors },
     )
+  }
+
+  if (userId) {
+    void captureProductEvent('feedback_submitted', userId, { type, rating })
   }
 
   return NextResponse.json({ ok: true }, { headers: cors })
