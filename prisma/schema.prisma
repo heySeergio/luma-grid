@@ -394,3 +394,40 @@ model WaitlistEntry {
   @@index([createdAt])
   @@map("waitlist_entries")
 }
+
+/// Visitas a páginas públicas del sitio (marketing, landing, legal…). No incluye uso del tablero.
+model WebVisitEvent {
+  id           String   @id @default(cuid())
+  path         String
+  referrer     String?
+  referrerHost String?  @map("referrer_host")
+  utmSource    String?  @map("utm_source")
+  utmMedium    String?  @map("utm_medium")
+  utmCampaign  String?  @map("utm_campaign")
+  country      String?  @db.Char(2)
+  city         String?
+  /// Segundos en la página (actualizado al salir).
+  durationSec  Int?     @map("duration_sec")
+  /// Cookie anónima de visitante (localStorage).
+  visitorId    String?  @map("visitor_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([path, createdAt])
+  @@index([referrerHost, createdAt])
+  @@index([utmSource, createdAt])
+  @@index([visitorId, createdAt])
+  @@map("web_visit_events")
+}
+
+/// Búsquedas en el sitio web (cuando la UI las emita).
+model WebSearchEvent {
+  id        String   @id @default(cuid())
+  query     String
+  path      String?
+  visitorId String?  @map("visitor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("web_search_events")
+}

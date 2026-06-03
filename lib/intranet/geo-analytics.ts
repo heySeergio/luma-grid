@@ -52,17 +52,32 @@ export async function getGeoAnalytics(): Promise<GeoAnalyticsData> {
     }
   }
 
-  const geoRows = await prisma.geoActivityEvent.findMany({
-    where: { createdAt: { gte: since } },
-    select: {
-      eventType: true,
-      regionCode: true,
-      regionName: true,
-      city: true,
-      country: true,
-      userId: true,
-    },
-  })
+  let geoRows: Array<{
+    eventType: string
+    regionCode: string | null
+    regionName: string | null
+    city: string | null
+    country: string | null
+    userId: string | null
+  }>
+  try {
+    geoRows = await prisma.geoActivityEvent.findMany({
+      where: { createdAt: { gte: since } },
+      select: {
+        eventType: true,
+        regionCode: true,
+        regionName: true,
+        city: true,
+        country: true,
+        userId: true,
+      },
+    })
+  } catch {
+    return {
+      ...empty,
+      note: 'No se pudo leer geo_activity_events. Ejecuta las migraciones en producción.',
+    }
+  }
 
   if (geoRows.length === 0) {
     return {
@@ -120,26 +135,31 @@ export async function getGeoAnalytics(): Promise<GeoAnalyticsData> {
   }
 
   // Pulsaciones del tablero atribuidas por última región conocida del usuario (7 días)
-  const symbolAttribution = await prisma.$queryRaw<
-    Array<{ region_code: string; taps: bigint }>
-  >`
-    SELECT g.region_code, COUNT(s.id)::bigint AS taps
-    FROM symbol_usage_events s
-    INNER JOIN profiles p ON p.id = s.profile_id
-    INNER JOIN LATERAL (
-      SELECT region_code
-      FROM geo_activity_events g
-      WHERE g.user_id = p.user_id
-        AND g.country = 'ES'
-        AND g.region_code IS NOT NULL
-        AND g.created_at <= s.created_at
-        AND g.created_at >= s.created_at - INTERVAL '7 days'
-      ORDER BY g.created_at DESC
-      LIMIT 1
-    ) g ON true
-    WHERE s.created_at >= ${since}
-    GROUP BY g.region_code
-  `
+  let symbolAttribution: Array<{ region_code: string; taps: bigint }> = []
+  try {
+    symbolAttribution = await prisma.$queryRaw<
+      Array<{ region_code: string; taps: bigint }>
+    >`
+      SELECT g.region_code, COUNT(s.id)::bigint AS taps
+      FROM symbol_usage_events s
+      INNER JOIN profiles p ON p.id = s.profile_id
+      INNER JOIN LATERAL (
+        SELECT region_code
+        FROM geo_activity_events g
+        WHERE g.user_id = p.user_id
+          AND g.country = 'ES'
+          AND g.region_code IS NOT NULL
+          AND g.created_at <= s.created_at
+          AND g.created_at >= s.created_at - INTERVAL '7 days'
+        ORDER BY g.created_at DESC
+        LIMIT 1
+      ) g ON true
+      WHERE s.created_at >= ${since}
+      GROUP BY g.region_code
+    `
+  } catch (e) {
+    console.error('[intranet/geo-analytics] symbol attribution', e)
+  }
 
   for (const row of symbolAttribution) {
     const code = row.region_code as SpainCcaaId

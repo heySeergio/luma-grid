@@ -2,6 +2,15 @@ import { prisma } from '@/lib/prisma'
 import { normalizePlanKey, type PlanKey } from '@/lib/intranet/plan-labels'
 import { getStripeRevenueSummary } from '@/lib/intranet/stripe-revenue'
 
+async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    console.error('[intranet/overview]', e)
+    return fallback
+  }
+}
+
 export async function getOverviewData() {
   const now = new Date()
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
@@ -16,27 +25,41 @@ export async function getOverviewData() {
     allUsersByPlan,
     mrrSummary,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { lastSeen: { gte: sevenDaysAgo } } }),
-    prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
-    prisma.profile.count(),
-    prisma.feedbackEntry.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-      select: {
-        id: true,
-        message: true,
-        createdAt: true,
-        anonymous: true,
-        email: true,
-        type: true,
-        user: { select: { name: true, email: true } },
-      },
-    }),
-    prisma.user.groupBy({
-      by: ['plan'],
-      _count: { plan: true },
-    }),
+    safeQuery(() => prisma.user.count(), 0),
+    safeQuery(
+      () => prisma.user.count({ where: { lastSeen: { gte: sevenDaysAgo } } }),
+      0,
+    ),
+    safeQuery(
+      () => prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
+      0,
+    ),
+    safeQuery(() => prisma.profile.count(), 0),
+    safeQuery(
+      () =>
+        prisma.feedbackEntry.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 3,
+          select: {
+            id: true,
+            message: true,
+            createdAt: true,
+            anonymous: true,
+            email: true,
+            type: true,
+            user: { select: { name: true, email: true } },
+          },
+        }),
+      [],
+    ),
+    safeQuery(
+      () =>
+        prisma.user.groupBy({
+          by: ['plan'],
+          _count: { plan: true },
+        }),
+      [],
+    ),
     getStripeRevenueSummary().catch(() => ({ mrrCents: 0, configured: false })),
   ])
 

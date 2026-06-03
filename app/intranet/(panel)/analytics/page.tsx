@@ -13,15 +13,18 @@ export default async function IntranetAnalyticsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <header>
-        <h1 className="text-2xl font-bold text-[#042D22]">Analytics</h1>
+        <h1 className="text-2xl font-bold text-[#042D22]">Uso de la app</h1>
         <p className="mt-1 text-sm text-[#042D22]/55">
-          Uso de la app y procedencia geográfica (últimos 30 días)
+          Pulsaciones, enunciados y usuarios del tablero (últimos 30 días)
         </p>
       </header>
 
       <section className="rounded-2xl border border-black/[0.06] bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#042D22]">España — mapa de actividad</h2>
-        <p className="mt-1 text-xs text-[#042D22]/50">{geo.note}</p>
+        <p className="mt-1 text-xs text-[#042D22]/50">
+          {geo.note}{' '}
+          Mapa esquemático con un punto por comunidad autónoma (no es un mapa satélite).
+        </p>
         {geo.spainRegions.length > 0 ? (
           <div className="mt-6">
             <SpainGeoMap regions={geo.spainRegions} />

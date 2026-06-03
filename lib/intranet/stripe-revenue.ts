@@ -77,6 +77,21 @@ export async function getStripeRevenueDetail() {
     }
   }
 
+  try {
+    return await loadStripeRevenueDetail()
+  } catch (e) {
+    console.error('[intranet/stripe-revenue]', e)
+    return {
+      configured: false,
+      mrrCents: 0,
+      byPlan: [] as PlanRevenueRow[],
+      churnThisMonth: 0,
+      recentPayments: [] as RecentPaymentRow[],
+    }
+  }
+}
+
+async function loadStripeRevenueDetail() {
   const stripe = getStripe()
   const now = new Date()
   const monthStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000)

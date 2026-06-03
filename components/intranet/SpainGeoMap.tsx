@@ -2,6 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import { SPAIN_CCAA, type SpainCcaaId } from '@/lib/analytics/spain-ccaa'
+import {
+  SPAIN_BALEARES_PATH,
+  SPAIN_CANARIAS_PATH,
+  SPAIN_ENCLAVES,
+  SPAIN_MAP_VIEWBOX,
+  SPAIN_PENINSULA_PATH,
+} from '@/lib/analytics/spain-outline'
 import type { RegionGeoRow } from '@/lib/intranet/geo-analytics'
 
 type Props = {
@@ -28,12 +35,50 @@ export function SpainGeoMap({ regions }: Props) {
     <div className="flex flex-col gap-4 lg:flex-row">
       <div className="relative min-h-[320px] flex-1 rounded-2xl border border-black/[0.06] bg-[#FDF8EF] p-4">
         <svg
-          viewBox="0 0 100 95"
+          viewBox={SPAIN_MAP_VIEWBOX}
           className="h-auto w-full max-h-[360px]"
           role="img"
           aria-label="Mapa de actividad en España por comunidad autónoma"
         >
           <rect x="0" y="0" width="100" height="95" fill="#F5F0E8" rx="4" />
+
+          <g aria-hidden>
+            <path
+              d={SPAIN_PENINSULA_PATH}
+              fill="#E6DDD0"
+              stroke="#042D22"
+              strokeOpacity={0.22}
+              strokeWidth={0.6}
+              strokeLinejoin="round"
+            />
+            <path
+              d={SPAIN_BALEARES_PATH}
+              fill="#E6DDD0"
+              stroke="#042D22"
+              strokeOpacity={0.22}
+              strokeWidth={0.45}
+            />
+            <path
+              d={SPAIN_CANARIAS_PATH}
+              fill="#E6DDD0"
+              stroke="#042D22"
+              strokeOpacity={0.22}
+              strokeWidth={0.45}
+            />
+            {SPAIN_ENCLAVES.map((e, i) => (
+              <circle
+                key={i}
+                cx={e.cx}
+                cy={e.cy}
+                r={e.r}
+                fill="#E6DDD0"
+                stroke="#042D22"
+                strokeOpacity={0.22}
+                strokeWidth={0.4}
+              />
+            ))}
+          </g>
+
           {(Object.keys(SPAIN_CCAA) as SpainCcaaId[]).map((id) => {
             const pos = SPAIN_CCAA[id]
             const row = byCode.get(id)
@@ -76,7 +121,7 @@ export function SpainGeoMap({ regions }: Props) {
           })}
         </svg>
         <p className="mt-2 text-center text-[10px] text-[#042D22]/45">
-          Tamaño del círculo ≈ visitas + pulsaciones (ponderadas)
+          Mapa esquemático de España · tamaño del círculo ≈ visitas + pulsaciones (ponderadas)
         </p>
       </div>
 

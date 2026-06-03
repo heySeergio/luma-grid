@@ -10,7 +10,8 @@ const links = [
   { href: '/intranet/revenue', label: 'Ingresos' },
   { href: '/intranet/feedback', label: 'Feedback' },
   { href: '/intranet/waitlist', label: 'Waitlist' },
-  { href: '/intranet/analytics', label: 'Analytics' },
+  { href: '/intranet/analytics', label: 'Uso app' },
+  { href: '/intranet/web', label: 'Tráfico web' },
   { href: '/intranet/system', label: 'Sistema' },
 ] as const
 
@@ -19,7 +20,7 @@ export function IntranetSidebar() {
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-black/10 bg-white/80 px-3 py-6">
-      <div className="mb-8 px-1">
+      <div className="mb-8 flex justify-center px-1">
         <BrandLockup
           href="/intranet"
           variant="marketing"
@@ -27,7 +28,7 @@ export function IntranetSidebar() {
           priority
           iconClassName="rounded-none shadow-none"
           subtitle="INTRANET"
-          subtitleClassName="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#042D22]/45"
+          subtitleClassName="mt-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#042D22]/45"
         />
       </div>
       <nav className="flex flex-1 flex-col gap-0.5">

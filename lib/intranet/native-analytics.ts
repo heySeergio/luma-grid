@@ -98,7 +98,31 @@ function buildDailySeries(
   })
 }
 
+const EMPTY_ANALYTICS: NativeAnalyticsData = {
+  source: 'neon',
+  dailyActive: last30Days().map((date) => ({ date, dau: 0, wau: 0, mau: 0 })),
+  topEvents: [],
+  activityByPlan: [],
+  totals: {
+    symbolTaps: 0,
+    utterances: 0,
+    navigationActions: 0,
+    activeUsers30d: 0,
+  },
+  geoAndDeviceNote:
+    'No se pudieron cargar los datos. Comprueba migraciones (utterance_events, navigation_events) y DATABASE_URL.',
+}
+
 export async function getNativeAnalytics(): Promise<NativeAnalyticsData> {
+  try {
+    return await loadNativeAnalytics()
+  } catch (e) {
+    console.error('[intranet/native-analytics]', e)
+    return EMPTY_ANALYTICS
+  }
+}
+
+async function loadNativeAnalytics(): Promise<NativeAnalyticsData> {
   const since = new Date()
   since.setDate(since.getDate() - 30)
 

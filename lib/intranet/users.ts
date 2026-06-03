@@ -2,20 +2,42 @@ import { prisma } from '@/lib/prisma'
 import { normalizePlanKey } from '@/lib/intranet/plan-labels'
 
 export async function getIntranetUsers() {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      plan: true,
-      createdAt: true,
-      lastSeen: true,
-      stripeSubscriptionId: true,
-      planExpiresAt: true,
-      _count: { select: { profiles: true } },
-    },
-  })
+  let users: Awaited<
+    ReturnType<
+      typeof prisma.user.findMany<{
+        select: {
+          id: true
+          name: true
+          email: true
+          plan: true
+          createdAt: true
+          lastSeen: true
+          stripeSubscriptionId: true
+          planExpiresAt: true
+          _count: { select: { profiles: true } }
+        }
+      }>
+    >
+  > = []
+  try {
+    users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        plan: true,
+        createdAt: true,
+        lastSeen: true,
+        stripeSubscriptionId: true,
+        planExpiresAt: true,
+        _count: { select: { profiles: true } },
+      },
+    })
+  } catch (e) {
+    console.error('[intranet/users]', e)
+    return []
+  }
 
   return users.map((u) => ({
     id: u.id,
