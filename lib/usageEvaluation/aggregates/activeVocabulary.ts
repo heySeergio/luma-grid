@@ -25,6 +25,15 @@ function resolveTier(meta: LexemeMeta | undefined): ActiveVocabularyItem['tier']
   return 'unknown'
 }
 
+function resolveActiveVocabLabel(
+  row: VocabUsageEventRow,
+  lexemeMetaById: Map<string, LexemeMeta>,
+): string | null {
+  const fromMeta = row.lexemeId ? lexemeMetaById.get(row.lexemeId)?.lemma?.trim() : undefined
+  const fromRow = row.label.trim()
+  return fromMeta || fromRow || null
+}
+
 /** Agrupa eventos del periodo en vocabulario activo ordenado por frecuencia. */
 export function aggregateActiveVocabulary(
   events: VocabUsageEventRow[],
@@ -43,7 +52,9 @@ export function aggregateActiveVocabulary(
   >()
 
   for (const row of events) {
-    const label = row.label.trim() || 'Sin etiqueta'
+    const label = resolveActiveVocabLabel(row, lexemeMetaById)
+    if (!label) continue
+
     const key = vocabKey({ ...row, label })
     const prev = map.get(key)
     if (prev) {

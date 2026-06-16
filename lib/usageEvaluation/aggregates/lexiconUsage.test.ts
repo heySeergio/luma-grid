@@ -21,6 +21,20 @@ describe('aggregateActiveVocabulary', () => {
     assert.equal(result[0]?.isOnBoard, true)
     assert.equal(result[0]?.tier, 'core')
   })
+
+  it('ignora pulsaciones sin etiqueta resoluble', () => {
+    const board = new Set<string>()
+    const meta = new Map<string, { isCore: boolean; lexemeTier: string; lemma: string }>()
+    const rows = [
+      { symbolId: null, lexemeId: null, label: '' },
+      { symbolId: null, lexemeId: null, label: '   ' },
+      { symbolId: null, lexemeId: null, label: 'Yo' },
+    ]
+    const result = aggregateActiveVocabulary(rows, board, meta)
+    assert.equal(result.length, 1)
+    assert.equal(result[0]?.label, 'Yo')
+    assert.equal(result[0]?.count, 1)
+  })
 })
 
 describe('findIgnoredSymbols', () => {

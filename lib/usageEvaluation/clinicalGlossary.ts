@@ -34,8 +34,5 @@ export const CLINICAL_GLOSSARY = [
   },
 ] as const
 
-export const DEMO_CLINICAL_DISCLAIMER =
-  'Tablero de demostración: este informe no debe usarse como historial clínico. Usa un tablero personal del usuario para seguimiento terapéutico.'
-
 export const PRIVACY_PDF_FOOTER =
   'Datos recogidos con consentimiento del titular de la cuenta (compartir uso para predicciones e informes).'

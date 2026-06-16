@@ -3,7 +3,6 @@ import autoTable from 'jspdf-autotable'
 import { formatCompositionDuration } from '@/lib/usageEvaluation/aggregates/communicationEvaluation'
 import {
   CLINICAL_GLOSSARY,
-  DEMO_CLINICAL_DISCLAIMER,
   PRIVACY_PDF_FOOTER,
 } from '@/lib/usageEvaluation/clinicalGlossary'
 import type { ClinicalBoardReportPayload } from '@/lib/usageEvaluation/clinicalReportTypes'
@@ -42,7 +41,7 @@ function writeParagraph(doc: jsPDF, text: string, x: number, y: number, maxW: nu
 
 /** Informe clínico unificado: comunicación + vocabulario + glosario. */
 export function downloadClinicalReportPdf(payload: ClinicalBoardReportPayload): void {
-  const { communication: data, lexicon, isDemo } = payload
+  const { communication: data, lexicon } = payload
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 14
@@ -61,19 +60,6 @@ export function downloadClinicalReportPdf(payload: ClinicalBoardReportPayload): 
   doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, margin, y)
   y += 8
   doc.setTextColor(0, 0, 0)
-
-  if (isDemo) {
-    doc.setFillColor(255, 251, 235)
-    doc.setDrawColor(245, 158, 11)
-    const demoLines = doc.splitTextToSize(DEMO_CLINICAL_DISCLAIMER, contentW - 4)
-    const boxH = demoLines.length * 4 + 6
-    doc.roundedRect(margin, y - 2, contentW, boxH, 2, 2, 'FD')
-    doc.setFontSize(9)
-    doc.setTextColor(120, 53, 15)
-    doc.text(demoLines, margin + 2, y + 2)
-    y += boxH + 4
-    doc.setTextColor(0, 0, 0)
-  }
 
   if (!data.shareUsageEnabled) {
     y = writeParagraph(
@@ -237,17 +223,15 @@ export function downloadClinicalReportPdf(payload: ClinicalBoardReportPayload): 
   doc.setTextColor(100, 100, 100)
   writeParagraph(doc, PRIVACY_PDF_FOOTER, margin, y, contentW, 7)
 
-  const suffix = isDemo ? '-demo' : ''
+  const suffix = ''
   doc.save(`luma-informe-clinico${suffix}-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
 /** @deprecated Usar downloadClinicalReportPdf */
 export function downloadCommunicationEvaluationPdf(
   data: ClinicalBoardReportPayload['communication'],
-  opts?: { isDemo?: boolean },
 ): void {
   downloadClinicalReportPdf({
-    isDemo: opts?.isDemo ?? false,
     communication: data,
     lexicon: null,
   })

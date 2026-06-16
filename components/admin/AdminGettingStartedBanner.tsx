@@ -1,8 +1,10 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compass, X } from 'lucide-react'
 import { dismissAdminGettingStartedBanner } from '@/app/actions/account'
+import { ADMIN_PATHS } from '@/lib/admin/adminNav'
 
 const STORAGE_KEY = 'luma-admin-getting-started-dismissed-v1'
 const AUTO_DISMISS_MS = 25_000
@@ -12,7 +14,17 @@ const steps = [
   'Ajusta filas y columnas del grid (no disponible en el tablero demo fijo).',
   'Edita símbolos: revisa la detección léxica bajo la etiqueta y usa el control gramatical manual si hace falta.',
   'Guarda los cambios y prueba en Volver al tablero.',
-  'En el panel, abre Cuenta y luego «Léxico y Evaluación» para ver cobertura y símbolos pendientes de revisión.',
+  <>
+    En el panel, abre{' '}
+    <Link href={ADMIN_PATHS.account} className="font-semibold underline underline-offset-2">
+      Cuenta
+    </Link>{' '}
+    y luego{' '}
+    <Link href={ADMIN_PATHS.evaluation} className="font-semibold underline underline-offset-2">
+      Evaluación
+    </Link>{' '}
+    para elegir cómo seguir el uso del tablero y revisar la calidad del léxico en Vista previa.
+  </>,
 ]
 
 function readLocalDismissed(): boolean {
@@ -43,13 +55,17 @@ export default function AdminGettingStartedBanner({ serverDismissed = false }: A
   })
   const dismissedRef = useRef(serverDismissed || readLocalDismissed())
 
-  const dismiss = useCallback(() => {
+  const persistDismissed = useCallback(() => {
     if (dismissedRef.current) return
     dismissedRef.current = true
     persistLocalDismissed()
-    setVisible(false)
     void dismissAdminGettingStartedBanner()
   }, [])
+
+  const dismiss = useCallback(() => {
+    persistDismissed()
+    setVisible(false)
+  }, [persistDismissed])
 
   useEffect(() => {
     if (!serverDismissed) return
@@ -57,6 +73,19 @@ export default function AdminGettingStartedBanner({ serverDismissed = false }: A
     persistLocalDismissed()
     setVisible(false)
   }, [serverDismissed])
+
+  /** Primera visita a /admin: al salir (navegación, recarga o cierre) no volver a mostrar. */
+  useEffect(() => {
+    if (!visible) return
+
+    const markFirstVisitComplete = () => persistDismissed()
+
+    window.addEventListener('pagehide', markFirstVisitComplete)
+    return () => {
+      window.removeEventListener('pagehide', markFirstVisitComplete)
+      markFirstVisitComplete()
+    }
+  }, [visible, persistDismissed])
 
   useEffect(() => {
     if (!visible) return

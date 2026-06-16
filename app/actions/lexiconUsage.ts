@@ -107,11 +107,11 @@ export async function getProfileLexiconUsageReport(
     if (e.symbolId) usedSymbolIds.add(e.symbolId)
   }
 
-  const vocabEvents = eventRows.map((e) => ({
-    symbolId: e.symbolId,
-    lexemeId: e.lexemeId,
-    label: e.lexeme?.lemma?.trim() || e.symbol?.label?.trim() || 'Sin etiqueta',
-  }))
+  const vocabEvents = eventRows.flatMap((e) => {
+    const label = e.lexeme?.lemma?.trim() || e.symbol?.label?.trim()
+    if (!label) return []
+    return [{ symbolId: e.symbolId, lexemeId: e.lexemeId, label }]
+  })
 
   const lexemeIds = Array.from(
     new Set(
@@ -148,11 +148,11 @@ export async function getProfileLexiconUsageReport(
   const coreCoverage = computeCoreCoverage(activeVocabulary, coreLexemesTotal, boardCoreSymbolsTotal)
   const ignoredSymbols = findIgnoredSymbols(boardSymbols, usedSymbolIds, endClamped)
 
-  const ngramRows = eventRows.map((e) => ({
-    phraseSessionId: e.phraseSessionId,
-    sequenceIndex: e.sequenceIndex,
-    label: e.symbol?.label?.trim() || e.lexeme?.lemma?.trim() || 'Sin etiqueta',
-  }))
+  const ngramRows = eventRows.flatMap((e) => {
+    const label = e.symbol?.label?.trim() || e.lexeme?.lemma?.trim()
+    if (!label) return []
+    return [{ phraseSessionId: e.phraseSessionId, sequenceIndex: e.sequenceIndex, label }]
+  })
   const frequentSequences = aggregateFrequentSequences(ngramRows)
 
   const introducedInPeriod = boardSymbols.filter(

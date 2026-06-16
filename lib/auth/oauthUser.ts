@@ -2,10 +2,12 @@ import { prisma } from '@/lib/prisma'
 import { normalizeLabelForLexicalMatch } from '@/lib/lexicon/normalize'
 import { DEFAULT_SYMBOLS, DEFAULT_FOLDER_TILES } from '@/lib/data/defaultSymbols'
 import { sessionUserSelect, type SessionUserRecord } from '@/lib/auth/sessionUserSelect'
+import { linkCredentialsAccount } from '@/lib/auth/accounts'
+import { normalizeAuthEmail } from '@/lib/auth/normalizeEmail'
 import { Prisma } from '@prisma/client'
 
 function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
+  return normalizeAuthEmail(email)
 }
 
 const DEMO_REGISTRATION_SEED = [...DEFAULT_SYMBOLS, ...DEFAULT_FOLDER_TILES].slice(0, 60)
@@ -52,7 +54,7 @@ export async function createUserWithPasswordAndDemo(opts: {
     throw err
   }
 
-  return prisma.$transaction(async (tx) => {
+  const user = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
         email,
@@ -87,9 +89,12 @@ export async function createUserWithPasswordAndDemo(opts: {
       data: { defaultProfileId: profileId },
     })
 
-    const { profiles: _profiles, ...user } = created
-    return user
+    const { profiles: _profiles, ...userRow } = created
+    return userRow
   })
+
+  await linkCredentialsAccount(user.id, email)
+  return user
 }
 
 /**

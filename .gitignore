@@ -16,9 +16,6 @@
 # production
 /build
 
-# Claude worktrees (no submódulos rotos en git)
-.claude/worktrees/
-
 # misc
 .DS_Store
 *.pem
@@ -48,6 +45,10 @@ docs/.vercel
 # local snapshots (git bundle / tar backups)
 /backups/
 
+# Claude Code worktrees (no versionar como submodule)
+.claude/worktrees/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env*

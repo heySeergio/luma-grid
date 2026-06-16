@@ -10,13 +10,17 @@ type BrandLockupProps = {
   /** @deprecated El wordmark es tipografía (NavBrandTitle), no SVG. */
   wordmarkWidth?: number
   subtitle?: string
-  /** Clases extra para el subtítulo (p. ej. intranet). */
+  /** @deprecated Usa el badge integrado para INTRANET. */
   subtitleClassName?: string
   priority?: boolean
   /** Clases del PNG del logo: esquinas rectas (marca). */
   iconClassName?: string
   /** @deprecated Siempre el lockup de la landing; se ignora. */
   variant?: 'default' | 'marketing'
+}
+
+function isIntranetBadge(subtitle?: string) {
+  return subtitle?.trim().toUpperCase() === 'INTRANET'
 }
 
 export default function BrandLockup({
@@ -28,9 +32,10 @@ export default function BrandLockup({
   priority = false,
   iconClassName = 'rounded-none shadow-[0_2px_8px_rgba(0,0,0,0.08)]',
 }: BrandLockupProps) {
+  const intranetBadge = isIntranetBadge(subtitle)
 
   const rowClass =
-    `font-bricolage-heading flex min-w-0 items-start gap-2.5 text-base font-extrabold tracking-tight text-forest dark:text-white sm:text-lg ${className}`.trim()
+    `font-bricolage-heading flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-forest dark:text-white sm:text-lg ${className}`.trim()
   const logoClass = `h-8 w-8 shrink-0 object-cover sm:h-9 sm:w-9 rounded-none ${iconClassName}`.trim()
 
   const inner = (
@@ -43,19 +48,35 @@ export default function BrandLockup({
         priority={priority}
         className={logoClass}
       />
-      <div className="min-w-0 pt-0.5">
-        <NavBrandTitle>Luma Grid</NavBrandTitle>
-        {subtitle ? (
-          <p
-            className={
-              subtitleClassName.trim()
-                ? subtitleClassName.trim()
-                : 'mt-1 text-sm text-[var(--app-muted-foreground)]'
-            }
-          >
-            {subtitle}
-          </p>
-        ) : null}
+      <div className="min-w-0 leading-none">
+        {intranetBadge ? (
+          <div className="flex -translate-y-0.5 items-baseline gap-2">
+            <NavBrandTitle>Luma Grid</NavBrandTitle>
+            <span
+              aria-hidden
+              className="relative top-px shrink-0 rounded-[5px] border border-[#042D22]/10 bg-[#042D22]/[0.05] px-1.5 py-px text-[0.5rem] font-bold uppercase tracking-[0.14em] text-[#042D22]/45 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/45"
+            >
+              Intranet
+            </span>
+          </div>
+        ) : (
+          <>
+            <span className="inline-block -translate-y-0.5">
+              <NavBrandTitle>Luma Grid</NavBrandTitle>
+            </span>
+            {subtitle ? (
+              <p
+                className={
+                  subtitleClassName.trim()
+                    ? subtitleClassName.trim()
+                    : 'mt-1 text-sm text-[var(--app-muted-foreground)]'
+                }
+              >
+                {subtitle}
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   )

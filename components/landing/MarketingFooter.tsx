@@ -34,8 +34,8 @@ export function MarketingFooter() {
               <Image
                 src="/casa-numa-logo.png"
                 alt="Casa NUMA"
-                width={895}
-                height={350}
+                width={832}
+                height={304}
                 className="relative z-0 h-auto w-full object-contain object-left transition-opacity duration-200 ease-out group-hover:opacity-0"
               />
               <span

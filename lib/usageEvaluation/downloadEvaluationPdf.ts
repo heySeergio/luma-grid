@@ -27,10 +27,7 @@ function ensureY(doc: jsPDF, y: number, minSpaceMm: number, margin: number): num
   return y
 }
 
-export function downloadBoardUsageEvaluationPdf(
-  data: BoardUsageEvaluationResult,
-  opts?: { isDemo?: boolean },
-): void {
+export function downloadBoardUsageEvaluationPdf(data: BoardUsageEvaluationResult): void {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 14
@@ -47,15 +44,6 @@ export function downloadBoardUsageEvaluationPdf(
   doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, margin, y)
   y += 7
   doc.setTextColor(0, 0, 0)
-
-  if (opts?.isDemo) {
-    const demoLines = doc.splitTextToSize(
-      'Tablero de demostración: los datos reflejan solo la actividad registrada en este tablero si existe.',
-      pageW - 2 * margin,
-    )
-    doc.text(demoLines, margin, y)
-    y += demoLines.length * 4 + 4
-  }
 
   if (!data.shareUsageEnabled) {
     const warn = doc.splitTextToSize(

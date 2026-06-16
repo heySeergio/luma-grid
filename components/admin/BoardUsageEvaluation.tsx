@@ -24,13 +24,11 @@ function formatDateTimeShort(d: Date) {
 
 type Props = {
   profileId: string
-  isDemo: boolean
   onOpenAccountSettings: () => void
 }
 
 export default function BoardUsageEvaluation({
   profileId,
-  isDemo,
   onOpenAccountSettings,
 }: Props) {
   const [mode, setMode] = useState<'preset' | 'custom'>('preset')
@@ -181,7 +179,7 @@ export default function BoardUsageEvaluation({
           {data && !loading ? (
             <button
               type="button"
-              onClick={() => downloadBoardUsageEvaluationPdf(data, { isDemo })}
+              onClick={() => downloadBoardUsageEvaluationPdf(data)}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/90 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <Download className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
@@ -249,12 +247,6 @@ export default function BoardUsageEvaluation({
                 para registrar toques y poder ver categorías y símbolos más usados en este informe.
               </p>
             </div>
-          ) : null}
-
-          {isDemo ? (
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Tablero de demostración: los datos reflejan solo la actividad registrada en este tablero si existe.
-            </p>
           ) : null}
 
           {data.shareUsageEnabled ? (

@@ -5,9 +5,10 @@ import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
-import { getSafeCallbackUrl } from '@/lib/auth-redirect'
+import { getSafeCallbackUrl, resolveClientSignInRedirect } from '@/lib/auth-redirect'
 import BrandLockup from '@/components/site/BrandLockup'
 import { OAuthSignInButtons } from '@/components/auth/OAuthSignInButtons'
+import { PasskeySignInButton, useLoginHints } from '@/components/auth/PasskeySignInButton'
 
 export default function LoginForm() {
   const router = useRouter()
@@ -21,8 +22,10 @@ export default function LoginForm() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const hints = useLoginHints(email)
 
   const registered = searchParams.get('registered') === '1'
+  const accountLinkError = searchParams.get('error') === 'AccountLinkConflict'
 
   async function handleCredentialsSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,7 +42,7 @@ export default function LoginForm() {
       setError('Correo o contraseña incorrectos.')
       return
     }
-    router.push(res?.url ?? callbackUrl)
+    router.push(resolveClientSignInRedirect(res?.url, callbackUrl))
     router.refresh()
   }
 
@@ -57,15 +60,34 @@ export default function LoginForm() {
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-forest dark:text-slate-100">Bienvenido</h1>
             <p className="mt-2 text-sm text-[var(--app-muted-foreground)]">
-              Entra con tu correo o con Google
+              Entra con tu correo, Google o passkey
             </p>
           </div>
 
           {registered ? (
             <p className="mb-4 rounded-xl border border-emerald-200/70 bg-emerald-50/90 px-3 py-2 text-center text-sm text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-              Cuenta creada. Inicia sesión con tu correo y contraseña.
+              Cuenta creada. Revisa tu correo para verificarlo e inicia sesión.
             </p>
           ) : null}
+
+          {accountLinkError ? (
+            <p className="mb-4 rounded-xl border border-amber-200/70 bg-amber-50/90 px-3 py-2 text-center text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200">
+              Esta cuenta de Google ya está vinculada a otro usuario.
+            </p>
+          ) : null}
+
+          <PasskeySignInButton email={email} callbackUrl={callbackUrl} className="mb-4" />
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center" aria-hidden>
+              <div className="w-full border-t border-[var(--app-border)]" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="rounded-full bg-[var(--app-surface-muted)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted-foreground)]">
+                O con correo
+              </span>
+            </div>
+          </div>
 
           <form onSubmit={(e) => void handleCredentialsSubmit(e)} className="space-y-4">
             {error ? (
@@ -88,24 +110,34 @@ export default function LoginForm() {
                 placeholder="tu@email.com"
               />
             </div>
-            <div className="space-y-1.5">
-              <label htmlFor="login-password" className="text-sm font-medium text-[var(--app-foreground)]">
-                Contraseña
-              </label>
-              <input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
-                placeholder="••••••••"
-              />
-            </div>
+            {hints.hasCredentials ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="login-password" className="text-sm font-medium text-[var(--app-foreground)]">
+                    Contraseña
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-semibold text-accent-blue hover:underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                </div>
+                <input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="app-input w-full rounded-xl px-4 py-2.5 text-sm"
+                  placeholder="••••••••"
+                />
+              </div>
+            ) : null}
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !hints.hasCredentials}
               className="ui-primary-button flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -113,18 +145,21 @@ export default function LoginForm() {
             </button>
           </form>
 
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center" aria-hidden>
-              <div className="w-full border-t border-[var(--app-border)]" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="rounded-full bg-[var(--app-surface-muted)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted-foreground)]">
-                O continúa con
-              </span>
-            </div>
-          </div>
-
-          <OAuthSignInButtons callbackUrl={callbackUrl} googleLabel="Continuar con Google" />
+          {hints.hasGoogle ? (
+            <>
+              <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center" aria-hidden>
+                  <div className="w-full border-t border-[var(--app-border)]" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="rounded-full bg-[var(--app-surface-muted)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted-foreground)]">
+                    O continúa con
+                  </span>
+                </div>
+              </div>
+              <OAuthSignInButtons callbackUrl={callbackUrl} googleLabel="Continuar con Google" />
+            </>
+          ) : null}
 
           <p className="mt-8 text-center text-sm text-[var(--app-muted-foreground)]">
             ¿Primera vez?{' '}

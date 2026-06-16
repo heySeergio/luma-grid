@@ -799,3 +799,15 @@ body.font-dyslexia-enabled .luma-marketing-portal select {
   text-decoration-thickness: 2px;
   text-underline-offset: 0.2em;
 }
+
+/* —— Admin panel horizontal navigation —— */
+.admin-panel-nav__primary,
+.admin-panel-nav__boards-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.admin-panel-nav__primary::-webkit-scrollbar,
+.admin-panel-nav__boards-scroll::-webkit-scrollbar {
+  display: none;
+}

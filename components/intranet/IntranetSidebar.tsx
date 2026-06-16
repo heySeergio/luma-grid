@@ -23,12 +23,10 @@ export function IntranetSidebar() {
       <div className="mb-8 flex justify-center px-1">
         <BrandLockup
           href="/intranet"
-          variant="marketing"
           iconSize={40}
           priority
           iconClassName="rounded-none shadow-none"
           subtitle="INTRANET"
-          subtitleClassName="mt-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#042D22]/45"
         />
       </div>
       <nav className="flex flex-1 flex-col gap-0.5">

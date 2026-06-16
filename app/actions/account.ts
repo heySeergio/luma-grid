@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { revalidateAdminPaths } from '@/lib/admin/adminNav'
 import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import {
   readAccountPrivacyPrefsFromDb,
@@ -14,6 +15,9 @@ import {
   writeAccountPrivacyPrefsToDb,
   writeTableroUiPrefsToDb,
 } from '@/lib/account/userPrefsRaw'
+import { getLinkedProviders, linkCredentialsAccount, unlinkGoogleAccount } from '@/lib/auth/accounts'
+import { getOptionalSessionUserId } from '@/lib/auth/sessionHelpers'
+import { fetchPasskeysForUser, type PasskeyListItem } from '@/app/actions/passkeys'
 import { isMissingDatabaseColumnError, isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 
 const TABLERO_UI_PRISMA_FIELDS = [
@@ -59,6 +63,11 @@ export type PublicAccountSettings = {
     shareUsageForPredictions: boolean
     adminGettingStartedDismissed: boolean
     hasLocalPassword: boolean
+    linkedProviders: string[]
+    passkeyCount: number
+    passkeys: PasskeyListItem[]
+    twoFactorEnabled: boolean
+    emailVerified: boolean
 }
 
 async function updatePreferredThemeForUser(userId: string, preferredTheme: AccountThemePreference) {
@@ -121,8 +130,26 @@ function buildPublicAccountSettings(
         shareUsageForPredictions: rest.shareUsageForPredictions !== false,
         adminGettingStartedDismissed: rest.adminGettingStartedDismissed === true,
         hasLocalPassword: Boolean(_pw),
+        linkedProviders: [],
+        passkeyCount: 0,
+        passkeys: [],
+        twoFactorEnabled: rest.twoFactorEnabled === true,
+        emailVerified: Boolean(rest.emailVerified),
         ...overrides,
     }
+}
+
+async function loadSecurityMeta(userId: string) {
+    const [linkedProviders, passkeys, user] = await Promise.all([
+        getLinkedProviders(userId),
+        fetchPasskeysForUser(userId),
+        prisma.user.findUnique({
+            where: { id: userId },
+            select: { emailVerified: true },
+        }),
+    ])
+    const emailVerified = Boolean(user?.emailVerified) || linkedProviders.includes('google')
+    return { linkedProviders, passkeyCount: passkeys.length, passkeys, emailVerified }
 }
 
 const ACCOUNT_SETTINGS_SELECT = {
@@ -141,28 +168,31 @@ const ACCOUNT_SETTINGS_SELECT = {
     shareUsageForPredictions: true,
     adminGettingStartedDismissed: true,
     password: true,
+    twoFactorEnabled: true,
+    emailVerified: true,
 } as const
 
 export async function getAccountSettings(): Promise<PublicAccountSettings | null> {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return null
+    const userId = await getOptionalSessionUserId()
+    if (!userId) return null
 
     try {
         const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
+            where: { id: userId },
             select: ACCOUNT_SETTINGS_SELECT as any,
         })
 
         if (!user) return null
 
-        return buildPublicAccountSettings(user as Record<string, unknown> & { password?: string | null })
+        const security = await loadSecurityMeta(userId)
+        return buildPublicAccountSettings(user as Record<string, unknown> & { password?: string | null }, security)
     } catch (error) {
         if (!isTableroUiPrefsPrismaError(error)) {
             throw error
         }
 
         const fallbackUser = await prisma.user.findUnique({
-            where: { id: session.user.id },
+            where: { id: userId },
             select: {
                 id: true,
                 name: true,
@@ -175,10 +205,11 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
 
         if (!fallbackUser) return null
 
-        const [prefs, adminGettingStartedDismissed, tableroUiPrefs] = await Promise.all([
-            readAccountPrivacyPrefsFromDb(session.user.id),
-            readAdminGettingStartedDismissedFromDb(session.user.id),
-            readTableroUiPrefsFromDb(session.user.id),
+        const [prefs, adminGettingStartedDismissed, tableroUiPrefs, security] = await Promise.all([
+            readAccountPrivacyPrefsFromDb(userId),
+            readAdminGettingStartedDismissedFromDb(userId),
+            readTableroUiPrefsFromDb(userId),
+            loadSecurityMeta(userId),
         ])
 
         return buildPublicAccountSettings(fallbackUser as Record<string, unknown> & { password?: string | null }, {
@@ -187,6 +218,7 @@ export async function getAccountSettings(): Promise<PublicAccountSettings | null
             defaultTableroTab: prefs.defaultTableroTab,
             shareUsageForPredictions: prefs.shareUsageForPredictions,
             adminGettingStartedDismissed,
+            ...security,
         })
     }
 }
@@ -210,7 +242,7 @@ export async function dismissAdminGettingStartedBanner(): Promise<void> {
             WHERE "id" = ${session.user.id}
         `
     }
-    revalidatePath('/admin')
+    revalidateAdminPaths(revalidatePath)
 }
 
 export async function updateAccountSettings(data: {
@@ -270,17 +302,17 @@ export async function updateAccountSettings(data: {
     let password: string | undefined
     if (newPassword) {
         if (!user.password) {
-            throw new Error(
-                'Esta cuenta solo usa inicio de sesión con Google. No hay contraseña local que cambiar.',
-            )
+            if (newPassword.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres')
+            password = await bcrypt.hash(newPassword, 10)
+        } else {
+            if (!currentPassword) throw new Error('Debes indicar tu contraseña actual')
+
+            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
+            if (!isCurrentPasswordValid) throw new Error('La contraseña actual no es correcta')
+            if (newPassword.length < 8) throw new Error('La nueva contraseña debe tener al menos 8 caracteres')
+
+            password = await bcrypt.hash(newPassword, 10)
         }
-        if (!currentPassword) throw new Error('Debes indicar tu contraseña actual')
-
-        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
-        if (!isCurrentPasswordValid) throw new Error('La contraseña actual no es correcta')
-        if (newPassword.length < 8) throw new Error('La nueva contraseña debe tener al menos 8 caracteres')
-
-        password = await bcrypt.hash(newPassword, 10)
     }
 
     const tableroUiPrefsToSave: TableroUiPrefs = {
@@ -312,12 +344,17 @@ export async function updateAccountSettings(data: {
             } as any,
             select: ACCOUNT_SETTINGS_SELECT as any,
         })
-        revalidatePath('/admin')
+        if (password && !user.password) {
+            await linkCredentialsAccount(user.id, normalizedEmail)
+        }
+        revalidateAdminPaths(revalidatePath)
         revalidatePath('/tablero')
+        const security = await loadSecurityMeta(user.id)
         return buildPublicAccountSettings(updatedUser as Record<string, unknown> & { password?: string | null }, {
             ...tableroUiPrefsToSave,
             defaultTableroTab,
             shareUsageForPredictions,
+            ...security,
         })
     } catch (error) {
         if (!isTableroUiPrefsPrismaError(error)) {
@@ -352,7 +389,7 @@ export async function updateAccountSettings(data: {
     }
     await writeAccountPrivacyPrefsToDb(user.id, { defaultTableroTab, shareUsageForPredictions })
 
-    revalidatePath('/admin')
+    revalidateAdminPaths(revalidatePath)
     revalidatePath('/tablero')
 
     const [prefs, adminGettingStartedDismissed] = await Promise.all([
@@ -368,6 +405,33 @@ export async function updateAccountSettings(data: {
     })
 }
 
+export async function unlinkGoogleAccountAction(): Promise<PublicAccountSettings> {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+
+    try {
+        await unlinkGoogleAccount(session.user.id)
+    } catch (error) {
+        if (error instanceof Error) {
+            if (error.message === 'NEED_ALTERNATIVE_LOGIN') {
+                throw new Error(
+                    'Añade una contraseña o passkey antes de desvincular Google; es tu único método de acceso.',
+                )
+            }
+            if (error.message === 'GOOGLE_NOT_LINKED') {
+                throw new Error('Tu cuenta no tiene Google vinculado.')
+            }
+        }
+        throw error
+    }
+
+    revalidateAdminPaths(revalidatePath)
+
+    const settings = await getAccountSettings()
+    if (!settings) throw new Error('No se pudo actualizar la cuenta.')
+    return settings
+}
+
 export async function updateThemePreference(preferredTheme: AccountThemePreference) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -380,7 +444,7 @@ export async function updateThemePreference(preferredTheme: AccountThemePreferen
 
     const updatedUser = await updatePreferredThemeForUser(session.user.id, preferredTheme)
 
-    revalidatePath('/admin')
+    revalidateAdminPaths(revalidatePath)
     revalidatePath('/tablero')
 
     return updatedUser

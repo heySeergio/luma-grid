@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react'
 import { Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { getProfileBoardEfficiencyReport } from '@/app/actions/boardEfficiency'
-import DemoClinicalBanner from '@/components/admin/DemoClinicalBanner'
 import UsagePeriodPicker from '@/components/admin/UsagePeriodPicker'
 import { useUsageReportPeriod } from '@/lib/hooks/useUsageReportPeriod'
 import type { BoardEfficiencyReport } from '@/lib/usageEvaluation/boardEfficiencyTypes'
@@ -29,13 +28,13 @@ function formatNumber(value: number, digits = 1) {
 
 type Props = {
   profileId: string
-  isDemo: boolean
+  profileName?: string | null
   onOpenAccountSettings: () => void
 }
 
 export default function BoardNavigationEfficiency({
   profileId,
-  isDemo,
+  profileName = null,
   onOpenAccountSettings,
 }: Props) {
   const [data, setData] = useState<BoardEfficiencyReport | null>(null)
@@ -84,8 +83,6 @@ export default function BoardNavigationEfficiency({
             <PrivacyBanner onOpenAccountSettings={onOpenAccountSettings} />
           ) : (
             <>
-              {isDemo ? <DemoClinicalBanner /> : null}
-
               <div className="rounded-xl border border-slate-200/70 bg-white/50 px-4 py-3 dark:border-slate-600/50 dark:bg-slate-900/30">
                 <p className="text-xs font-medium text-[var(--app-muted-foreground)]">Periodo del informe</p>
                 <p className="mt-0.5 text-base font-semibold text-slate-800 dark:text-slate-100">

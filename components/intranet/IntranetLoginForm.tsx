@@ -47,7 +47,6 @@ export function IntranetLoginForm() {
             priority
             iconClassName="rounded-none shadow-none"
             subtitle="INTRANET"
-            subtitleClassName="mt-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#042D22]/45"
           />
         </div>
         <h1 className="text-center text-2xl font-extrabold tracking-tight">Acceso restringido</h1>

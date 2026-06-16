@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { createUserWithPasswordAndDemo } from '@/lib/auth/oauthUser'
+import { createAuthToken } from '@/lib/auth/authTokens'
+import { sendVerificationEmail } from '@/lib/email/resend'
+import { normalizeAuthEmail } from '@/lib/auth/normalizeEmail'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,11 +48,13 @@ export async function POST(req: Request) {
   const passwordHash = await bcrypt.hash(pwd, 10)
 
   try {
-    await createUserWithPasswordAndDemo({
+    const user = await createUserWithPasswordAndDemo({
       email,
       passwordHash,
       name: name || null,
     })
+    const token = await createAuthToken(user.id, 'email_verify')
+    await sendVerificationEmail(normalizeAuthEmail(email), token)
   } catch (e) {
     if (e instanceof Error && e.message === 'EMAIL_IN_USE') {
       return NextResponse.json({ error: 'Ese correo ya está registrado' }, { status: 409 })

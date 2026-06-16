@@ -11,7 +11,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { captureClientEvent } from "@/lib/posthog/client";
 
 type FeedbackModalProps = {
   open: boolean;
@@ -117,7 +116,6 @@ export function FeedbackModal({
         return;
       }
       setStatus("success");
-      captureClientEvent("feedback_submitted", { anonymous });
     } catch {
       setStatus("error");
       setErrorMessage("Error de conexión. Inténtalo más tarde.");
@@ -158,7 +156,7 @@ export function FeedbackModal({
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={descId}
-            className="relative z-10 w-full max-w-[440px] overflow-hidden rounded-[28px] border border-neutral-200/95 bg-[#FDF8EF] shadow-[0_24px_64px_-12px_rgba(28,43,36,0.16),0_8px_24px_-6px_rgba(0,0,0,0.08)]"
+            className="relative z-10 w-full max-w-[600px] overflow-hidden rounded-[28px] border border-neutral-200/95 bg-[#FDF8EF] shadow-[0_24px_64px_-12px_rgba(28,43,36,0.16),0_8px_24px_-6px_rgba(0,0,0,0.08)]"
             initial={
               reduceMotion
                 ? { opacity: 0 }
@@ -240,7 +238,7 @@ export function FeedbackModal({
                   </legend>
                   <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
                     <label
-                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border bg-white px-4 py-3.5 text-left transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#3A7CEC]/35 has-[:focus-visible]:ring-offset-2 ${
+                      className={`flex flex-1 cursor-pointer items-start gap-3 rounded-2xl border bg-white px-4 py-3.5 text-left transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#3A7CEC]/35 has-[:focus-visible]:ring-offset-2 ${
                         mode === "anonymous"
                           ? "border-[#3A7CEC]/45 shadow-sm"
                           : "border-neutral-200 hover:border-neutral-300"
@@ -265,7 +263,7 @@ export function FeedbackModal({
                       </span>
                     </label>
                     <label
-                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border bg-white px-4 py-3.5 text-left transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#3A7CEC]/35 has-[:focus-visible]:ring-offset-2 ${
+                      className={`flex flex-1 cursor-pointer items-start gap-3 rounded-2xl border bg-white px-4 py-3.5 text-left transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#3A7CEC]/35 has-[:focus-visible]:ring-offset-2 ${
                         mode === "notify"
                           ? "border-[#3A7CEC]/45 shadow-sm"
                           : "border-neutral-200 hover:border-neutral-300"

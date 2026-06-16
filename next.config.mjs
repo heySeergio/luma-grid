@@ -70,11 +70,6 @@ const nextConfig = {
       bodySizeLimit: '4mb',
     },
   },
-  logging: {
-    incomingRequests: {
-      ignore: [/\/api\/internal\/last-seen/],
-    },
-  },
   images: {
     remotePatterns: [
       {
@@ -86,6 +81,14 @@ const nextConfig = {
         hostname: 'api.arasaac.org',
       },
     ],
+  },
+  async redirects() {
+    return [
+      { source: '/admin/lexico', destination: '/admin/evaluacion', permanent: true },
+      { source: '/admin/lexico/vocabulario', destination: '/admin/evaluacion', permanent: true },
+      { source: '/admin/lexico/evaluacion', destination: '/admin/evaluacion', permanent: true },
+      { source: '/admin/lexico/eficiencia', destination: '/admin/evaluacion', permanent: true },
+    ]
   },
 }
 

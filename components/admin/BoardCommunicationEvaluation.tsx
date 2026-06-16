@@ -4,7 +4,6 @@ import { useCallback, useState } from 'react'
 import { Download, Loader2, TrendingDown, TrendingUp, Minus } from 'lucide-react'
 import { getProfileCommunicationEvaluation } from '@/app/actions/communicationEvaluation'
 import { getProfileLexiconUsageReport } from '@/app/actions/lexiconUsage'
-import DemoClinicalBanner from '@/components/admin/DemoClinicalBanner'
 import UsagePeriodPicker from '@/components/admin/UsagePeriodPicker'
 import { useUsageReportPeriod } from '@/lib/hooks/useUsageReportPeriod'
 import {
@@ -29,13 +28,13 @@ function formatShortDate(iso: string) {
 
 type Props = {
   profileId: string
-  isDemo: boolean
+  profileName?: string | null
   onOpenAccountSettings: () => void
 }
 
 export default function BoardCommunicationEvaluation({
   profileId,
-  isDemo,
+  profileName = null,
   onOpenAccountSettings,
 }: Props) {
   const [data, setData] = useState<CommunicationEvaluationReport | null>(null)
@@ -107,11 +106,10 @@ export default function BoardCommunicationEvaluation({
       endIso: data.currentRange.endIso,
     })
     downloadClinicalReportPdf({
-      isDemo,
       communication: data,
       lexicon,
     })
-  }, [data, profileId, isDemo])
+  }, [data, profileId])
 
   return (
     <div className="space-y-5 text-sm">
@@ -154,8 +152,6 @@ export default function BoardCommunicationEvaluation({
             <PrivacyBanner onOpenAccountSettings={onOpenAccountSettings} />
           ) : (
             <>
-              {isDemo ? <DemoClinicalBanner /> : null}
-
               <PeriodBanner data={data} />
 
               <section>

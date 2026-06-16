@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { NextAuthOptions } from 'next-auth'
+import { getServerSession, NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
@@ -9,6 +9,11 @@ import { sessionUserSelect } from '@/lib/auth/sessionUserSelect'
 import { parseDefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import type { DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
+import { linkGoogleAccount } from '@/lib/auth/accounts'
+import { normalizeAuthEmail } from '@/lib/auth/normalizeEmail'
+import { consumeAuthToken } from '@/lib/auth/authTokens'
+import { loadUserForSession } from '@/lib/auth/sessionHelpers'
+import { getAuthSecret } from '@/lib/auth/secret'
 
 const defaultTableroTabForUserId = cache(async (userId: string): Promise<DefaultTableroTab> => {
   const p = await readAccountPrivacyPrefsFromDb(userId)
@@ -21,8 +26,27 @@ function isAllowedOAuthProvider(id: string | undefined): id is OauthProviderId {
   return id === 'google'
 }
 
-function normalizeAuthEmail(email: string) {
-  return email.trim().toLowerCase()
+async function applyUserToToken(
+  token: Record<string, unknown>,
+  userId: string,
+  opts?: { mfaVerified?: boolean; mfaPending?: boolean },
+) {
+  const dbUser = await loadUserForSession(userId)
+  if (!dbUser) return token
+  token.sub = dbUser.id
+  token.email = dbUser.email
+  token.name = dbUser.name ?? undefined
+  token.preferredTheme = dbUser.preferredTheme as 'light' | 'dark' | 'system'
+  token.preferredDyslexiaFont = Boolean(dbUser.preferredDyslexiaFont)
+  token.defaultTableroTab = await defaultTableroTabForUserId(dbUser.id)
+  if (opts?.mfaPending) {
+    token.mfaPending = true
+    token.mfaVerified = false
+  } else {
+    token.mfaPending = false
+    token.mfaVerified = opts?.mfaVerified ?? !dbUser.twoFactorEnabled
+  }
+  return token
 }
 
 export const authOptions: NextAuthOptions = {
@@ -46,6 +70,7 @@ export const authOptions: NextAuthOptions = {
           select: {
             ...sessionUserSelect,
             password: true,
+            twoFactorEnabled: true,
           },
         })
         if (!user?.password) return null
@@ -57,6 +82,53 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           preferredTheme: user.preferredTheme as 'light' | 'dark' | 'system',
           preferredDyslexiaFont: user.preferredDyslexiaFont,
+          twoFactorEnabled: user.twoFactorEnabled,
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'credentials-mfa',
+      name: 'Completar 2FA',
+      credentials: {
+        completionToken: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        const raw = credentials?.completionToken
+        if (!raw || typeof raw !== 'string') return null
+        const consumed = await consumeAuthToken(raw, 'session_completion')
+        if (!consumed) return null
+        const user = await loadUserForSession(consumed.userId)
+        if (!user) return null
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          preferredTheme: user.preferredTheme as 'light' | 'dark' | 'system',
+          preferredDyslexiaFont: user.preferredDyslexiaFont,
+          mfaVerified: true,
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'passkey',
+      name: 'Passkey',
+      credentials: {
+        completionToken: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        const raw = credentials?.completionToken
+        if (!raw || typeof raw !== 'string') return null
+        const consumed = await consumeAuthToken(raw, 'session_completion')
+        if (!consumed) return null
+        const user = await loadUserForSession(consumed.userId)
+        if (!user) return null
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          preferredTheme: user.preferredTheme as 'light' | 'dark' | 'system',
+          preferredDyslexiaFont: user.preferredDyslexiaFont,
+          mfaVerified: true,
         }
       },
     }),
@@ -71,43 +143,63 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || 'luma-grids-super-secret-local-key-2026!@#',
+  secret: getAuthSecret(),
   callbacks: {
     async signIn({ account, profile, user }) {
-      if (account?.provider === 'credentials') {
+      if (account?.provider === 'credentials' || account?.provider === 'credentials-mfa' || account?.provider === 'passkey') {
         return Boolean(user?.email)
       }
       if (!isAllowedOAuthProvider(account?.provider)) {
         return false
       }
       const email = profile?.email ?? user?.email
-      return Boolean(email)
+      if (!email) return false
+      try {
+        const googleSub = account?.providerAccountId
+        if (!googleSub) return false
+
+        const session = await getServerSession(authOptions)
+        if (session?.user?.id) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { email: true },
+          })
+          const googleEmail = normalizeAuthEmail(email)
+          if (!dbUser || dbUser.email !== googleEmail) {
+            return '/admin/cuenta?error=GoogleEmailMismatch'
+          }
+          await linkGoogleAccount(session.user.id, googleSub)
+          return true
+        }
+
+        const dbUser = await findOrCreateUserFromOAuth({
+          email,
+          name: user?.name,
+        })
+        await linkGoogleAccount(dbUser.id, googleSub)
+        return true
+      } catch (e) {
+        if (e instanceof Error && e.message === 'ACCOUNT_LINK_CONFLICT') {
+          return '/login?error=AccountLinkConflict'
+        }
+        return false
+      }
     },
     async jwt({ token, user, account, trigger, session }) {
-      if (token.sub && !token.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub as string },
-          select: { email: true, name: true },
-        })
-        if (dbUser?.email) {
-          token.email = dbUser.email
-          if (!token.name && dbUser.name) token.name = dbUser.name
+      if (account?.provider === 'credentials-mfa' || account?.provider === 'passkey') {
+        if (user?.id) {
+          await applyUserToToken(token as Record<string, unknown>, user.id, { mfaVerified: true })
         }
+        return token
       }
 
       if (account?.provider === 'credentials' && user?.id) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: sessionUserSelect,
-        })
-        if (dbUser) {
-          token.sub = dbUser.id
-          token.email = dbUser.email
-          token.name = dbUser.name ?? undefined
-          token.preferredTheme = dbUser.preferredTheme as 'light' | 'dark' | 'system'
-          token.preferredDyslexiaFont = Boolean(dbUser.preferredDyslexiaFont)
-          token.defaultTableroTab = await defaultTableroTabForUserId(dbUser.id)
-        }
+        const twoFactorEnabled = Boolean((user as { twoFactorEnabled?: boolean }).twoFactorEnabled)
+        await applyUserToToken(
+          token as Record<string, unknown>,
+          user.id,
+          twoFactorEnabled ? { mfaPending: true } : { mfaVerified: true },
+        )
         return token
       }
 
@@ -116,12 +208,18 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
         })
-        token.sub = dbUser.id
-        token.email = dbUser.email
-        token.name = dbUser.name ?? undefined
-        token.preferredTheme = dbUser.preferredTheme as 'light' | 'dark' | 'system'
-        token.preferredDyslexiaFont = Boolean(dbUser.preferredDyslexiaFont)
-        token.defaultTableroTab = await defaultTableroTabForUserId(dbUser.id)
+        if (account?.providerAccountId) {
+          await linkGoogleAccount(dbUser.id, account.providerAccountId)
+        }
+        const full = await prisma.user.findUnique({
+          where: { id: dbUser.id },
+          select: { twoFactorEnabled: true },
+        })
+        await applyUserToToken(
+          token as Record<string, unknown>,
+          dbUser.id,
+          full?.twoFactorEnabled ? { mfaPending: true } : { mfaVerified: true },
+        )
       }
 
       if (user?.preferredTheme) {
@@ -130,6 +228,11 @@ export const authOptions: NextAuthOptions = {
 
       if (typeof user?.preferredDyslexiaFont === 'boolean') {
         token.preferredDyslexiaFont = user.preferredDyslexiaFont
+      }
+
+      if (trigger === 'update' && (session as { mfaVerified?: boolean })?.mfaVerified) {
+        token.mfaPending = false
+        token.mfaVerified = true
       }
 
       if (trigger === 'update' && session?.user?.preferredTheme) {
@@ -171,6 +274,8 @@ export const authOptions: NextAuthOptions = {
         } else if (token.sub) {
           session.user.defaultTableroTab = await defaultTableroTabForUserId(token.sub as string)
         }
+        session.user.mfaPending = token.mfaPending === true
+        session.user.mfaVerified = token.mfaVerified !== false
       }
       return session
     },

@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
+import { shouldSkipProfileUsageCapture } from '@/lib/evaluation/profileCapture'
 import {
   NAVIGATION_ACTIONS,
   type NavigationAction,
@@ -31,17 +32,17 @@ export async function recordNavigation(payload: RecordNavigationPayload): Promis
   if (!session?.user?.id) return false
 
   const privacyPrefs = await readAccountPrivacyPrefsFromDb(session.user.id)
-  if (privacyPrefs.shareUsageForPredictions === false) {
-    return false
-  }
 
   if (!payload.profileId || !isNavigationAction(payload.action)) return false
 
   const profile = await prisma.profile.findUnique({
     where: { id: payload.profileId, userId: session.user.id },
-    select: { id: true },
+    select: { id: true, evaluationMode: true },
   })
   if (!profile) return false
+  if (shouldSkipProfileUsageCapture(profile, privacyPrefs.shareUsageForPredictions)) {
+    return false
+  }
 
   try {
     await prisma.navigationEvent.create({

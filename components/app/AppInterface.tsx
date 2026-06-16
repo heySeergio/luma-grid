@@ -10,7 +10,6 @@ import PhraseCompletionChips from './PhraseCompletionChips'
 import ScannerOverlay from './ScannerOverlay'
 import PendingSyncStatus from './PendingSyncStatus'
 import ProfileSelector from './ProfileSelector'
-import { BoardOpenedTracker } from '@/components/analytics/BoardOpenedTracker'
 import { analyzeLexicalTextInput } from '@/app/actions/lexicon'
 import { DEFAULT_FOLDER_CONTENTS, computeMainGrid } from '@/lib/data/defaultSymbols'
 import { mergeMainGridWithFolderView } from '@/lib/grid/mergeMainGridWithFolderView'
@@ -972,7 +971,6 @@ export default function AppInterface({
 
   return (
     <div className="theme-page-shell flex min-h-0 flex-1 flex-col overflow-hidden text-[var(--app-foreground)] dark:text-slate-100">
-      <BoardOpenedTracker profileId={profileId || null} />
       <PendingSyncStatus isOnline={isOnline} shareUsageForPredictions={shareUsageForPredictions} />
       {/* Quick phrases */}
       {pinnedPhrases.length > 0 && (

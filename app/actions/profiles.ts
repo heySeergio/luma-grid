@@ -54,6 +54,7 @@ export async function getProfiles() {
                 keyboardTheme: true,
                 fixedZoneCells: true,
                 demoSuppressedTemplateLabels: true,
+                evaluationMode: true,
             },
         }),
         loadDemoSuppressedFolderItemsMap(session.user.id),
@@ -70,6 +71,7 @@ export async function getProfiles() {
         gender: string
         keyboardTheme: KeyboardThemeColors | null
         fixedZoneCellKeys: string[] | null
+        evaluationMode: string
         demoSuppressedTemplateLabels: string[]
         demoSuppressedFolderItems: string[]
     } => {
@@ -90,6 +92,7 @@ export async function getProfiles() {
             gender: p.gender,
             keyboardTheme: parseKeyboardTheme(p.keyboardTheme),
             fixedZoneCellKeys: fz === null ? null : [...fz],
+            evaluationMode: p.evaluationMode,
             demoSuppressedTemplateLabels: parseDemoSuppressedTemplateLabelsJson(
                 p.demoSuppressedTemplateLabels,
             ),
@@ -152,12 +155,6 @@ export async function createProfile(data: {
             updatedAt: true,
             keyboardTheme: true,
         },
-    })
-
-    const { captureProductEvent } = await import('@/lib/posthog/capture')
-    void captureProductEvent('board_created', session.user.id, {
-      profile_id: profile.id,
-      profile_name: profile.name,
     })
 
     revalidatePath('/admin')

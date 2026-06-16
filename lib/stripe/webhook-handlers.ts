@@ -90,8 +90,6 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
           planSelectionCompletedAt: new Date(),
         },
       })
-      const { captureProductEvent } = await import('@/lib/posthog/capture')
-      void captureProductEvent('plan_upgraded', userId, { plan: planDb })
       break
     }
 

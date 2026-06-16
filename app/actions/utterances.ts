@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readAccountPrivacyPrefsFromDb } from '@/lib/account/userPrefsRaw'
+import { shouldSkipProfileUsageCapture } from '@/lib/evaluation/profileCapture'
 import { inferCommunicativeFunction } from '@/lib/usageEvaluation/inferCommunicativeFunction'
 import type { RecordUtterancePayload, UtteranceSource } from '@/lib/usageEvaluation/utteranceTypes'
 
@@ -29,18 +30,18 @@ export async function recordUtterance(payload: RecordUtterancePayload): Promise<
   if (!session?.user?.id) return false
 
   const privacyPrefs = await readAccountPrivacyPrefsFromDb(session.user.id)
-  if (privacyPrefs.shareUsageForPredictions === false) {
-    return false
-  }
 
   const text = payload.text?.trim()
   if (!text || !payload.profileId) return false
 
   const profile = await prisma.profile.findUnique({
     where: { id: payload.profileId, userId: session.user.id },
-    select: { id: true },
+    select: { id: true, evaluationMode: true },
   })
   if (!profile) return false
+  if (shouldSkipProfileUsageCapture(profile, privacyPrefs.shareUsageForPredictions)) {
+    return false
+  }
 
   const symbolsUsed = Array.isArray(payload.symbolsUsed)
     ? payload.symbolsUsed
@@ -69,12 +70,6 @@ export async function recordUtterance(payload: RecordUtterancePayload): Promise<
         symbolsUsed,
         inferredIntent,
       },
-    })
-    const { recordGeoActivity } = await import('@/lib/analytics/record-geo-activity')
-    void recordGeoActivity({
-      userId: session.user.id,
-      eventType: 'utterance',
-      path: '/tablero',
     })
     return true
   } catch {

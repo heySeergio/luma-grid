@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, EyeOff, Loader2 } from 'lucide-react'
 import { getProfileLexiconUsageReport } from '@/app/actions/lexiconUsage'
 import { getProfileCommunicationEvaluation } from '@/app/actions/communicationEvaluation'
-import DemoClinicalBanner from '@/components/admin/DemoClinicalBanner'
 import UsagePeriodPicker from '@/components/admin/UsagePeriodPicker'
 import { useUsageReportPeriod } from '@/lib/hooks/useUsageReportPeriod'
 import type { LexiconUsageReport } from '@/lib/usageEvaluation/lexiconUsageTypes'
@@ -28,11 +27,11 @@ const TIER_LABEL = {
 
 type Props = {
   profileId: string
-  isDemo: boolean
+  profileName?: string | null
   onOpenAccountSettings: () => void
 }
 
-export default function BoardLexiconUsage({ profileId, isDemo, onOpenAccountSettings }: Props) {
+export default function BoardLexiconUsage({ profileId, profileName = null, onOpenAccountSettings }: Props) {
   const [data, setData] = useState<LexiconUsageReport | null>(null)
 
   const fetchWithRange = useCallback(
@@ -58,8 +57,8 @@ export default function BoardLexiconUsage({ profileId, isDemo, onOpenAccountSett
       endIso: data.currentRange.endIso,
     })
     if (!communication) return
-    downloadClinicalReportPdf({ isDemo, communication, lexicon: data })
-  }, [data, profileId, isDemo])
+    downloadClinicalReportPdf({ communication, lexicon: data })
+  }, [data, profileId])
 
   return (
     <div className="space-y-5 text-sm">
@@ -102,8 +101,6 @@ export default function BoardLexiconUsage({ profileId, isDemo, onOpenAccountSett
             <PrivacyBanner onOpenAccountSettings={onOpenAccountSettings} />
           ) : (
             <>
-              {isDemo ? <DemoClinicalBanner /> : null}
-
               <div className="rounded-xl border border-slate-200/70 bg-white/50 px-4 py-3 dark:border-slate-600/50 dark:bg-slate-900/30">
                 <p className="text-xs font-medium text-[var(--app-muted-foreground)]">Periodo del informe</p>
                 <p className="mt-0.5 text-base font-semibold text-slate-800 dark:text-slate-100">
@@ -311,23 +308,75 @@ function StatMini({ label, value }: { label: string; value: string | number }) {
 }
 
 function IgnoredBlock({ symbols }: { symbols: LexiconUsageReport['ignoredSymbols'] }) {
+  const maxDays = Math.max(...symbols.map((s) => s.daysOnBoard), 1)
+
   return (
     <div>
       <h3 className="mb-2 text-base font-bold text-slate-800 dark:text-slate-100">Palabras ignoradas</h3>
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
         Pictogramas visibles en el tablero sin ningún uso en el periodo. Candidatos a reposicionar o retirar.
       </p>
-      <ul className="space-y-1.5 rounded-lg border border-slate-200/60 p-3 dark:border-slate-600/50">
-        {symbols.map((s) => (
-          <li key={s.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-sm">
-            <span className="min-w-0">
-              <span className="font-medium text-slate-800 dark:text-slate-200">{s.label}</span>
-              <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{s.category}</span>
-            </span>
-            <span className="tabular-nums text-slate-600 dark:text-slate-400">{s.daysOnBoard} d en tablero</span>
-          </li>
-        ))}
-      </ul>
+      <div className="overflow-x-auto rounded-lg border border-slate-200/60 dark:border-slate-600/50">
+        <table className="w-full min-w-[420px] text-left text-sm">
+          <thead className="bg-[var(--app-surface-muted)]">
+            <tr>
+              <th className="px-3 py-2.5 font-semibold text-slate-700 dark:text-slate-200">Término</th>
+              <th className="px-2 py-2.5 font-semibold text-slate-700 dark:text-slate-200">Categoría</th>
+              <th className="px-2 py-2.5 font-semibold text-slate-700 dark:text-slate-200">Usos en periodo</th>
+              <th className="px-3 py-2.5 font-semibold text-slate-700 dark:text-slate-200">Tiempo en tablero</th>
+            </tr>
+          </thead>
+          <tbody>
+            {symbols.map((s) => {
+              const tenurePct = Math.max(8, Math.round((s.daysOnBoard / maxDays) * 100))
+              return (
+                <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/80">
+                  <td className="px-3 py-2.5">
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <span
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-coral/20 bg-coral/10 text-coral dark:border-coral/30 dark:bg-coral/15"
+                        aria-hidden
+                      >
+                        <EyeOff className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{s.label}</span>
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5">
+                    <span className="inline-flex rounded-full border border-forest/10 bg-forest/[0.06] px-2 py-0.5 text-xs font-medium text-forest dark:border-forest/25 dark:bg-forest/20 dark:text-[#c8ddd2]">
+                      {s.category}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5">
+                    <div className="flex min-w-[5.5rem] items-center gap-2">
+                      <div
+                        className="h-2 flex-1 overflow-hidden rounded-full border border-dashed border-coral/35 bg-coral/[0.06] dark:border-coral/40 dark:bg-coral/10"
+                        role="img"
+                        aria-label="0 usos en el periodo"
+                      />
+                      <span className="shrink-0 tabular-nums text-xs font-semibold text-coral dark:text-[#f0a090]">0</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex min-w-[7.5rem] items-center gap-2">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/60">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-cta-yellow via-accent-blue/90 to-accent-blue"
+                          style={{ width: `${tenurePct}%` }}
+                          role="presentation"
+                        />
+                      </div>
+                      <span className="shrink-0 tabular-nums text-xs font-medium text-slate-600 dark:text-slate-400">
+                        {s.daysOnBoard} d
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
