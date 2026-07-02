@@ -21,12 +21,18 @@ interface Props {
   className?: string
 }
 
+const ADMIN_CELL_GLYPH_CLASS =
+  'h-[min(88cqmin,96cqw)] w-[min(88cqmin,96cqw)] max-h-[min(54cqh,88cqmin)] object-contain'
+
 /**
  * Icono de celda del grid de admin: muestra imagen (imageUrl o ARASAAC autocargado)
  * o el emoji/fallback si no hay imagen disponible. Replica la lógica de SymbolCell
  * para que el panel de admin muestre los mismos pictogramas que el tablero base.
  */
-export default function AdminArasaacCellIcon({ symbol, className = 'h-8 w-8 object-contain' }: Props) {
+export default function AdminArasaacCellIcon({
+  symbol,
+  className = ADMIN_CELL_GLYPH_CLASS,
+}: Props) {
   const [arasaacUrl, setArasaacUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -76,5 +82,11 @@ export default function AdminArasaacCellIcon({ symbol, className = 'h-8 w-8 obje
     )
   }
 
-  return <PictoEmoji emoji={symbol.emoji || '❓'} aria-hidden />
+  return (
+    <PictoEmoji
+      emoji={symbol.emoji || '❓'}
+      className="text-[clamp(1.35rem,calc(0.44rem+9cqmin+0.32vmin),2.5rem)] leading-none"
+      aria-hidden
+    />
+  )
 }

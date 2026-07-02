@@ -13,13 +13,15 @@ import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 const nav = [
   { href: '#inicio', label: 'Inicio' },
   { href: '#funciones', label: 'Funciones' },
-  ...(SHOW_LANDING_PRICING_SECTION ? [{ href: '#planes' as const, label: 'Planes' as const }] : []),
+  ...(SHOW_LANDING_PRICING_SECTION
+    ? [{ href: '#planes' as const, label: 'Planes' as const }]
+    : [{ href: 'planes' as const, label: 'Planes' as const }]),
   { href: 'instalar', label: 'Instalar' },
   { href: 'sobre-nosotros', label: 'Sobre nosotros' },
 ] as const
 
-/** Separador antes de «Instalar» (índice del primer enlace tras Inicio/Funciones[/Planes]). */
-const navBeforeSeparator = SHOW_LANDING_PRICING_SECTION ? 3 : 2
+/** Separador antes de «Instalar» (índice del primer enlace tras Inicio/Funciones/Planes). */
+const navBeforeSeparator = 3
 
 function navHref(href: string) {
   return href.startsWith('#') ? `/${href}` : `/${href}`

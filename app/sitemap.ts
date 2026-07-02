@@ -5,6 +5,7 @@ import { getSiteUrl } from '@/lib/seo/siteUrl'
 const PATHS: { path: string; changeFrequency: MetadataRoute.Sitemap[0]['changeFrequency']; priority: number }[] = [
   { path: '', changeFrequency: 'weekly', priority: 1 },
   { path: '/tablero', changeFrequency: 'weekly', priority: 0.95 },
+  { path: '/planes', changeFrequency: 'weekly', priority: 0.8 },
   { path: '/plan', changeFrequency: 'weekly', priority: 0.8 },
   { path: '/login', changeFrequency: 'monthly', priority: 0.65 },
   { path: '/register', changeFrequency: 'monthly', priority: 0.65 },

@@ -37,7 +37,7 @@ export default function AdminPreviewBoardToolbar({
   if (fixedZoneEditMode) {
     return (
       <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-        <span className="hidden text-xs font-medium text-violet-800 dark:text-violet-200 lg:inline">
+        <span className="text-xs font-medium text-violet-800 dark:text-violet-200">
           Editando base fija
         </span>
         {isSelectedDemoProfile ? (
@@ -78,7 +78,7 @@ export default function AdminPreviewBoardToolbar({
           title="Volver al tablero principal"
         >
           <ArrowLeft size={12} aria-hidden />
-          <span className="hidden sm:inline">Principal</span>
+          <span>Principal</span>
         </button>
       ) : null}
       {isSelectedDemoProfile ? (
@@ -106,8 +106,7 @@ export default function AdminPreviewBoardToolbar({
         title="Editar base fija"
       >
         <Pin className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="hidden sm:inline">Editar base fija</span>
-        <span className="sm:hidden">Base fija</span>
+        <span>Editar base fija</span>
       </button>
     </div>
   )

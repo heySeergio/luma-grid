@@ -16,6 +16,8 @@ type Props = {
   disabled?: boolean
   /** Landing: sin enlaces a registro ni CTA inferior (solo referencia de precios). */
   comingSoon?: boolean
+  /** Página informativa: muestra CTAs deshabilitados (sin registro ni checkout). */
+  displayOnly?: boolean
 }
 
 /** Ventajas por plan (compartido con upsell del admin, etc.). */
@@ -37,7 +39,14 @@ export const PLAN_FEATURE_BULLETS = {
 
 const features = PLAN_FEATURE_BULLETS
 
-export default function PricingCards({ variant, onSelectFree, onSelectPaid, disabled, comingSoon }: Props) {
+export default function PricingCards({
+  variant,
+  onSelectFree,
+  onSelectPaid,
+  disabled,
+  comingSoon,
+  displayOnly = false,
+}: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   const isModal = variant === 'modal'
 
@@ -45,6 +54,75 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
   const voiceSecondary = interval === 'month' ? '79€/año (ahorra ~27%)' : 'equiv. ~6,58€/mes'
   const idPrimary = interval === 'month' ? '24€' : '199€'
   const idSecondary = interval === 'month' ? '199€/año (ahorra ~31%)' : 'equiv. ~16,58€/mes'
+
+  const freeCtaClass =
+    'mt-6 w-full rounded-2xl border border-slate-300 py-3 text-sm font-bold text-slate-800 transition dark:border-white/20 dark:text-white'
+  const voiceCtaClass =
+    'mt-6 w-full rounded-2xl bg-indigo-500 py-3 text-sm font-bold text-white transition'
+  const identityCtaClass =
+    'mt-6 w-full rounded-2xl border border-slate-800 bg-slate-900 py-3 text-sm font-bold text-white transition dark:border-white/20 dark:bg-white dark:text-slate-900'
+
+  function renderFreeCta() {
+    if (comingSoon) return null
+    if (displayOnly) {
+      return (
+        <button type="button" disabled className={`${freeCtaClass} cursor-not-allowed opacity-60`}>
+          Empezar gratis
+        </button>
+      )
+    }
+    if (isModal && onSelectFree) {
+      return (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => void onSelectFree()}
+          className={`${freeCtaClass} hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-white/10`}
+        >
+          Empezar gratis
+        </button>
+      )
+    }
+    return (
+      <Link
+        href="/register"
+        className={`${freeCtaClass} block text-center hover:bg-slate-50 dark:hover:bg-white/10`}
+      >
+        Empezar gratis
+      </Link>
+    )
+  }
+
+  function renderPaidCta(tier: 'voice' | 'identity', label: string, className: string) {
+    if (comingSoon) return null
+    if (displayOnly) {
+      return (
+        <button type="button" disabled className={`${className} cursor-not-allowed opacity-60`}>
+          {label}
+        </button>
+      )
+    }
+    if (isModal && onSelectPaid) {
+      return (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => void onSelectPaid(tier, interval)}
+          className={`${className} disabled:opacity-50 ${tier === 'voice' ? 'hover:bg-indigo-400' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
+        >
+          {label}
+        </button>
+      )
+    }
+    return (
+      <Link
+        href="/register"
+        className={`${className} block text-center ${tier === 'voice' ? 'hover:bg-indigo-400' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
+      >
+        {label}
+      </Link>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -95,23 +173,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
               </li>
             ))}
           </ul>
-          {isModal && onSelectFree ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => void onSelectFree()}
-              className="mt-6 w-full rounded-2xl border border-slate-300 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-            >
-              Empezar gratis
-            </button>
-          ) : comingSoon ? null : (
-            <Link
-              href="/register"
-              className="mt-6 block w-full rounded-2xl border border-slate-300 py-3 text-center text-sm font-bold text-slate-800 transition hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-            >
-              Empezar gratis
-            </Link>
-          )}
+          {renderFreeCta()}
         </article>
 
         {/* Voz — destacado */}
@@ -135,23 +197,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
               </li>
             ))}
           </ul>
-          {isModal && onSelectPaid ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => void onSelectPaid('voice', interval)}
-              className="mt-6 w-full rounded-2xl bg-indigo-500 py-3 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:opacity-50"
-            >
-              Activar Voz
-            </button>
-          ) : comingSoon ? null : (
-            <Link
-              href="/register"
-              className="mt-6 block w-full rounded-2xl bg-indigo-500 py-3 text-center text-sm font-bold text-white transition hover:bg-indigo-400"
-            >
-              Activar Voz
-            </Link>
-          )}
+          {renderPaidCta('voice', 'Activar Voz', voiceCtaClass)}
         </article>
 
         {/* Identidad */}
@@ -172,23 +218,7 @@ export default function PricingCards({ variant, onSelectFree, onSelectPaid, disa
               </li>
             ))}
           </ul>
-          {isModal && onSelectPaid ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => void onSelectPaid('identity', interval)}
-              className="mt-6 w-full rounded-2xl border border-slate-800 bg-slate-900 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:border-white/20 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              Activar Identidad
-            </button>
-          ) : comingSoon ? null : (
-            <Link
-              href="/register"
-              className="mt-6 block w-full rounded-2xl border border-slate-800 bg-slate-900 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800 dark:border-white/20 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              Activar Identidad
-            </Link>
-          )}
+          {renderPaidCta('identity', 'Activar Identidad', identityCtaClass)}
         </article>
       </div>
     </div>

@@ -526,26 +526,6 @@ body.font-dyslexia-enabled .dyslexia-comfort-btn {
   container-type: size;
 }
 
-/* Celda muy baja o muy estrecha: solo texto (una línea con auto-fit), sin picto recortado */
-@container (max-height: 72px), (max-width: 40px) {
-  .symbol-cell__glyph-zone {
-    display: none !important;
-  }
-
-  .symbol-cell.symbol-cell__btn--has-glyph .symbol-cell__inner {
-    justify-content: center;
-  }
-
-  .symbol-cell__label--adaptive {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    align-self: stretch !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-}
-
 /* Layout improvements */
 .aac-grid-surface {
   background: color-mix(in srgb, var(--app-surface-muted) 88%, transparent);

@@ -78,6 +78,7 @@ import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import PictoEmoji from '@/components/ui/PictoEmoji'
+import SymbolCellAutoFitLabel from '@/components/app/SymbolCellAutoFitLabel'
 import AdminArasaacCellIcon from '@/components/admin/AdminArasaacCellIcon'
 import AdminGettingStartedBanner from '@/components/admin/AdminGettingStartedBanner'
 import AdminPanelNav, { type AdminPreviewTab } from '@/components/admin/AdminPanelNav'
@@ -551,6 +552,34 @@ function AdminGridSymbolButton({
     >
       {children}
     </button>
+  )
+}
+
+const ADMIN_CELL_LABEL_CLASS =
+  'text-[clamp(0.65rem,calc(0.22rem+2.95cqmin+0.28vmin),0.98rem)]'
+
+function AdminGridCellBody({ symbol }: { symbol: AdminSymbol }) {
+  const textColor = getSymbolTextColor(symbol.color)
+
+  return (
+    <div className="symbol-cell__inner flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-0.5">
+      <div
+        className="symbol-cell__glyph-zone flex min-h-0 w-full shrink-0 items-center justify-center overflow-hidden"
+        style={{ color: textColor }}
+      >
+        <AdminArasaacCellIcon
+          symbol={symbol}
+          className="h-[min(88cqmin,96cqw)] w-[min(88cqmin,96cqw)] max-h-[min(54cqh,88cqmin)] object-contain"
+        />
+      </div>
+      <div className="relative z-[1] w-full min-w-0 shrink-0 px-0.5">
+        <SymbolCellAutoFitLabel
+          label={symbol.label}
+          textColor={textColor}
+          labelClassName={ADMIN_CELL_LABEL_CLASS}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -3810,7 +3839,7 @@ export default function AdminPageClient() {
                                         ? 'Clic para editar · Arrastra para mover o intercambiar'
                                         : undefined
                                     }
-                                    className={`symbol-cell relative flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                    className={`symbol-cell-root symbol-cell symbol-cell__btn--has-glyph relative flex h-full min-h-0 w-full min-w-0 flex-col items-stretch rounded-xl border border-solid p-1.5 transition select-none ${symbol.state === 'locked' ? 'opacity-50 grayscale' : ''} ${symbol.state === 'hidden' ? 'opacity-20 striping-bg' : ''} ${showFixedZoneEditHighlight ? 'ring-[3px] ring-violet-500/85 shadow-[0_0_16px_rgba(139,92,246,0.45)]' : ''} ${canDragThisSymbol ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                     style={{
                                       backgroundColor: showFixedZoneEditHighlight
                                         ? `color-mix(in srgb, ${baseCellBg} 58%, rgb(167 139 250) 42%)`
@@ -3828,12 +3857,7 @@ export default function AdminPageClient() {
                                         <Folder size={12} strokeWidth={2} />
                                       </span>
                                     ) : null}
-                                    <div className="text-xl mb-1">
-                                      <AdminArasaacCellIcon symbol={symbol} />
-                                    </div>
-                                    <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
-                                      {symbol.label}
-                                    </span>
+                                    <AdminGridCellBody symbol={symbol} />
                                     {hasRenderableCellContent &&
                                     symbolHasVariantMenu(adminEditToMenuConfig(symbol.wordVariants)) ? (
                                       <span
@@ -3978,7 +4002,7 @@ export default function AdminPageClient() {
                       <DragOverlay modifiers={[snapCenterToCursor]} dropAnimation={null}>
                         {adminGridDraggedSymbol ? (
                           <div
-                            className="pointer-events-none flex aspect-video w-[var(--aac-cell-width,8.5rem)] flex-col items-center justify-center rounded-xl border border-solid p-1.5 shadow-2xl ring-2 ring-accent-blue/70"
+                            className="symbol-cell-root pointer-events-none flex aspect-video w-[var(--aac-cell-width,8.5rem)] flex-col items-stretch rounded-xl border border-solid p-1.5 shadow-2xl ring-2 ring-accent-blue/70"
                             style={{
                               width: ADMIN_PREVIEW_CELL_COL_WIDTH,
                               backgroundColor: resolveSymbolColor(adminGridDraggedSymbol.color),
@@ -3986,12 +4010,7 @@ export default function AdminPageClient() {
                               color: getSymbolTextColor(adminGridDraggedSymbol.color),
                             }}
                           >
-                            <div className="text-xl mb-1">
-                              <AdminArasaacCellIcon symbol={adminGridDraggedSymbol} />
-                            </div>
-                            <span className="line-clamp-1 text-center text-[10px] font-bold leading-tight">
-                              {adminGridDraggedSymbol.label}
-                            </span>
+                            <AdminGridCellBody symbol={adminGridDraggedSymbol} />
                           </div>
                         ) : null}
                       </DragOverlay>

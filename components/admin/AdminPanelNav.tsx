@@ -90,9 +90,9 @@ const PRIMARY_ITEMS: {
   icon: LucideIcon
 }[] = [
   { view: null, href: ADMIN_PRIMARY_NAV_HREFS.preview, label: 'Vista previa', icon: LayoutGrid },
-  { view: 'account', href: ADMIN_PRIMARY_NAV_HREFS.account, label: 'Cuenta', icon: Settings },
   { view: 'luma', href: ADMIN_PRIMARY_NAV_HREFS.voice, label: 'Voz', icon: Mic },
   { view: 'evaluation', href: ADMIN_PRIMARY_NAV_HREFS.evaluation, label: 'Evaluación', icon: BarChart3 },
+  { view: 'account', href: ADMIN_PRIMARY_NAV_HREFS.account, label: 'Cuenta', icon: Settings },
 ]
 
 function closeBoardMenu(event: React.MouseEvent<HTMLElement>) {
@@ -231,7 +231,7 @@ function BoardActionsMenu({
         onClick={() => setOpen((value) => !value)}
       >
         <MoreHorizontal size={15} aria-hidden />
-        <span className="hidden sm:inline">Opciones</span>
+        <span>Opciones</span>
       </button>
       {open ? (
         <div
@@ -473,7 +473,7 @@ export default function AdminPanelNav({
             aria-expanded={adminFeedbackOpen}
           >
             <FlaskConical size={14} aria-hidden />
-            <span className="hidden sm:inline">Beta</span>
+            <span>Beta</span>
           </button>
         </nav>
 
