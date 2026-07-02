@@ -8,7 +8,6 @@ import { useEffect, useState } from 'react'
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
 import { SHOW_LANDING_PRICING_SECTION } from '@/components/landing/landingFlags'
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
-import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 
 const nav = [
   { href: '#inicio', label: 'Inicio' },
@@ -20,19 +19,13 @@ const nav = [
   { href: 'sobre-nosotros', label: 'Sobre nosotros' },
 ] as const
 
-/** Separador antes de «Instalar» (índice del primer enlace tras Inicio/Funciones/Planes). */
 const navBeforeSeparator = 3
 
 function navHref(href: string) {
   return href.startsWith('#') ? `/${href}` : `/${href}`
 }
 
-type SiteHeaderProps = {
-  comingSoon?: boolean
-}
-
-export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
-  const { openWaitlist, waitlistOpen } = useWaitlistModal()
+export function SiteHeader() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const closeMobileNav = () => setMobileNavOpen(false)
@@ -70,24 +63,12 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
               <NavBrandTitle>Luma Grid</NavBrandTitle>
             </Link>
             <div className="flex items-center gap-2 sm:hidden">
-              {comingSoon ? (
-                <button
-                  type="button"
-                  onClick={openWaitlist}
-                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
-                  aria-haspopup="dialog"
-                  aria-expanded={waitlistOpen}
-                >
-                  Entrar en waitlist
-                </button>
-              ) : (
-                <Link
-                  href="/tablero"
-                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
-                >
-                  Abrir app
-                </Link>
-              )}
+              <Link
+                href="/register"
+                className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+              >
+                Crear cuenta
+              </Link>
               <button
                 type="button"
                 className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] bg-white text-neutral-800 shadow-sm transition hover:bg-neutral-50"
@@ -124,32 +105,20 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
             ))}
           </nav>
 
-          {comingSoon ? (
-            <button
-              type="button"
-              onClick={openWaitlist}
-              className="hidden shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 md:inline-flex"
-              aria-haspopup="dialog"
-              aria-expanded={waitlistOpen}
+          <div className="hidden shrink-0 items-center gap-2 md:flex">
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
             >
-              Entrar en waitlist
-            </button>
-          ) : (
-            <div className="hidden shrink-0 items-center gap-2 md:flex">
-              <Link
-                href="/admin"
-                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
-              >
-                Panel admin
-              </Link>
-              <Link
-                href="/tablero"
-                className="inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
-              >
-                Abrir app
-              </Link>
-            </div>
-          )}
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+            >
+              Crear cuenta
+            </Link>
+          </div>
         </div>
 
         {mobileNavOpen ? (
@@ -178,6 +147,15 @@ export function SiteHeader({ comingSoon = true }: SiteHeaderProps) {
                       </Link>
                     </li>
                   ))}
+                  <li className="border-t border-black/[0.06]">
+                    <Link
+                      href="/login"
+                      className="block px-5 py-3.5 text-[15px] font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                      onClick={closeMobileNav}
+                    >
+                      Iniciar sesión
+                    </Link>
+                  </li>
                 </ul>
               </div>
             </nav>

@@ -5,6 +5,7 @@ import { Handshake, Volume2, Wrench, type LucideIcon } from 'lucide-react'
 import { MarketingFooter } from '@/components/landing/MarketingFooter'
 import { FeedbackOpinionCta } from '@/components/sobre-nosotros/FeedbackOpinionCta'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 export const metadata: Metadata = {
@@ -47,7 +48,7 @@ la experiencia a cada persona: su ritmo, su estilo y su identidad.`,
     iconWrapClass: 'bg-[#35AA63]',
     Icon: Handshake,
     body: `Las ideas salen de charlas reales con logopedas, maestros
-de PT y equipos de orientación. Aquí no mandan las suposiciones.`,
+de PT y AL y equipos de orientación. Aquí no mandan las suposiciones.`,
   },
   {
     title: 'Simple para el profesional, poderoso para el usuario',
@@ -166,20 +167,26 @@ con calma.`}
             <p className="mt-6 text-sm font-semibold text-white/90 sm:text-base">
               ¿Tienes dudas? Escríbenos a{' '}
               <a
-                href="mailto:lumagrid@casanuma.biz"
+                href={`mailto:${CONTACT_EMAIL}`}
                 className="font-extrabold text-[#FCE855] underline-offset-4 transition hover:underline hover:brightness-110"
               >
-                lumagrid@casanuma.biz
+                {CONTACT_EMAIL}
               </a>
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link
+                href="/register"
+                className="inline-flex items-center justify-center rounded-full bg-[#FCE855] px-5 py-2.5 text-sm font-extrabold text-black shadow-sm transition hover:brightness-95"
+              >
+                Crear cuenta gratis
+              </Link>
               <FeedbackOpinionCta />
               <Link
-                href="/"
+                href="/planes"
                 className="text-sm font-bold text-[#FCE855] underline-offset-4 transition hover:underline hover:brightness-110"
               >
-                Explorar la landing
+                Ver planes
               </Link>
             </div>
           </section>

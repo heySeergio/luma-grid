@@ -735,8 +735,7 @@ export default function AdminPageClient() {
   const [previewPlayingVoiceId, setPreviewPlayingVoiceId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
-  /** Nivel de producto para voz (sin UI de planes). Fijo a identidad para evitar `ReferenceError` por caché/HMR antiguo. */
-  const voicePlan: SubscriptionPlan = 'identity'
+  const [voicePlan, setVoicePlan] = useState<SubscriptionPlan>('free')
   const previewAudioContextRef = useRef<AudioContext | null>(null)
   const previewBlobUrlRef = useRef<string | null>(null)
 
@@ -815,6 +814,7 @@ export default function AdminPageClient() {
       }
 
       if (voiceSettings) {
+        setVoicePlan(voiceSettings.plan)
         setVoiceTtsMode(voiceSettings.ttsMode)
         const profilesList = fetchedProfiles
         const activePid =

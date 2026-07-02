@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolveActingContextForSession } from '@/lib/auth/actingContext'
 import { ADMIN_PATHS } from '@/lib/admin/adminNav'
 import {
   isSelectableEvaluationMode,
@@ -10,6 +11,7 @@ import {
   type SelectableEvaluationMode,
 } from '@/lib/evaluation/mode'
 import { prisma } from '@/lib/prisma'
+import { canUseFullEvaluation, effectiveSubscriptionPlan } from '@/lib/subscription/plans'
 
 async function assertProfileOwnership(profileId: string, userId: string) {
   return prisma.profile.findUnique({
@@ -18,14 +20,34 @@ async function assertProfileOwnership(profileId: string, userId: string) {
   })
 }
 
+async function effectiveUserIdFromSession(): Promise<string | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return null
+  const ctx = await resolveActingContextForSession(session)
+  return ctx.effectiveUserId
+}
+
 export async function getProfileEvaluationMode(profileId: string): Promise<EvaluationMode | null> {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id || !profileId) return null
+  if (!session?.user?.id) return null
+  const userId = (await resolveActingContextForSession(session)).effectiveUserId
+  if (!userId || !profileId) return null
 
-  const profile = await assertProfileOwnership(profileId, session.user.id)
+  const profile = await assertProfileOwnership(profileId, userId)
   if (!profile) return null
 
   return profile.evaluationMode as EvaluationMode
+}
+
+export async function canActorUseFullEvaluation(): Promise<boolean> {
+  const userId = await effectiveUserIdFromSession()
+  if (!userId) return false
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true },
+  })
+  const plan = effectiveSubscriptionPlan(user?.email, user?.plan)
+  return canUseFullEvaluation(plan)
 }
 
 export async function setProfileEvaluationMode(
@@ -37,7 +59,24 @@ export async function setProfileEvaluationMode(
   if (!profileId) return { ok: false, error: 'Perfil no indicado' }
   if (!isSelectableEvaluationMode(mode)) return { ok: false, error: 'Modo no válido' }
 
-  const profile = await assertProfileOwnership(profileId, session.user.id)
+  const ctx = await resolveActingContextForSession(session)
+  const userId = ctx.effectiveUserId
+
+  if (mode === 'FULL') {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, plan: true },
+    })
+    const plan = effectiveSubscriptionPlan(user?.email, user?.plan)
+    if (!canUseFullEvaluation(plan)) {
+      return {
+        ok: false,
+        error: 'La evaluación completa requiere plan Voz, Identidad o Terapeuta.',
+      }
+    }
+  }
+
+  const profile = await assertProfileOwnership(profileId, userId)
   if (!profile) return { ok: false, error: 'Tablero no encontrado' }
 
   await prisma.profile.update({

@@ -15,6 +15,7 @@ import {
   type KeyboardThemeColors,
 } from '@/lib/keyboard/theme'
 import { effectiveSubscriptionPlan, getMaxProfiles } from '@/lib/subscription/plans'
+import { resolveActingContextForSession } from '@/lib/auth/actingContext'
 import {
   clampFixedZoneKeysToGrid,
   parseProfileFixedZoneJson,
@@ -29,17 +30,26 @@ import { loadDemoSuppressedFolderItemsMap } from '@/lib/prisma/demoSuppressedFol
 
 const DEFAULT_PROFILE_COLOR = '#6366f1'
 
+async function requireEffectiveUserId(): Promise<string> {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+    const ctx = await resolveActingContextForSession(session)
+    return ctx.effectiveUserId
+}
+
 export async function getProfiles() {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
+    const ctx = await resolveActingContextForSession(session)
+    const userId = ctx.effectiveUserId
 
     const [user, rows, folderItemsMap] = await Promise.all([
         prisma.user.findUnique({
-            where: { id: session.user.id },
+            where: { id: userId },
             select: { defaultProfileId: true },
         }),
         prisma.profile.findMany({
-            where: { userId: session.user.id },
+            where: { userId },
             orderBy: { createdAt: 'asc' },
             select: {
                 id: true,
@@ -57,7 +67,7 @@ export async function getProfiles() {
                 evaluationMode: true,
             },
         }),
-        loadDemoSuppressedFolderItemsMap(session.user.id),
+        loadDemoSuppressedFolderItemsMap(userId),
     ])
 
     const openingId = user?.defaultProfileId ?? null
@@ -112,18 +122,17 @@ export async function createProfile(data: {
     gridRows?: number
     gridCols?: number
 }) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const owner = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: userId },
         select: { email: true, plan: true },
     })
     const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
     const maxP = getMaxProfiles(plan)
     /** El tablero DEMO (isDemo) no cuenta en el cupo del plan. */
     const existingNonDemo = await prisma.profile.count({
-        where: { userId: session.user.id, isDemo: false },
+        where: { userId: userId, isDemo: false },
     })
     if (existingNonDemo >= maxP) {
         throw new Error(
@@ -138,7 +147,7 @@ export async function createProfile(data: {
         data: {
             name: data.name.trim(),
             gender: data.gender,
-            userId: session.user.id,
+            userId: userId,
             isDemo: false,
             gridRows,
             gridCols,
@@ -164,11 +173,10 @@ export async function createProfile(data: {
 }
 
 export async function updateProfile(data: { profileId: string, name: string }) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const targetProfile = await prisma.profile.findUnique({
-        where: { id: data.profileId, userId: session.user.id },
+        where: { id: data.profileId, userId: userId },
         select: { id: true },
     })
 
@@ -202,17 +210,16 @@ export async function updateProfile(data: { profileId: string, name: string }) {
 
 /** Tablero que se abre al entrar en /tablero (no modifica el tablero demo fijo `isDemo`). */
 export async function setDefaultOpeningProfile(profileId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const ok = await prisma.profile.findFirst({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId: userId },
         select: { id: true },
     })
     if (!ok) throw new Error('Tablero no encontrado')
 
     await prisma.user.update({
-        where: { id: session.user.id },
+        where: { id: userId },
         data: { defaultProfileId: profileId },
     })
 
@@ -222,17 +229,16 @@ export async function setDefaultOpeningProfile(profileId: string) {
 
 /** Si este tablero era el de apertura y el usuario deja de marcarlo, asigna otro (prioriza el tablero demo fijo). */
 export async function reassignOpeningProfileAwayFrom(profileId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: userId },
         select: { defaultProfileId: true },
     })
     if (user?.defaultProfileId !== profileId) return
 
     const others = await prisma.profile.findMany({
-        where: { userId: session.user.id, id: { not: profileId } },
+        where: { userId: userId, id: { not: profileId } },
         orderBy: [{ isDemo: 'desc' }, { createdAt: 'asc' }],
         take: 1,
         select: { id: true, isDemo: true },
@@ -240,7 +246,7 @@ export async function reassignOpeningProfileAwayFrom(profileId: string) {
     const next = others[0]?.id ?? profileId
 
     await prisma.user.update({
-        where: { id: session.user.id },
+        where: { id: userId },
         data: { defaultProfileId: next },
     })
 
@@ -249,15 +255,14 @@ export async function reassignOpeningProfileAwayFrom(profileId: string) {
 }
 
 export async function updateProfileGender(profileId: string, gender: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     if (gender !== 'male' && gender !== 'female') {
         throw new Error('Género no válido')
     }
 
     const updatedProfile = await prisma.profile.update({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId: userId },
         data: { gender },
         select: {
             id: true,
@@ -280,11 +285,10 @@ export async function updateProfileGender(profileId: string, gender: string) {
 }
 
 export async function deleteProfile(profileId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const targetProfile = await prisma.profile.findUnique({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId: userId },
         select: { id: true, isDemo: true },
     })
 
@@ -293,18 +297,18 @@ export async function deleteProfile(profileId: string) {
 
     await prisma.$transaction(async (tx) => {
         const owner = await tx.user.findUnique({
-            where: { id: session.user.id },
+            where: { id: userId },
             select: { defaultProfileId: true },
         })
         await tx.profile.delete({ where: { id: profileId } })
         if (owner?.defaultProfileId === profileId) {
             const fallback = await tx.profile.findFirst({
-                where: { userId: session.user.id },
+                where: { userId: userId },
                 orderBy: { createdAt: 'asc' },
                 select: { id: true },
             })
             await tx.user.update({
-                where: { id: session.user.id },
+                where: { id: userId },
                 data: { defaultProfileId: fallback?.id ?? null },
             })
         }
@@ -315,17 +319,16 @@ export async function deleteProfile(profileId: string) {
 }
 
 export async function updateProfileGridSize(profileId: string, rows: number, cols: number) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const gridRows = Math.max(1, rows)
     const gridCols = Math.max(1, cols)
 
-    const currentZone = await readFixedZoneCellsForProfile(profileId, session.user.id)
+    const currentZone = await readFixedZoneCellsForProfile(profileId, userId)
     const parsed = parseProfileFixedZoneJson(currentZone)
 
     await prisma.profile.update({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId: userId },
         data: { gridRows, gridCols },
         select: { id: true },
     })
@@ -333,7 +336,7 @@ export async function updateProfileGridSize(profileId: string, rows: number, col
     if (parsed !== null) {
         await setFixedZoneCellsForProfile(
             profileId,
-            session.user.id,
+            userId,
             serializeFixedZoneJson(
                 clampFixedZoneKeysToGrid(parsed, gridCols, gridRows),
             ) as Prisma.InputJsonValue,
@@ -343,7 +346,7 @@ export async function updateProfileGridSize(profileId: string, rows: number, col
     await prisma.symbol.deleteMany({
         where: {
             profileId,
-            profile: { userId: session.user.id },
+            profile: { userId: userId },
             OR: [
                 { positionX: { lt: 0 } },
                 { positionY: { lt: 0 } },
@@ -359,12 +362,11 @@ export async function updateProfileGridSize(profileId: string, rows: number, col
 
 /** Crea un tablero nuevo copiando dimensiones, género y todos los símbolos (incl. referencias de carpeta/gridId). */
 export async function duplicateProfile(sourceProfileId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const [source, sourceFixedZone] = await Promise.all([
         prisma.profile.findFirst({
-            where: { id: sourceProfileId, userId: session.user.id },
+            where: { id: sourceProfileId, userId: userId },
             select: {
                 name: true,
                 gender: true,
@@ -373,18 +375,18 @@ export async function duplicateProfile(sourceProfileId: string) {
                 keyboardTheme: true,
             },
         }),
-        readFixedZoneCellsForProfile(sourceProfileId, session.user.id),
+        readFixedZoneCellsForProfile(sourceProfileId, userId),
     ])
     if (!source) throw new Error('Tablero no encontrado')
 
     const owner = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: userId },
         select: { email: true, plan: true },
     })
     const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
     const maxP = getMaxProfiles(plan)
     const existingNonDemo = await prisma.profile.count({
-        where: { userId: session.user.id, isDemo: false },
+        where: { userId: userId, isDemo: false },
     })
     if (existingNonDemo >= maxP) {
         throw new Error(
@@ -403,7 +405,7 @@ export async function duplicateProfile(sourceProfileId: string) {
             data: {
                 name: newName,
                 gender: source.gender,
-                userId: session.user.id,
+                userId: userId,
                 isDemo: false,
                 gridRows: source.gridRows,
                 gridCols: source.gridCols,
@@ -455,7 +457,7 @@ export async function duplicateProfile(sourceProfileId: string) {
     if (sourceFixedZone !== null && sourceFixedZone !== undefined) {
         await setFixedZoneCellsForProfile(
             newProfile.id,
-            session.user.id,
+            userId,
             sourceFixedZone as Prisma.InputJsonValue,
         )
     }
@@ -472,6 +474,8 @@ export async function updateProfileKeyboardTheme(
 ): Promise<{ ok: true; theme: KeyboardThemeColors | null } | { ok: false; error: string }> {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return { ok: false, error: 'No autorizado' }
+    const ctx = await resolveActingContextForSession(session)
+    const userId = ctx.effectiveUserId
 
     const theme = sanitizeKeyboardThemeInput(themeInput)
     const asJson: Prisma.InputJsonValue | typeof Prisma.JsonNull = isKeyboardThemeEmpty(theme)
@@ -480,7 +484,7 @@ export async function updateProfileKeyboardTheme(
 
     try {
         await prisma.profile.update({
-            where: { id: profileId, userId: session.user.id },
+            where: { id: profileId, userId: userId },
             data: { keyboardTheme: asJson },
             select: { id: true },
         })
@@ -495,11 +499,10 @@ export async function updateProfileKeyboardTheme(
 }
 
 export async function updateProfileFixedZone(profileId: string, keys: string[]) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const profile = await prisma.profile.findFirst({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId: userId },
         select: { gridRows: true, gridCols: true },
     })
     if (!profile) throw new Error('Tablero no encontrado')
@@ -510,7 +513,7 @@ export async function updateProfileFixedZone(profileId: string, keys: string[]) 
 
     await setFixedZoneCellsForProfile(
         profileId,
-        session.user.id,
+        userId,
         serializeFixedZoneJson(clamped) as Prisma.InputJsonValue,
     )
 
@@ -519,10 +522,9 @@ export async function updateProfileFixedZone(profileId: string, keys: string[]) 
 }
 
 export async function resetProfileFixedZoneToDefault(profileId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
-    await setFixedZoneCellsForProfile(profileId, session.user.id, null)
+    await setFixedZoneCellsForProfile(profileId, userId, null)
 
     revalidatePath('/admin')
     revalidatePath('/tablero')
@@ -537,11 +539,10 @@ export async function saveDemoBoardSuppressionsAction(
     templateLabels: string[],
     folderItemKeys: string[],
 ) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const profile = await prisma.profile.findFirst({
-        where: { id: profileId, userId: session.user.id, isDemo: true },
+        where: { id: profileId, userId: userId, isDemo: true },
         select: { id: true },
     })
     if (!profile) throw new Error('Solo el tablero demo puede guardar estas supresiones')

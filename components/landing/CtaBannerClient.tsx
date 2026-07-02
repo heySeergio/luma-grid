@@ -9,7 +9,6 @@ import {
   CTA_ENTRANCE_DURATION,
   CTA_GLOBAL_OFFSET_SEC,
 } from '@/components/landing/CtaBannerDecors'
-import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 import { useDelayedSectionReveal } from '@/components/landing/useDelayedSectionReveal'
 import { useIsMobileLayout } from '@/lib/hooks/useIsMobileLayout'
 
@@ -17,11 +16,9 @@ const easeOut = [0.22, 1, 0.36, 1] as const
 
 type CtaBannerClientProps = {
   moverEnabled: boolean
-  comingSoon?: boolean
 }
 
-export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerClientProps) {
-  const { openWaitlist } = useWaitlistModal()
+export function CtaBannerClient({ moverEnabled }: CtaBannerClientProps) {
   const rootRef = useRef<HTMLDivElement>(null)
 
   const reduceMotion = useReducedMotion()
@@ -63,31 +60,20 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
           Empieza a comunicarte <span className="text-accent-blue">a tu manera.</span>
         </h2>
         <p className="mt-4 text-base font-medium leading-relaxed text-forest sm:text-lg">
-          Únete a miles de personas que usan Luma Grid para expresarse, aprender y conectar.
+          Crea tu cuenta gratis en minutos. Sin tarjeta para el plan Libre.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-4">
-          {comingSoon ? (
-            <button
-              type="button"
-              onClick={openWaitlist}
-              className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
-              aria-haspopup="dialog"
-            >
-              Únete a la lista de espera
-            </button>
-          ) : (
-            <Link
-              href="/tablero"
-              className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
-            >
-              Entrar al tablero
-            </Link>
-          )}
           <Link
-            href="/#funciones"
+            href="/register"
+            className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
+          >
+            Crear cuenta gratis
+          </Link>
+          <Link
+            href="/login"
             className="text-sm font-bold text-forest underline-offset-4 transition hover:underline"
           >
-            Ver demo →
+            Ya tengo cuenta →
           </Link>
         </div>
       </motion.div>

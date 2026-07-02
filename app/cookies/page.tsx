@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 export const metadata: Metadata = {
@@ -100,6 +101,16 @@ const sections = [
         <p>
           Esta política podrá actualizarse si cambian los mecanismos de almacenamiento, se incorporan nuevas integraciones (voz, identidad social,
           modelos de IA) o funciones que utilicen cookies o almacenamiento local de forma distinta.
+        </p>
+        <p>
+          Si tienes dudas sobre cookies o almacenamiento local, escríbenos a{' '}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+          .
         </p>
       </>
     ),

@@ -35,7 +35,7 @@ export default function PlanPickerModal({ open, dismissable = false, onClose, on
     }
   }
 
-  async function handlePaid(tier: 'voice' | 'identity', interval: 'month' | 'year') {
+  async function handlePaid(tier: 'voice' | 'identity' | 'therapist', interval: 'month' | 'year') {
     setError(null)
     setBusy(true)
     try {

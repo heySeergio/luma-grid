@@ -8,6 +8,12 @@ import {
 } from '@/lib/prisma/profileFixedZoneSql'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolveActingContextForSession } from '@/lib/auth/actingContext'
+import {
+  effectiveSubscriptionPlan,
+  FREE_MAX_TOTAL_SYMBOLS,
+  isSubscriptionEnforcementEnabled,
+} from '@/lib/subscription/plans'
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { isMissingDatabaseColumnError, isUnknownPrismaFieldError } from '@/lib/prisma/compat'
@@ -46,6 +52,37 @@ import {
 
 /** Prisma interactive tx default timeout is 5s; large grids exceed it and fail with "Transaction not found". */
 const SYMBOL_PERSIST_TX = { maxWait: 15_000, timeout: 60_000 } as const
+
+async function requireEffectiveUserId(): Promise<string> {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) throw new Error('No autorizado')
+    const ctx = await resolveActingContextForSession(session)
+    return ctx.effectiveUserId
+}
+
+async function assertFreePlanSymbolLimit(userId: string, incomingCount: number): Promise<void> {
+    if (!isSubscriptionEnforcementEnabled()) return
+    const owner = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, plan: true },
+    })
+    const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
+    if (plan !== 'free') return
+    const current = await prisma.symbol.count({
+        where: { profile: { userId } },
+    })
+    if (incomingCount > FREE_MAX_TOTAL_SYMBOLS) {
+        throw new Error(
+            `El plan Libre permite hasta ${FREE_MAX_TOTAL_SYMBOLS} botones en total. Visita /plan para ampliar tu plan.`,
+        )
+    }
+    // Aproximación: si el guardado reemplaza por perfil, no sobrecontar estrictamente aquí.
+    if (current > FREE_MAX_TOTAL_SYMBOLS) {
+        throw new Error(
+            `Has superado el límite de ${FREE_MAX_TOTAL_SYMBOLS} botones del plan Libre.`,
+        )
+    }
+}
 
 /** Enriquecimiento léxico en segundo plano: como mucho este número de símbolos por transacción (y en secuencia por símbolo dentro del lote). */
 const LEXICON_BACKFILL_BATCH_SIZE = 50
@@ -766,8 +803,9 @@ async function loadSymbolRowsForSaveDiff(profileId: string): Promise<SymbolRowFo
 export async function getProfileSymbols(profileId: string) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return []
+    const ctx = await resolveActingContextForSession(session)
 
-    const profile = await readProfileGridAndDemoForOwner(profileId, session.user.id)
+    const profile = await readProfileGridAndDemoForOwner(profileId, ctx.effectiveUserId)
     if (!profile) return []
 
     const { cols, rows } = effectiveGridDimensions(profile)
@@ -786,9 +824,8 @@ export async function getProfileSymbols(profileId: string) {
         }
     }
 
-    const userId = session.user.id
     after(() => {
-        void backfillProfileSymbolLexicon(profileId, userId).catch(() => {
+        void backfillProfileSymbolLexicon(profileId, ctx.effectiveUserId).catch(() => {
             // Igual que antes: no fallar la petición si el backfill falla (p. ej. migración pendiente).
         })
     })
@@ -805,10 +842,11 @@ export async function getProfileSymbols(profileId: string) {
 }
 
 export async function saveSymbols(profileId: string, symbols: SymbolInput[]): Promise<AppSymbol[]> {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
-    const profile = await readProfileGridAndDemoForOwner(profileId, session.user.id)
+    await assertFreePlanSymbolLimit(userId, symbols.length)
+
+    const profile = await readProfileGridAndDemoForOwner(profileId, userId)
     if (!profile) throw new Error('Tablero no encontrado')
 
     const { cols, rows } = effectiveGridDimensions(profile)
@@ -970,14 +1008,13 @@ export async function saveSymbols(profileId: string, symbols: SymbolInput[]): Pr
 }
 
 export async function deleteSymbolAction(profileId: string, symbolId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const trimmedId = typeof symbolId === 'string' ? symbolId.trim() : ''
     if (!trimmedId) throw new Error('Símbolo no válido')
 
     const profileRow = await prisma.profile.findFirst({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId },
         select: { id: true, isDemo: true, demoSuppressedTemplateLabels: true },
     })
     if (!profileRow) throw new Error('Tablero no encontrado')
@@ -1033,14 +1070,13 @@ export async function deleteSymbolAction(profileId: string, symbolId: string) {
  * guardando la etiqueta en `demoSuppressedTemplateLabels`.
  */
 export async function suppressDemoVirtualGridSymbolAction(profileId: string, templateLabel: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const key = typeof templateLabel === 'string' ? templateLabel.trim().toLowerCase() : ''
     if (!key) throw new Error('Etiqueta no válida')
 
     const profileRow = await prisma.profile.findFirst({
-        where: { id: profileId, userId: session.user.id },
+        where: { id: profileId, userId },
         select: { id: true, isDemo: true, demoSuppressedTemplateLabels: true },
     })
     if (!profileRow) throw new Error('Tablero no encontrado')
@@ -1062,8 +1098,7 @@ export async function suppressDemoVirtualGridSymbolAction(profileId: string, tem
 
 /** Oculta un picto del contenido demo de una carpeta (ids `folder-item-*`); persiste en el perfil demo. */
 export async function suppressDemoFolderItemAction(profileId: string, symbolId: string) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) throw new Error('No autorizado')
+    const userId = await requireEffectiveUserId()
 
     const trimmedId = typeof symbolId === 'string' ? symbolId.trim() : ''
     if (!trimmedId) throw new Error('Símbolo no válido')
@@ -1083,7 +1118,7 @@ export async function suppressDemoFolderItemAction(profileId: string, symbolId: 
     >`
       SELECT id, is_demo, demo_suppressed_folder_items
       FROM profiles
-      WHERE id = ${profileId} AND user_id = ${session.user.id}
+      WHERE id = ${profileId} AND user_id = ${userId}
       LIMIT 1
     `
     const profileRow = profileRows[0]

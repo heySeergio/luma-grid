@@ -21,7 +21,8 @@ import {
 type Props = {
   profileId: string
   onModeSelected: (mode: SelectableEvaluationMode) => void
-  fillHeight?: boolean
+  /** Oculta la opción FULL si el plan no la permite. */
+  allowFullMode?: boolean
 }
 
 const MODE_COPY: Record<
@@ -186,11 +187,10 @@ type ModeCardProps = {
   mode: SelectableEvaluationMode
   busy: boolean
   disabled: boolean
-  fillHeight: boolean
   onSelect: (mode: SelectableEvaluationMode) => void
 }
 
-function ModeCard({ mode, busy, disabled, fillHeight, onSelect }: ModeCardProps) {
+function ModeCard({ mode, busy, disabled, onSelect }: ModeCardProps) {
   const labels = EVALUATION_MODE_LABELS[mode]
   const copy = MODE_COPY[mode]
   const badge = ICON_BADGE[mode]
@@ -200,7 +200,7 @@ function ModeCard({ mode, busy, disabled, fillHeight, onSelect }: ModeCardProps)
 
   return (
     <article
-      className={`relative flex flex-col gap-3 rounded-2xl border-2 p-4 ${CARD_SURFACE[mode]} ${fillHeight ? 'min-h-0 h-full' : ''}`}
+      className={`relative flex flex-col gap-3 rounded-2xl border-2 p-4 ${CARD_SURFACE[mode]}`}
     >
       {recommended ? (
         <span className="absolute -right-2 -top-2 inline-flex items-center gap-1 rounded-full bg-violet-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm dark:bg-violet-600">
@@ -259,7 +259,11 @@ function ModeCard({ mode, busy, disabled, fillHeight, onSelect }: ModeCardProps)
   )
 }
 
-export default function EvaluationModePicker({ profileId, onModeSelected, fillHeight = false }: Props) {
+export default function EvaluationModePicker({
+  profileId,
+  onModeSelected,
+  allowFullMode = true,
+}: Props) {
   const [saving, setSaving] = useState<SelectableEvaluationMode | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -275,23 +279,24 @@ export default function EvaluationModePicker({ profileId, onModeSelected, fillHe
     onModeSelected(mode)
   }
 
-  const modes: SelectableEvaluationMode[] = ['NONE', 'SIMPLE', 'FULL']
+  const modes: SelectableEvaluationMode[] = allowFullMode
+    ? ['NONE', 'SIMPLE', 'FULL']
+    : ['NONE', 'SIMPLE']
   const disabled = saving != null
 
   return (
-    <div className={`flex flex-col gap-5 ${fillHeight ? 'min-h-0 flex-1' : ''}`}>
+    <div className="flex flex-col gap-5 pb-2">
       <p className="shrink-0 text-sm text-[var(--app-muted-foreground)]">
         Elige cuánto análisis quieres recibir como adulto.
       </p>
 
-      <div className={`grid gap-4 lg:grid-cols-3 ${fillHeight ? 'min-h-0 flex-1 auto-rows-fr' : ''}`}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-start">
         {modes.map((mode) => (
           <ModeCard
             key={mode}
             mode={mode}
             busy={saving === mode}
             disabled={disabled}
-            fillHeight={fillHeight}
             onSelect={(m) => void handleSelect(m)}
           />
         ))}

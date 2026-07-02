@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Settings2 } from 'lucide-react'
-import { getProfileEvaluationMode } from '@/app/actions/evaluationMode'
+import { getProfileEvaluationMode, canActorUseFullEvaluation } from '@/app/actions/evaluationMode'
 import AllBoardsEvaluationView from '@/components/admin/AllBoardsEvaluationView'
 import EvaluationBoardScopePicker, {
   type EvaluationScope,
@@ -52,8 +52,13 @@ export default function EvaluationPanel({
   const [loading, setLoading] = useState(false)
   const [exportPayload, setExportPayload] = useState<EvaluationExportPayload | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
+  const [allowFullMode, setAllowFullMode] = useState(true)
 
   const isAllBoards = evaluationScope === 'all'
+
+  useEffect(() => {
+    void canActorUseFullEvaluation().then(setAllowFullMode)
+  }, [profileId])
 
   useEffect(() => {
     setExportPayload(null)
@@ -96,7 +101,6 @@ export default function EvaluationPanel({
   const showPicker =
     !isAllBoards && Boolean(profileId) && !loading && (changingMode || mode === 'UNSET' || mode === null)
   const useViewportLayout = fillViewport
-  const stretchLayout = fillViewport && showPicker
 
   const subtitle = isAllBoards
     ? 'Resumen comparativo de todos los tableros.'
@@ -147,13 +151,9 @@ export default function EvaluationPanel({
 
       <div
         className={
-          useViewportLayout
-            ? stretchLayout
-              ? 'flex min-h-0 flex-1 flex-col'
-              : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'
-            : showPicker
-              ? ''
-              : 'min-h-0 overflow-y-auto'
+          useViewportLayout || showPicker
+            ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]'
+            : 'min-h-0 overflow-y-auto overscroll-contain'
         }
       >
         {isAllBoards ? (
@@ -169,7 +169,11 @@ export default function EvaluationPanel({
         ) : loading ? (
           <p className="text-sm text-[var(--app-muted-foreground)]">Cargando…</p>
         ) : showPicker ? (
-          <EvaluationModePicker profileId={profileId} onModeSelected={handleModeSelected} fillHeight={stretchLayout} />
+          <EvaluationModePicker
+            profileId={profileId}
+            onModeSelected={handleModeSelected}
+            allowFullMode={allowFullMode}
+          />
         ) : mode === 'NONE' ? (
           <NoneEvaluationView />
         ) : mode === 'SIMPLE' ? (

@@ -21,6 +21,8 @@ export default function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendStatus, setResendStatus] = useState('')
   const [error, setError] = useState('')
   const hints = useLoginHints(email)
 
@@ -31,19 +33,50 @@ export default function LoginForm() {
     e.preventDefault()
     setBusy(true)
     setError('')
-    const res = await signIn('credentials', {
-      email: email.trim(),
-      password,
-      redirect: false,
-      callbackUrl,
-    })
-    setBusy(false)
-    if (res?.error) {
-      setError('Correo o contraseña incorrectos.')
+    try {
+      const res = await signIn('credentials', {
+        email: email.trim(),
+        password,
+        redirect: false,
+        callbackUrl,
+      })
+      if (res?.error) {
+        setError('Correo o contraseña incorrectos.')
+        return
+      }
+      router.push(resolveClientSignInRedirect(res?.url, callbackUrl))
+      router.refresh()
+    } catch {
+      setError('No se pudo completar el inicio de sesión. Recarga la página e inténtalo de nuevo.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleResendVerification() {
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setResendStatus('Introduce tu correo arriba para reenviar la verificación.')
       return
     }
-    router.push(resolveClientSignInRedirect(res?.url, callbackUrl))
-    router.refresh()
+    setResendBusy(true)
+    setResendStatus('')
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(data?.error || 'No se pudo reenviar el correo.')
+      }
+      setResendStatus('Si la cuenta existe y no está verificada, te enviaremos un correo nuevo.')
+    } catch (err) {
+      setResendStatus(err instanceof Error ? err.message : 'No se pudo reenviar el correo.')
+    } finally {
+      setResendBusy(false)
+    }
   }
 
   const cbQuery = searchParams.get('callbackUrl')
@@ -65,9 +98,18 @@ export default function LoginForm() {
           </div>
 
           {registered ? (
-            <p className="mb-4 rounded-xl border border-emerald-200/70 bg-emerald-50/90 px-3 py-2 text-center text-sm text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-              Cuenta creada. Revisa tu correo para verificarlo e inicia sesión.
-            </p>
+            <div className="mb-4 rounded-xl border border-emerald-200/70 bg-emerald-50/90 px-3 py-2 text-center text-sm text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <p>Cuenta creada. Puedes iniciar sesión ya; la verificación del correo es opcional para entrar.</p>
+              <button
+                type="button"
+                disabled={resendBusy}
+                onClick={() => void handleResendVerification()}
+                className="mt-2 font-semibold underline underline-offset-2 disabled:opacity-60"
+              >
+                {resendBusy ? 'Enviando…' : 'Reenviar correo de verificación'}
+              </button>
+              {resendStatus ? <p className="mt-2 text-xs">{resendStatus}</p> : null}
+            </div>
           ) : null}
 
           {accountLinkError ? (

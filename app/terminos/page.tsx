@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 export const metadata: Metadata = {
@@ -130,6 +131,23 @@ const sections = [
       <>
         <p>
           Estas condiciones pueden actualizarse para reflejar cambios legales, funcionales, comerciales o de seguridad. Las nuevas versiones serán aplicables desde su publicación en el sitio.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: '9. Contacto',
+    content: (
+      <>
+        <p>
+          Para consultas sobre estas condiciones, escríbenos a{' '}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+          .
         </p>
       </>
     ),

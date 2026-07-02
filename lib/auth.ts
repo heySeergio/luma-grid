@@ -14,6 +14,8 @@ import { normalizeAuthEmail } from '@/lib/auth/normalizeEmail'
 import { consumeAuthToken } from '@/lib/auth/authTokens'
 import { loadUserForSession } from '@/lib/auth/sessionHelpers'
 import { getAuthSecret } from '@/lib/auth/secret'
+import { hasActivePaidSubscription, isTherapistPlan, normalizeSubscriptionPlan } from '@/lib/subscription/plans'
+import { isUnknownPrismaFieldError } from '@/lib/prisma/compat'
 
 const defaultTableroTabForUserId = cache(async (userId: string): Promise<DefaultTableroTab> => {
   const p = await readAccountPrivacyPrefsFromDb(userId)
@@ -46,6 +48,56 @@ async function applyUserToToken(
     token.mfaPending = false
     token.mfaVerified = opts?.mfaVerified ?? !dbUser.twoFactorEnabled
   }
+
+  const subscriptionSelect = {
+    plan: true,
+    stripeSubscriptionId: true,
+    planExpiresAt: true,
+  } as const
+
+  let fullUser: {
+    plan: string | null
+    stripeSubscriptionId: string | null
+    planExpiresAt: Date | null
+    organizationMembership?: { id: string } | null
+    ownedOrganization?: { id: string } | null
+  } | null = null
+
+  try {
+    fullUser = await prisma.user.findUnique({
+      where: { id: dbUser.id },
+      select: {
+        ...subscriptionSelect,
+        organizationMembership: { select: { id: true } },
+        ownedOrganization: { select: { id: true } },
+      },
+    })
+  } catch (error) {
+    if (!isUnknownPrismaFieldError(error, ['organizationMembership', 'ownedOrganization'])) {
+      throw error
+    }
+    fullUser = await prisma.user.findUnique({
+      where: { id: dbUser.id },
+      select: subscriptionSelect,
+    })
+  }
+
+  const plan = normalizeSubscriptionPlan(fullUser?.plan)
+  const therapistPlanActive =
+    isTherapistPlan(plan) &&
+    hasActivePaidSubscription(
+      {
+        plan: fullUser?.plan,
+        stripeSubscriptionId: fullUser?.stripeSubscriptionId,
+        planExpiresAt: fullUser?.planExpiresAt,
+      },
+      dbUser.email,
+    )
+  token.therapistOrgMember = Boolean(
+    fullUser?.organizationMembership || fullUser?.ownedOrganization,
+  )
+  token.therapistPlanActive = therapistPlanActive
+
   return token
 }
 

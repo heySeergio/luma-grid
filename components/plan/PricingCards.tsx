@@ -12,7 +12,7 @@ type Props = {
   /** Modal: elegir plan gratis */
   onSelectFree?: () => void | Promise<void>
   /** Modal: checkout Stripe */
-  onSelectPaid?: (tier: 'voice' | 'identity', interval: 'month' | 'year') => void | Promise<void>
+  onSelectPaid?: (tier: 'voice' | 'identity' | 'therapist', interval: 'month' | 'year') => void | Promise<void>
   disabled?: boolean
   /** Landing: sin enlaces a registro ni CTA inferior (solo referencia de precios). */
   comingSoon?: boolean
@@ -22,7 +22,7 @@ type Props = {
 
 /** Ventajas por plan (compartido con upsell del admin, etc.). */
 export const PLAN_FEATURE_BULLETS = {
-  free: ['1 tablero activo', 'Máximo 60 botones en total (incl. carpetas)', 'Voz del sistema (TTS del dispositivo)'],
+  free: ['3 tableros activos', 'Hasta 150 botones en total (incl. carpetas)', 'Voz del sistema (TTS del dispositivo)'],
   voice: [
     'Hasta 5 tableros',
     'Botones ilimitados por tablero',
@@ -51,9 +51,21 @@ export default function PricingCards({
   const isModal = variant === 'modal'
 
   const voicePrimary = interval === 'month' ? '9€' : '79€'
-  const voiceSecondary = interval === 'month' ? '79€/año (ahorra ~27%)' : 'equiv. ~6,58€/mes'
   const idPrimary = interval === 'month' ? '24€' : '199€'
-  const idSecondary = interval === 'month' ? '199€/año (ahorra ~31%)' : 'equiv. ~16,58€/mes'
+  const voiceYearlyHint = '79 €/año (ahorra ~27%)'
+  const idYearlyHint = '199 €/año (ahorra ~31%)'
+
+  function YearlyPriceHint({ label }: { label: string }) {
+    return (
+      <button
+        type="button"
+        onClick={() => setInterval('year')}
+        className="mt-1 text-left text-xs text-indigo-800 underline decoration-indigo-400/60 underline-offset-2 transition hover:decoration-indigo-600 dark:text-indigo-200 dark:decoration-indigo-300/60"
+      >
+        {label}
+      </button>
+    )
+  }
 
   const freeCtaClass =
     'mt-6 w-full rounded-2xl border border-slate-300 py-3 text-sm font-bold text-slate-800 transition dark:border-white/20 dark:text-white'
@@ -93,7 +105,7 @@ export default function PricingCards({
     )
   }
 
-  function renderPaidCta(tier: 'voice' | 'identity', label: string, className: string) {
+  function renderPaidCta(tier: 'voice' | 'identity' | 'therapist', label: string, className: string) {
     if (comingSoon) return null
     if (displayOnly) {
       return (
@@ -188,7 +200,11 @@ export default function PricingCards({
               {interval === 'month' ? '/mes' : '/año'}
             </span>
           </p>
-          <p className="mt-1 text-xs text-indigo-800 dark:text-indigo-200">{interval === 'month' ? voiceSecondary : 'Pago anual único'}</p>
+          {interval === 'month' ? (
+            <YearlyPriceHint label={voiceYearlyHint} />
+          ) : (
+            <p className="mt-1 text-xs text-indigo-800 dark:text-indigo-200">Pago anual único</p>
+          )}
           <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-700 dark:text-slate-200">
             {features.voice.map((f) => (
               <li key={f} className="flex gap-2">
@@ -209,7 +225,11 @@ export default function PricingCards({
               {interval === 'month' ? '/mes' : '/año'}
             </span>
           </p>
-          <p className="mt-1 text-xs text-slate-500">{interval === 'month' ? idSecondary : 'Pago anual único'}</p>
+          {interval === 'month' ? (
+            <YearlyPriceHint label={idYearlyHint} />
+          ) : (
+            <p className="mt-1 text-xs text-slate-500">Pago anual único</p>
+          )}
           <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-600 dark:text-slate-300">
             {features.identity.map((f) => (
               <li key={f} className="flex gap-2">

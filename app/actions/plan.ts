@@ -5,7 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
-import { priceIdForCheckout } from '@/lib/stripe/plan-mapping'
+import { priceIdForCheckout, type CheckoutPlanTier } from '@/lib/stripe/plan-mapping'
 import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
 import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
 import { effectiveSubscriptionPlan, type SubscriptionPlan } from '@/lib/subscription/plans'
@@ -45,7 +45,7 @@ export async function getSubscriptionGateState(): Promise<SubscriptionGateState>
 
   return {
     signedIn: true,
-    needsPlanSelection: false,
+    needsPlanSelection: !user.planSelectionCompletedAt,
     plan: effectiveSubscriptionPlan(user.email, user.plan),
     stripeCustomerId: user.stripeCustomerId,
   }
@@ -76,8 +76,9 @@ export type StartSubscriptionCheckoutResult =
  * para que el cliente muestre el aviso sin error 500.
  */
 export async function startSubscriptionCheckout(
-  planTier: 'voice' | 'identity',
+  planTier: CheckoutPlanTier,
   interval: 'month' | 'year',
+  opts?: { extraUsers?: number; extraTherapists?: number },
 ): Promise<StartSubscriptionCheckoutResult> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -86,10 +87,31 @@ export async function startSubscriptionCheckout(
 
   const priceId = priceIdForCheckout(planTier, interval)
   if (!priceId) {
+    const envHint =
+      planTier === 'therapist'
+        ? 'STRIPE_PRICE_TERAPEUTA_MONTHLY y STRIPE_PRICE_TERAPEUTA_YEARLY'
+        : 'STRIPE_PRICE_VOZ_MONTHLY, STRIPE_PRICE_VOZ_YEARLY, STRIPE_PRICE_IDENTIDAD_MONTHLY y STRIPE_PRICE_IDENTIDAD_YEARLY'
     return {
       ok: false,
-      message:
-        'Los precios de Stripe no están configurados en el servidor. Añade en .env.local los IDs de precio (price_…) de Stripe: STRIPE_PRICE_VOZ_MONTHLY, STRIPE_PRICE_VOZ_YEARLY, STRIPE_PRICE_IDENTIDAD_MONTHLY y STRIPE_PRICE_IDENTIDAD_YEARLY. Consulta .env.example.',
+      message: `Los precios de Stripe no están configurados en el servidor. Añade en .env.local los IDs de precio (price_…) de Stripe: ${envHint}. Consulta .env.example.`,
+    }
+  }
+
+  const lineItems: Array<{ price: string; quantity: number }> = [{ price: priceId, quantity: 1 }]
+
+  if (planTier === 'therapist') {
+    const { extraUserPriceIdMonthly, extraTherapistPriceIdMonthly } = await import(
+      '@/lib/stripe/plan-mapping'
+    )
+    const extraUsers = Math.max(0, opts?.extraUsers ?? 0)
+    const extraTherapists = Math.max(0, opts?.extraTherapists ?? 0)
+    const extraUserPrice = extraUserPriceIdMonthly()
+    const extraTherapistPrice = extraTherapistPriceIdMonthly()
+    if (extraUsers > 0 && extraUserPrice) {
+      lineItems.push({ price: extraUserPrice, quantity: extraUsers })
+    }
+    if (extraTherapists > 0 && extraTherapistPrice) {
+      lineItems.push({ price: extraTherapistPrice, quantity: extraTherapists })
     }
   }
 
@@ -106,8 +128,11 @@ export async function startSubscriptionCheckout(
       mode: 'subscription',
       allow_promotion_codes: true,
       customer_email: user?.email ?? undefined,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/tablero?session_id={CHECKOUT_SESSION_ID}`,
+      line_items: lineItems,
+      success_url:
+        planTier === 'therapist'
+          ? `${origin}/elegir-usuario?session_id={CHECKOUT_SESSION_ID}`
+          : `${origin}/tablero?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/plan?cancel=1`,
       metadata: {
         userId: session.user.id,

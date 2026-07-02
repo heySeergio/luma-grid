@@ -1,10 +1,9 @@
 import Link from 'next/link'
-import { Heart, MessageCircle, Sparkles, Volume2, WifiOff } from 'lucide-react'
+import { MessageCircle, Sparkles, Volume2, WifiOff } from 'lucide-react'
 import PricingCards from '@/components/plan/PricingCards'
 import { LandingJsonLd, FAQ_ITEMS } from '@/components/seo/LandingJsonLd'
 import BrandLockup from '@/components/site/BrandLockup'
 import LandingFaq from '@/components/site/LandingFaq'
-import DonationPartnerLogos from '@/components/site/DonationPartnerLogos'
 import PwaInstallButtons from '@/components/site/PwaInstallButtons'
 import SiteFooter from '@/components/site/SiteFooter'
 
@@ -274,15 +273,6 @@ export default function LandingPageOriginal({ includeJsonLd = true, comingSoon =
             </p>
           </div>
           <PricingCards variant="landing" comingSoon={comingSoon} />
-          <div className="mx-auto mt-8 max-w-3xl md:mt-10">
-            <p className="flex items-start justify-center gap-2 text-left text-xs leading-relaxed text-slate-500 dark:text-slate-400 md:text-sm">
-              <Heart className="mt-0.5 h-4 w-4 shrink-0 text-rose-500/90 dark:text-rose-400/90" strokeWidth={2} aria-hidden />
-              <span>
-                El 1% del beneficio neto de Luma Grid se dona trimestralmente a ARASAAC, Confederación Autismo España y Protectora Huellas Ávila.
-              </span>
-            </p>
-            <DonationPartnerLogos className="mt-5" />
-          </div>
         </div>
       </section>
 

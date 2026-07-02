@@ -1,4 +1,6 @@
 /** Colores de marca (tailwind: canvas, forest, accent-blue). */
+import { CONTACT_EMAIL } from '@/lib/site/contact'
+
 const BRAND = {
   canvas: '#FDF8F1',
   surface: '#FFFFFF',
@@ -158,7 +160,7 @@ export function defaultOuterFooterHtml(): string {
   const year = new Date().getFullYear()
   return `
     Si tienes dudas o necesitas ayuda, escríbenos a
-    <a href="mailto:hola@lumagrid.app" style="color:${BRAND.link};text-decoration:none;font-weight:600">hola@lumagrid.app</a>
+    <a href="mailto:${CONTACT_EMAIL}" style="color:${BRAND.link};text-decoration:none;font-weight:600">${CONTACT_EMAIL}</a>
     <br />
     © ${year} Luma Grid. Todos los derechos reservados.
     <br />

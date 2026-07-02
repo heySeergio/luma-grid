@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
-import { resolveDbPlanFromSubscriptionItems } from '@/lib/stripe/plan-mapping'
+import { resolveSubscriptionFromItems } from '@/lib/stripe/plan-mapping'
 import { periodEndFromSubscription } from '@/lib/stripe/subscription-helpers'
 import { shouldSkipStripeSubscriptionPull } from '@/lib/stripe/sync-bypass'
 import { hasActivePaidSubscription } from '@/lib/subscription/plans'
@@ -22,7 +22,8 @@ export const voiceOpsUserSelect = {
 
 export type VoiceOpsUser = Prisma.UserGetPayload<{ select: typeof voiceOpsUserSelect }>
 
-function planRank(plan: 'voz' | 'identidad'): number {
+function planRank(plan: 'voz' | 'identidad' | 'terapeuta'): number {
+  if (plan === 'terapeuta') return 3
   return plan === 'identidad' ? 2 : 1
 }
 
@@ -53,7 +54,7 @@ export async function syncStripeSubscriptionForUser(userId: string): Promise<voi
   let best: {
     customerId: string
     sub: Stripe.Subscription
-    planDb: 'voz' | 'identidad'
+    planDb: 'voz' | 'identidad' | 'terapeuta'
   } | null = null
 
   for (const customer of customerList.data) {
@@ -67,8 +68,9 @@ export async function syncStripeSubscriptionForUser(userId: string): Promise<voi
 
     for (const sub of subs.data) {
       if (sub.status !== 'active' && sub.status !== 'trialing') continue
-      const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data)
-      if (!planDb) continue
+      const resolved = resolveSubscriptionFromItems(sub.items.data)
+      if (!resolved) continue
+      const planDb = resolved.planDb
 
       const end = sub.items.data[0]?.current_period_end ?? 0
       if (!best) {
@@ -95,7 +97,18 @@ export async function syncStripeSubscriptionForUser(userId: string): Promise<voi
   const sub = await stripe.subscriptions.retrieve(best.sub.id, {
     expand: ['items.data.price'],
   })
-  const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data) ?? best.planDb
+  const resolved = resolveSubscriptionFromItems(sub.items.data)
+  const planDb = resolved?.planDb ?? best.planDb
+
+  if (planDb === 'terapeuta' && resolved) {
+    const { syncOrganizationFromStripe } = await import('@/lib/stripe/org-sync')
+    await syncOrganizationFromStripe(userId, best.customerId, sub.id, resolved)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { planExpiresAt: periodEndFromSubscription(sub) },
+    })
+    return
+  }
 
   await prisma.user.update({
     where: { id: userId },

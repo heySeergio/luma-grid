@@ -3,12 +3,14 @@ import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe/server'
 import {
   dbPlanFromCheckoutTier,
-  resolveDbPlanFromSubscriptionItems,
+  resolveSubscriptionFromItems,
+  type CheckoutPlanTier,
 } from '@/lib/stripe/plan-mapping'
 import {
   periodEndFromSubscription,
   subscriptionIdFromInvoice,
 } from '@/lib/stripe/subscription-helpers'
+import { syncOrganizationFromStripe, syncUserPlanFromStripe } from '@/lib/stripe/org-sync'
 
 async function findUserIdForStripeCustomer(
   stripe: Stripe,
@@ -19,6 +21,12 @@ async function findUserIdForStripeCustomer(
     select: { id: true },
   })
   if (byId) return byId.id
+
+  const org = await prisma.organization.findFirst({
+    where: { stripeCustomerId: customerId },
+    select: { ownerUserId: true },
+  })
+  if (org) return org.ownerUserId
 
   let customer: Stripe.Customer | Stripe.DeletedCustomer
   try {
@@ -33,6 +41,28 @@ async function findUserIdForStripeCustomer(
     select: { id: true },
   })
   return u?.id ?? null
+}
+
+async function applySubscriptionToUser(
+  userId: string,
+  customerId: string,
+  sub: Stripe.Subscription,
+): Promise<void> {
+  const resolution = resolveSubscriptionFromItems(sub.items.data)
+  if (!resolution) return
+
+  const expires = periodEndFromSubscription(sub)
+
+  if (resolution.planDb === 'terapeuta') {
+    await syncOrganizationFromStripe(userId, customerId, sub.id, resolution)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { planExpiresAt: expires },
+    })
+    return
+  }
+
+  await syncUserPlanFromStripe(userId, customerId, sub.id, resolution.planDb, expires)
 }
 
 export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<void> {
@@ -56,40 +86,57 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
         }
       }
 
-      const planTier = session.metadata?.planTier as 'voice' | 'identity' | undefined
+      const planTier = session.metadata?.planTier as CheckoutPlanTier | undefined
       const cust = session.customer
       const customerId = typeof cust === 'string' ? cust : cust?.id
       const subRef = session.subscription
       const subscriptionId =
         typeof subRef === 'string' ? subRef : subRef?.id ?? null
 
-      if (!userId || session.mode !== 'subscription') break
+      if (!userId || session.mode !== 'subscription' || !subscriptionId || !customerId) break
 
-      let planDb: 'voz' | 'identidad' | null =
-        planTier === 'voice' || planTier === 'identity' ? dbPlanFromCheckoutTier(planTier) : null
+      const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['items.data.price'],
+      })
 
-      let expires: Date | null = null
-      if (subscriptionId) {
-        const sub = await stripe.subscriptions.retrieve(subscriptionId, {
-          expand: ['items.data.price'],
-        })
-        const resolved = resolveDbPlanFromSubscriptionItems(sub.items.data)
-        if (resolved) planDb = resolved
-        expires = periodEndFromSubscription(sub)
+      const resolution = resolveSubscriptionFromItems(sub.items.data)
+      if (resolution) {
+        if (resolution.planDb === 'terapeuta') {
+          await syncOrganizationFromStripe(userId, customerId, subscriptionId, resolution)
+          await prisma.user.update({
+            where: { id: userId },
+            data: { planExpiresAt: periodEndFromSubscription(sub) },
+          })
+        } else {
+          await syncUserPlanFromStripe(
+            userId,
+            customerId,
+            subscriptionId,
+            resolution.planDb,
+            periodEndFromSubscription(sub),
+          )
+        }
+        break
       }
 
-      if (!planDb) break
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          plan: planDb,
-          stripeCustomerId: customerId ?? undefined,
-          stripeSubscriptionId: subscriptionId ?? undefined,
-          planExpiresAt: expires,
-          planSelectionCompletedAt: new Date(),
-        },
-      })
+      if (planTier === 'voice' || planTier === 'identity' || planTier === 'therapist') {
+        const planDb = dbPlanFromCheckoutTier(planTier)
+        if (planDb === 'terapeuta') {
+          await syncOrganizationFromStripe(userId, customerId, subscriptionId, {
+            planDb,
+            extraUserSlots: 0,
+            extraTherapistSeats: 0,
+          })
+        } else {
+          await syncUserPlanFromStripe(
+            userId,
+            customerId,
+            subscriptionId,
+            planDb,
+            periodEndFromSubscription(sub),
+          )
+        }
+      }
       break
     }
 
@@ -106,18 +153,7 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const sub = await stripe.subscriptions.retrieve(subscriptionId, {
         expand: ['items.data.price'],
       })
-      const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data)
-      if (!planDb) break
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          plan: planDb,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: subscriptionId,
-          planExpiresAt: periodEndFromSubscription(sub),
-        },
-      })
+      await applySubscriptionToUser(userId, customerId, sub)
       break
     }
 
@@ -129,31 +165,13 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const userId = await findUserIdForStripeCustomer(stripe, customerId)
       if (!userId) break
 
-      const planDb = resolveDbPlanFromSubscriptionItems(sub.items.data)
-      if (planDb) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            plan: planDb,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: sub.id,
-            planExpiresAt: periodEndFromSubscription(sub),
-          },
-        })
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        await applySubscriptionToUser(userId, customerId, sub)
         break
       }
 
-      const tier = sub.metadata?.planTier as string | undefined
-      if (tier === 'voice' || tier === 'identity') {
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            plan: dbPlanFromCheckoutTier(tier),
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: sub.id,
-            planExpiresAt: periodEndFromSubscription(sub),
-          },
-        })
+      if (sub.status === 'canceled' || sub.status === 'unpaid' || sub.status === 'past_due') {
+        // Mantener plan hasta planExpiresAt; no degradar aquí salvo deleted
       }
       break
     }
@@ -172,6 +190,15 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
           plan: 'libre',
           stripeSubscriptionId: null,
           planExpiresAt: null,
+        },
+      })
+
+      await prisma.organization.updateMany({
+        where: { ownerUserId: userId },
+        data: {
+          stripeSubscriptionId: null,
+          extraUserSlots: 0,
+          extraTherapistSeats: 0,
         },
       })
       break

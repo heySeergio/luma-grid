@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 
 /** Pie de la landing comercial (legal, Casa Numa). */
 export function MarketingFooter() {
@@ -29,7 +30,7 @@ export function MarketingFooter() {
               href="https://casanuma.biz"
               target="_blank"
               rel="noopener noreferrer"
-              className="group relative inline-block w-[2.2rem] shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest focus-visible:ring-offset-2"
+              className="group relative inline-block w-[4rem] shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest focus-visible:ring-offset-2"
             >
               <Image
                 src="/casa-numa-logo.png"
@@ -57,10 +58,10 @@ export function MarketingFooter() {
           <p className="mt-6 max-w-sm text-sm font-medium leading-relaxed text-forest/75">
             ¿Tienes dudas? Escríbenos a{' '}
             <a
-              href="mailto:lumagrid@casanuma.biz"
+              href={`mailto:${CONTACT_EMAIL}`}
               className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
             >
-              lumagrid@casanuma.biz
+              {CONTACT_EMAIL}
             </a>
           </p>
         </div>

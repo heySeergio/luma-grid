@@ -15,7 +15,6 @@ import { SHOW_LANDING_PRICING_SECTION } from "@/components/landing/landingFlags"
 import { PricingEntrance } from "@/components/landing/PricingEntrance";
 import { HeroComposition } from "@/components/landing/HeroComposition";
 import { HeroHeadline } from "@/components/landing/HeroHeadline";
-import { useWaitlistModal } from "@/components/landing/WaitlistModalProvider";
 
 /**
  * Arrastre de planta y niño (misma idea que `moverSvgOn` en el hero).
@@ -79,13 +78,7 @@ const heroFeatureIcons = {
   ),
 } as const;
 
-function Hero({
-  comingSoon,
-  onOpenWaitlist,
-}: {
-  comingSoon: boolean
-  onOpenWaitlist: () => void
-}) {
+function Hero() {
   return (
     <AnimatedSection
       id="inicio"
@@ -118,38 +111,24 @@ artificial para expresarte y conectar
 con el mundo.`}
             </p>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-3 sm:mt-4 sm:gap-4 md:justify-start">
-              {comingSoon ? (
-                <button
-                  type="button"
-                  onClick={onOpenWaitlist}
-                  className="inline-flex rounded-full border border-black/10 bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
-                  aria-haspopup="dialog"
-                >
-                  Avísame cuando esté disponible
-                </button>
-              ) : (
-                <Link
-                  href="/tablero"
-                  className="inline-flex rounded-full border border-black/10 bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
-                >
-                  Entrar al tablero
-                </Link>
-              )}
-              {comingSoon ? (
-                <Link
-                  href="/#comunicacion-fluye"
-                  className="text-sm font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
-                >
-                  Ver cómo funciona →
-                </Link>
-              ) : (
-                <Link
-                  href="/admin"
-                  className="text-sm font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
-                >
-                  Configurar tableros →
-                </Link>
-              )}
+              <Link
+                href="/register"
+                className="inline-flex rounded-full border border-black/10 bg-[#042D22] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+              >
+                Crear cuenta gratis
+              </Link>
+              <Link
+                href="/#planes"
+                className="text-sm font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+              >
+                Ver planes →
+              </Link>
+              <Link
+                href="/login"
+                className="text-sm font-bold text-forest/70 underline-offset-4 transition hover:text-coral hover:underline"
+              >
+                Iniciar sesión
+              </Link>
             </div>
             <ul className="mt-8 grid w-full max-w-sm grid-cols-2 justify-items-center gap-x-6 gap-y-4 text-sm font-bold text-[#042D22] sm:mt-10 sm:max-w-none sm:grid-cols-4 sm:justify-items-stretch sm:gap-x-8 sm:gap-y-3 lg:mt-11 lg:gap-x-10">
               <li className="flex min-w-0 items-center gap-2.5">
@@ -284,32 +263,27 @@ function Pricing() {
   );
 }
 
-function CtaBanner({ comingSoon }: { comingSoon: boolean }) {
+function CtaBanner() {
   return (
     <AnimatedSection
       id="recursos"
       className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
       enableLoop={false}
     >
-      <CtaBannerClient moverEnabled={ctaBannerMoverOn} comingSoon={comingSoon} />
+      <CtaBannerClient moverEnabled={ctaBannerMoverOn} />
     </AnimatedSection>
   );
 }
 
-type LandingPageProps = {
-  comingSoon?: boolean
-}
-
-export function LandingPage({ comingSoon = true }: LandingPageProps) {
-  const { openWaitlist } = useWaitlistModal()
+export function LandingPage() {
   return (
     <>
       <main className="pt-36 sm:pt-32">
-        <Hero comingSoon={comingSoon} onOpenWaitlist={openWaitlist} />
+        <Hero />
         <Audience />
         <Features />
         <Pricing />
-        <CtaBanner comingSoon={comingSoon} />
+        <CtaBanner />
       </main>
       <MarketingFooter />
     </>

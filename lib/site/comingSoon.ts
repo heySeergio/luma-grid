@@ -1,10 +1,7 @@
 /**
- * Landing pública (`/`): CTAs a tablero/admin/registro, precios activos, JSON-LD y guías PWA.
- *
- * Establece `NEXT_PUBLIC_COMING_SOON=false` en el entorno (p. ej. `.env.local` o Vercel) para
- * mostrar el servicio como abierto en la portada. Cualquier otro valor o variable ausente
- * mantiene el modo «próximamente» (comportamiento por defecto).
+ * La aplicación está abierta al público. Se mantiene la función por compatibilidad
+ * con páginas que aún pasan `comingSoon` al shell de marketing.
  */
 export function isLandingComingSoon(): boolean {
-  return process.env.NEXT_PUBLIC_COMING_SOON !== 'false'
+  return false
 }

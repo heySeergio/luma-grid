@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
-import Image from 'next/image'
-import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
+import { MarketingFooter } from '@/components/landing/MarketingFooter'
 import { InstallIconAndroid, InstallIconApple, InstallIconDesktop } from '@/components/site/installPlatformIcons'
 
 /** Metadatos de `/instalar` (usados en `app/instalar/page.tsx`). */
@@ -34,49 +33,6 @@ function Section({
       </h2>
       <div className="mt-4 space-y-3 text-sm font-medium leading-relaxed text-forest/80 md:text-base">{children}</div>
     </section>
-  )
-}
-
-/** Misma composición que `MarketingFooter`, sin hipervínculos (pie de `/instalar`). */
-function InstalarFooterSinEnlaces() {
-  return (
-    <footer className="border-t border-black/10 bg-canvas px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="inline-flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-forest">
-            <Image
-              src="/logo-luma-grid.png"
-              alt=""
-              width={40}
-              height={40}
-              className="h-9 w-9 shrink-0 object-cover shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
-            />
-            <NavBrandTitle>Luma Grid</NavBrandTitle>
-          </div>
-          <p className="mt-2 text-sm font-medium text-forest/65">Comunicación Aumentativa y Alternativa</p>
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-forest/70">Un proyecto de</p>
-            <span className="inline-block w-[2.2rem] shrink-0">
-              <Image
-                src="/casa-numa-logo.png"
-                alt="Casa NUMA"
-                width={832}
-                height={304}
-                className="h-auto w-full object-contain object-left"
-              />
-            </span>
-          </div>
-        </div>
-        <div
-          aria-label="Documentación legal (solo texto)"
-          className="grid w-full grid-cols-3 gap-3 text-center text-sm font-semibold leading-snug text-forest/80 sm:ml-auto sm:w-auto sm:max-w-2xl sm:gap-8 sm:text-right"
-        >
-          <p className="min-w-0">Términos y Condiciones</p>
-          <p>Privacidad</p>
-          <p>Cookies</p>
-        </div>
-      </div>
-    </footer>
   )
 }
 
@@ -186,7 +142,7 @@ export default function InstalarPageContent() {
         </div>
       </article>
 
-      <InstalarFooterSinEnlaces />
+      <MarketingFooter />
     </main>
   )
 }

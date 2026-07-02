@@ -4,21 +4,16 @@ import { LandingJsonLd } from '@/components/seo/LandingJsonLd'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
 import { getOgImageAbsoluteUrl, getOgImageDimensions } from '@/lib/seo/ogImage'
 import { getSiteUrl } from '@/lib/seo/siteUrl'
-import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 const siteUrl = getSiteUrl()
 const ogImageUrl = getOgImageAbsoluteUrl()
 const ogDims = getOgImageDimensions()
 
-const DESCRIPTION_COMING_SOON =
-  'Luma Grid: comunicación AAC en español con pictogramas, frases con IA, voz y PWA. Servicio en preparación; el acceso al tablero y al registro se anunciará próximamente.'
-
 const DESCRIPTION_LIVE =
   'Luma Grid: comunicación AAC en español con pictogramas, predicción contextual, voz del dispositivo o voces naturales en planes de pago, y panel para personalizar tableros. PWA instalable desde el tablero.'
 
 export async function generateMetadata(): Promise<Metadata> {
-  const comingSoon = isLandingComingSoon()
-  const description = comingSoon ? DESCRIPTION_COMING_SOON : DESCRIPTION_LIVE
+  const description = DESCRIPTION_LIVE
   return {
     title: {
       absolute:
@@ -88,12 +83,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootPage() {
-  const comingSoon = isLandingComingSoon()
-  const showJsonLd = !comingSoon
   return (
-    <MarketingSiteShell comingSoon={comingSoon}>
-      {showJsonLd ? <LandingJsonLd /> : null}
-      <LandingPageNoSsr comingSoon={comingSoon} />
+    <MarketingSiteShell comingSoon={false}>
+      <LandingJsonLd />
+      <LandingPageNoSsr />
     </MarketingSiteShell>
   )
 }

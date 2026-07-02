@@ -12,6 +12,7 @@ import {
   type KeyboardThemeColors,
 } from '@/lib/keyboard/theme'
 import { effectiveSubscriptionPlan, getMaxProfiles } from '@/lib/subscription/plans'
+import { resolveActingContextForSession } from '@/lib/auth/actingContext'
 import { revalidatePath } from 'next/cache'
 
 const LUMA_EXPORT_VERSION = 3 as const
@@ -65,6 +66,7 @@ export async function importProfileBoardFromLuma(
 ): Promise<{ ok: true; profileId: string } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { ok: false, error: 'No autorizado' }
+  const userId = (await resolveActingContextForSession(session)).effectiveUserId
 
   let parsed: unknown
   try {
@@ -117,13 +119,13 @@ export async function importProfileBoardFromLuma(
   }
 
   const owner = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: { email: true, plan: true },
   })
   const plan = effectiveSubscriptionPlan(owner?.email, owner?.plan)
   const maxP = getMaxProfiles(plan)
   const existingNonDemo = await prisma.profile.count({
-    where: { userId: session.user.id, isDemo: false },
+    where: { userId: userId, isDemo: false },
   })
   if (existingNonDemo >= maxP) {
     return {
@@ -277,7 +279,7 @@ export async function importProfileBoardFromLuma(
         data: {
           name: nameRaw.slice(0, 200),
           gender,
-          userId: session.user.id,
+          userId: userId,
           isDemo: false,
           gridRows,
           gridCols,
@@ -320,7 +322,7 @@ export async function importProfileBoardFromLuma(
     if (fixedZoneJson !== Prisma.JsonNull) {
       await setFixedZoneCellsForProfile(
         newProfile.id,
-        session.user.id,
+        userId,
         fixedZoneJson as Prisma.InputJsonValue,
       )
     }

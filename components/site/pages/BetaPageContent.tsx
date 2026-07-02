@@ -15,6 +15,7 @@ import {
 
 import { SparklesText } from '@/components/ui/sparkles-text'
 import { BRAND_NAV_HOVER_COLORS } from '@/lib/site/brandNavHoverColors'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 
 const WHATSAPP_URL = 'https://wa.me/34613910337'
 const WHATSAPP_LABEL = '+34 613 910 337'
@@ -377,6 +378,12 @@ export default function BetaPageContent() {
             >
               <MessageCircle className="size-5" aria-hidden />
               WhatsApp {WHATSAPP_LABEL}
+            </a>
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              {CONTACT_EMAIL}
             </a>
             <p className="self-center text-sm font-medium text-white/70">
               O responde por el medio por el que te contactamos

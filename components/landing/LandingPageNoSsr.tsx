@@ -12,11 +12,6 @@ const LandingPage = dynamic(
   },
 );
 
-type LandingPageNoSsrProps = {
-  comingSoon?: boolean;
-};
-
-/** Carga la landing solo en cliente (evita avisos de hidratación por atributos inyectados en el DOM). */
-export function LandingPageNoSsr({ comingSoon = true }: LandingPageNoSsrProps) {
-  return <LandingPage comingSoon={comingSoon} />;
+export function LandingPageNoSsr() {
+  return <LandingPage />;
 }

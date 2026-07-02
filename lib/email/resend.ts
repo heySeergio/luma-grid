@@ -6,7 +6,7 @@ import {
   lumaEmailLayout,
 } from '@/lib/email/template'
 
-const DEFAULT_FROM = 'Luma Grid <mailing@lumagrid.app>'
+const DEFAULT_FROM = 'Luma Grid <no-reply@lumagrid.app>'
 
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import LegalPage from '@/components/site/LegalPage'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { CONTACT_EMAIL } from '@/lib/site/contact'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 export const metadata: Metadata = {
@@ -165,8 +166,14 @@ const sections = [
           También puedes presentar reclamación ante la Agencia Española de Protección de Datos u otra autoridad competente.
         </p>
         <p>
-          Para ejercer derechos o solicitar información sobre el tratamiento, puedes contactar a través de los canales que Luma Grid habilite al efecto
-          (por ejemplo correo indicado en el sitio o en la aplicación).
+          Para ejercer derechos o solicitar información sobre el tratamiento, escríbenos a{' '}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+          .
         </p>
       </>
     ),

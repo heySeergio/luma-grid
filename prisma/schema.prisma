@@ -60,6 +60,10 @@ model User {
   passkeys                 Passkey[]
   backupCodes              BackupCode[]
   authTokens               AuthToken[]
+  ownedOrganization        Organization?        @relation("OrganizationOwner")
+  organizationMembership   OrganizationMember?
+  managedEndUser           ManagedEndUser?
+  actingSessionLogsAsActor ActingSessionLog[]   @relation("ActingSessionActor")
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 }
@@ -426,4 +430,70 @@ model WaitlistEntry {
   @@index([email])
   @@index([createdAt])
   @@map("waitlist_entries")
+}
+
+/// Organización del plan Terapeuta (titular + usuarios gestionados).
+model Organization {
+  id                     String   @id @default(cuid())
+  name                   String?
+  ownerUserId            String   @unique @map("owner_user_id")
+  owner                  User     @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  stripeCustomerId       String?  @map("stripe_customer_id")
+  stripeSubscriptionId   String?  @map("stripe_subscription_id")
+  includedUserSlots      Int      @default(10) @map("included_user_slots")
+  extraUserSlots         Int      @default(0) @map("extra_user_slots")
+  includedTherapistSeats Int      @default(1) @map("included_therapist_seats")
+  extraTherapistSeats    Int      @default(0) @map("extra_therapist_seats")
+  members                OrganizationMember[]
+  managedUsers           ManagedEndUser[]
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @unique @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       // OWNER | THERAPIST
+  inviteEmail    String?      @map("invite_email")
+  inviteStatus   String?      @map("invite_status") // pending | accepted
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+model ManagedEndUser {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @unique @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayLabel   String?      @map("display_label")
+  inviteEmail    String?      @map("invite_email")
+  inviteStatus   String?      @map("invite_status") // none | pending | accepted
+  archivedAt     DateTime?    @map("archived_at")
+  lastAccessedAt DateTime?    @map("last_accessed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([organizationId])
+  @@map("managed_end_users")
+}
+
+/// Auditoría de acceso del terapeuta a cuentas gestionadas.
+model ActingSessionLog {
+  id              String   @id @default(cuid())
+  actorUserId     String   @map("actor_user_id")
+  actor           User     @relation("ActingSessionActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  effectiveUserId String   @map("effective_user_id")
+  action          String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([actorUserId, createdAt])
+  @@index([effectiveUserId, createdAt])
+  @@map("acting_session_logs")
 }
