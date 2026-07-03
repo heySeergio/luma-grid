@@ -35,6 +35,13 @@ export const PLAN_FEATURE_BULLETS = {
     'Voces naturales y realistas + clonación de voz',
     '100.000 caracteres de voz / mes',
   ],
+  therapist: [
+    'Hasta 10 pacientes desde una sola cuenta',
+    'Dashboard profesional y evaluación avanzada',
+    'Biblioteca de plantillas compartidas del centro',
+    'Informes clínicos exportables',
+    'Roles y permisos para colaboradores',
+  ],
 } as const
 
 const features = PLAN_FEATURE_BULLETS
@@ -52,8 +59,10 @@ export default function PricingCards({
 
   const voicePrimary = interval === 'month' ? '9€' : '79€'
   const idPrimary = interval === 'month' ? '24€' : '199€'
+  const therapistPrimary = interval === 'month' ? '69€' : '690€'
   const voiceYearlyHint = '79 €/año (ahorra ~27%)'
   const idYearlyHint = '199 €/año (ahorra ~31%)'
+  const therapistYearlyHint = '690 €/año (ahorra 138 €)'
 
   function YearlyPriceHint({ label }: { label: string }) {
     return (
@@ -73,6 +82,8 @@ export default function PricingCards({
     'mt-6 w-full rounded-2xl bg-indigo-500 py-3 text-sm font-bold text-white transition'
   const identityCtaClass =
     'mt-6 w-full rounded-2xl border border-slate-800 bg-slate-900 py-3 text-sm font-bold text-white transition dark:border-white/20 dark:bg-white dark:text-slate-900'
+  const therapistCtaClass =
+    'mt-6 w-full rounded-2xl bg-sky-700 py-3 text-sm font-bold text-white transition hover:bg-sky-600'
 
   function renderFreeCta() {
     if (comingSoon) return null
@@ -120,7 +131,7 @@ export default function PricingCards({
           type="button"
           disabled={disabled}
           onClick={() => void onSelectPaid(tier, interval)}
-          className={`${className} disabled:opacity-50 ${tier === 'voice' ? 'hover:bg-indigo-400' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
+          className={`${className} disabled:opacity-50 ${tier === 'voice' ? 'hover:bg-indigo-400' : tier === 'therapist' ? 'hover:bg-sky-600' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
         >
           {label}
         </button>
@@ -129,7 +140,7 @@ export default function PricingCards({
     return (
       <Link
         href="/register"
-        className={`${className} block text-center ${tier === 'voice' ? 'hover:bg-indigo-400' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
+        className={`${className} block text-center ${tier === 'voice' ? 'hover:bg-indigo-400' : tier === 'therapist' ? 'hover:bg-sky-600' : 'hover:bg-slate-800 dark:hover:bg-slate-100'}`}
       >
         {label}
       </Link>
@@ -241,6 +252,47 @@ export default function PricingCards({
           {renderPaidCta('identity', 'Activar Identidad', identityCtaClass)}
         </article>
       </div>
+
+      {/* Terapeuta — ancho completo */}
+      <article className="flex flex-col rounded-3xl border-2 border-sky-600/70 bg-gradient-to-b from-sky-50/90 to-white p-6 shadow-lg dark:border-sky-500/50 dark:from-sky-950/40 dark:to-slate-900/80 lg:flex-row lg:gap-8">
+        <div className="lg:min-w-[14rem] lg:shrink-0">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-sky-800 dark:text-sky-300">
+            Profesionales
+          </p>
+          <h3 className="mt-1 text-lg font-bold text-slate-950 dark:text-white">Plan Terapeuta</h3>
+          <p className="mt-2 text-3xl font-black text-slate-950 dark:text-white">
+            {therapistPrimary}
+            <span className="text-base font-semibold text-slate-600 dark:text-slate-400">
+              {interval === 'month' ? '/mes' : '/año'}
+            </span>
+          </p>
+          {interval === 'month' ? (
+            <YearlyPriceHint label={therapistYearlyHint} />
+          ) : (
+            <p className="mt-1 text-xs text-sky-800 dark:text-sky-200">Pago anual único</p>
+          )}
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+            Para logopedas, terapeutas y centros que gestionan varios pacientes.
+          </p>
+        </div>
+        <div className="mt-5 flex flex-1 flex-col lg:mt-0">
+          <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            Todo lo del Plan Identidad, más:
+          </p>
+          <ul className="grid flex-1 gap-2 text-sm text-slate-600 sm:grid-cols-2 dark:text-slate-300">
+            {features.therapist.map((f) => (
+              <li key={f} className="flex gap-2">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+            Ampliaciones: paciente adicional +6 €/mes · terapeuta adicional +39 €/mes
+          </p>
+          {renderPaidCta('therapist', 'Activar Plan Terapeuta', therapistCtaClass)}
+        </div>
+      </article>
     </div>
   )
 }

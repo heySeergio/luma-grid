@@ -9,6 +9,12 @@ import { priceIdForCheckout, type CheckoutPlanTier } from '@/lib/stripe/plan-map
 import { createStripePortalSessionUrl } from '@/lib/stripe/portal'
 import { maybeSyncStripeSubscriptionFromStripe } from '@/lib/stripe/sync-subscription'
 import { effectiveSubscriptionPlan, type SubscriptionPlan } from '@/lib/subscription/plans'
+import {
+  checkoutUnavailableMessage,
+  defaultUserFacingErrorMessage,
+  isDevServerEnvironment,
+  userFacingErrorMessage,
+} from '@/lib/server/userFacingError'
 
 export type SubscriptionGateState =
   | { signedIn: false }
@@ -91,9 +97,15 @@ export async function startSubscriptionCheckout(
       planTier === 'therapist'
         ? 'STRIPE_PRICE_TERAPEUTA_MONTHLY y STRIPE_PRICE_TERAPEUTA_YEARLY'
         : 'STRIPE_PRICE_VOZ_MONTHLY, STRIPE_PRICE_VOZ_YEARLY, STRIPE_PRICE_IDENTIDAD_MONTHLY y STRIPE_PRICE_IDENTIDAD_YEARLY'
+    if (isDevServerEnvironment()) {
+      console.warn('[startSubscriptionCheckout] Precio Stripe no configurado:', envHint)
+    }
     return {
       ok: false,
-      message: `Los precios de Stripe no están configurados en el servidor. Añade en .env.local los IDs de precio (price_…) de Stripe: ${envHint}. Consulta .env.example.`,
+      message: userFacingErrorMessage(
+        `Los precios de Stripe no están configurados en el servidor. Añade en .env.local los IDs de precio (price_…) de Stripe: ${envHint}. Consulta .env.example.`,
+        checkoutUnavailableMessage(),
+      ),
     }
   }
 
@@ -148,13 +160,23 @@ export async function startSubscriptionCheckout(
     })
 
     if (!checkoutSession.url) {
-      return { ok: false, message: 'Stripe no devolvió URL de checkout.' }
+      return {
+        ok: false,
+        message: userFacingErrorMessage(
+          'Stripe no devolvió URL de checkout.',
+          defaultUserFacingErrorMessage(),
+        ),
+      }
     }
 
     return { ok: true, url: checkoutSession.url }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Error al crear la sesión de pago.'
-    return { ok: false, message: msg }
+    console.error('[startSubscriptionCheckout]', e)
+    const devMsg = e instanceof Error ? e.message : 'Error al crear la sesión de pago.'
+    return {
+      ok: false,
+      message: userFacingErrorMessage(devMsg, checkoutUnavailableMessage()),
+    }
   }
 }
 
