@@ -65,20 +65,32 @@ export function MarketingFooter() {
             </a>
           </p>
         </div>
-        <nav
-          aria-label="Enlaces legales"
-          className="grid w-full grid-cols-3 gap-3 text-center text-sm font-semibold leading-snug text-forest/80 sm:ml-auto sm:w-auto sm:max-w-2xl sm:gap-8 sm:text-right"
-        >
-          <Link href="/terminos" className="min-w-0 hover:text-coral">
-            Términos y Condiciones
-          </Link>
-          <Link href="/privacidad" className="hover:text-coral">
-            Privacidad
-          </Link>
-          <Link href="/cookies" className="hover:text-coral">
-            Cookies
-          </Link>
-        </nav>
+        <div className="grid w-full gap-8 sm:ml-auto sm:w-auto sm:max-w-2xl sm:grid-cols-2 sm:gap-10 sm:text-right">
+          <nav aria-label="Recursos" className="space-y-3 text-sm font-semibold leading-snug text-forest/80">
+            <p className="text-xs font-bold uppercase tracking-wide text-forest/55">Recursos</p>
+            <Link href="/comparar" className="block hover:text-coral">
+              Comparar comunicadores AAC
+            </Link>
+            <Link href="/planes" className="block hover:text-coral">
+              Planes y precios
+            </Link>
+            <Link href="/instalar" className="block hover:text-coral">
+              Cómo instalar
+            </Link>
+          </nav>
+          <nav aria-label="Enlaces legales" className="space-y-3 text-sm font-semibold leading-snug text-forest/80">
+            <p className="text-xs font-bold uppercase tracking-wide text-forest/55">Legal</p>
+            <Link href="/terminos" className="block min-w-0 hover:text-coral">
+              Términos y Condiciones
+            </Link>
+            <Link href="/privacidad" className="block hover:text-coral">
+              Privacidad
+            </Link>
+            <Link href="/cookies" className="block hover:text-coral">
+              Cookies
+            </Link>
+          </nav>
+        </div>
       </div>
     </footer>
   )
