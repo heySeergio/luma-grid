@@ -23,8 +23,12 @@ const ENTRANCE_DURATION = 0.44;
 /** Fade-in de cada ítem de la lista (fluye). */
 const LIST_ENTRANCE_DURATION = 0.52;
 /** Tras el fade del ítem, inicia el bucle propio (s). */
-function makeListLoopDelay(base: number, stagger: number) {
-  return (index: number) => base + index * stagger + LIST_ENTRANCE_DURATION;
+function makeListLoopDelay(
+  base: number,
+  stagger: number,
+  entranceDuration: number,
+) {
+  return (index: number) => base + index * stagger + entranceDuration;
 }
 const LIST_LOOP_FLOAT_Y = [0, -3.2, 0];
 const LIST_LOOP_FLOAT_DURATION = 5.5;
@@ -79,8 +83,10 @@ export function FeaturesFluyeEntrance({
   const headlineLine2Delay = isMobileLayout ? 0 : HEADLINE_LINE2_DELAY;
   const listBase = isMobileLayout ? 0 : LIST_BASE_DELAY;
   const listStagger = isMobileLayout ? 0 : LIST_STAGGER;
-  const listLoopDelay = makeListLoopDelay(listBase, listStagger);
+  const listLoopDelay = makeListLoopDelay(listBase, listStagger, listEntranceDuration);
   const driftDelaySec = isMobileLayout ? 0 : DRIFT_DELAY_AFTER_REVEAL_SEC;
+  const entranceDuration = isMobileLayout ? 0.3 : ENTRANCE_DURATION;
+  const listEntranceDuration = isMobileLayout ? 0.32 : LIST_ENTRANCE_DURATION;
 
   if (reduceMotion) {
     return (
@@ -179,7 +185,7 @@ export function FeaturesFluyeEntrance({
             initial={headlineBlock.initial}
             animate={reveal ? headlineBlock.enter : headlineBlock.initial}
             transition={{
-              duration: ENTRANCE_DURATION,
+              duration: entranceDuration,
               ease: easeOut,
               delay: HEADLINE_LINE1_DELAY,
             }}
@@ -191,7 +197,7 @@ export function FeaturesFluyeEntrance({
             initial={headlineBlock.initial}
             animate={reveal ? headlineBlock.enter : headlineBlock.initial}
             transition={{
-              duration: ENTRANCE_DURATION,
+              duration: entranceDuration,
               ease: easeOut,
               delay: headlineLine2Delay,
             }}
@@ -229,9 +235,9 @@ export function FeaturesFluyeEntrance({
           initial={headlineBlock.initial}
           animate={reveal ? headlineBlock.enter : headlineBlock.initial}
           transition={{
-            duration: ENTRANCE_DURATION,
+            duration: entranceDuration,
             ease: easeOut,
-            delay: headlineLine2Delay + 0.08,
+            delay: headlineLine2Delay + (isMobileLayout ? 0 : 0.08),
           }}
         >
           <FeaturesFluyeDocsLink className="relative z-20 mt-3 sm:mt-4" />
@@ -265,7 +271,7 @@ export function FeaturesFluyeEntrance({
                     : { opacity: 0, scale: 0.94 }
                 }
                 transition={{
-                  duration: LIST_ENTRANCE_DURATION,
+                  duration: listEntranceDuration,
                   ease: easeOut,
                   delay: listBase + index * listStagger,
                 }}

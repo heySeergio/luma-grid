@@ -28,6 +28,7 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
   const { revealed } = useDelayedSectionReveal(rootRef)
   const isMobileLayout = useIsMobileLayout()
   const ctaEntranceDelay = isMobileLayout ? 0 : CTA_GLOBAL_OFFSET_SEC
+  const ctaEntranceDuration = isMobileLayout ? 0.32 : CTA_ENTRANCE_DURATION
 
   const instant = reduceMotion === true
   const entranceStarted = instant || revealed
@@ -53,7 +54,7 @@ export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerCl
           instant
             ? { duration: 0 }
             : {
-                duration: CTA_ENTRANCE_DURATION,
+                duration: ctaEntranceDuration,
                 ease: easeOut,
                 delay: ctaEntranceDelay,
               }

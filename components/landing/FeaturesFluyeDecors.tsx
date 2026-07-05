@@ -126,6 +126,7 @@ export function FeaturesFluyeDecors({
     [persist],
   );
 
+  const entranceDuration = isMobileLayout ? 0.28 : ENTRANCE_DURATION;
   const reveal = positionsReady && entranceActive;
   const delayFor = (id: FluyeDecorId) =>
     isMobileLayout
@@ -135,7 +136,7 @@ export function FeaturesFluyeDecors({
         : ENTRANCE_DELAY_BOY_SEC;
 
   const plantLoopDelay = isMobileLayout
-    ? ENTRANCE_DURATION
+    ? entranceDuration
     : ENTRANCE_DELAY_PLANT_SEC + ENTRANCE_DURATION;
 
   return (
@@ -174,7 +175,7 @@ export function FeaturesFluyeDecors({
               reducedMotion
                 ? { duration: 0 }
                 : {
-                    duration: ENTRANCE_DURATION,
+                    duration: entranceDuration,
                     ease: easeOut,
                     delay: reveal ? delayFor(decor.id) : 0,
                   }

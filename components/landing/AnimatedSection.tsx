@@ -11,7 +11,9 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   SECTION_REVEAL_AMOUNT,
+  SECTION_REVEAL_AMOUNT_MOBILE,
   SECTION_REVEAL_MARGIN,
+  SECTION_REVEAL_MARGIN_MOBILE,
   SECTION_REVEAL_NUDGE_MS,
 } from "@/components/landing/sectionReveal";
 import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
@@ -167,17 +169,22 @@ function useScrollEnterLoop(
   const ref = useRef(null);
   const reduceMotion = useReducedMotion();
   const isMobileLayout = useIsMobileLayout();
+  /** En móvil las secciones internas ya revelan su contenido; evita doble fade al scroll. */
+  const skipScrollEnter = isMobileLayout && !enableLoop;
+  const resolvedAmount = isMobileLayout ? SECTION_REVEAL_AMOUNT_MOBILE : viewportAmount;
+  const resolvedMargin = isMobileLayout ? SECTION_REVEAL_MARGIN_MOBILE : margin;
   const rawInView = useInView(ref, {
     once: true,
-    amount: viewportAmount,
-    margin,
+    amount: resolvedAmount,
+    margin: resolvedMargin,
   });
   const [isInView, setIsInView] = useState(false);
   const [inDone, setInDone] = useState(false);
 
   useEffect(() => {
-    if (reduceMotion) {
-      setIsInView(rawInView);
+    if (reduceMotion || skipScrollEnter) {
+      setIsInView(true);
+      setInDone(true);
       return;
     }
     if (!rawInView) {
@@ -188,16 +195,28 @@ function useScrollEnterLoop(
     const nudgeMs = isMobileLayout ? 0 : SECTION_REVEAL_NUDGE_MS;
     const id = window.setTimeout(() => setIsInView(true), nudgeMs);
     return () => window.clearTimeout(id);
-  }, [rawInView, reduceMotion, isMobileLayout]);
+  }, [rawInView, reduceMotion, isMobileLayout, skipScrollEnter]);
 
   const loopDef = enableLoop ? loopFor(loop, reduceMotion) : settledAfterEnter;
 
   const onAnimationComplete = () => {
-    if (!isInView || reduceMotion) return;
+    if (!isInView || reduceMotion || skipScrollEnter) return;
     setInDone(true);
   };
 
-  return { ref, reduceMotion, isInView, inDone, loopDef, onAnimationComplete };
+  const effectiveInView = skipScrollEnter || isInView;
+  const effectiveInDone = skipScrollEnter || inDone;
+
+  return {
+    ref,
+    reduceMotion,
+    isInView: effectiveInView,
+    inDone: effectiveInDone,
+    loopDef,
+    onAnimationComplete,
+    skipScrollEnter,
+    isMobileLayout,
+  };
 }
 
 function enterHiddenProps(reduce: boolean | null): HTMLMotionProps<"section"> {
@@ -210,14 +229,17 @@ function enterHiddenProps(reduce: boolean | null): HTMLMotionProps<"section"> {
   };
 }
 
-function enterVisibleProps(reduce: boolean | null): HTMLMotionProps<"section"> {
+function enterVisibleProps(
+  reduce: boolean | null,
+  mobile = false,
+): HTMLMotionProps<"section"> {
   if (reduce) {
     return { initial: false, animate: { opacity: 1, y: 0 } };
   }
   return {
-    initial: { opacity: 0, y: 38 },
+    initial: { opacity: 0, y: mobile ? 22 : 38 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.58, ease: easeOut },
+    transition: { duration: mobile ? 0.34 : 0.58, ease: easeOut },
   };
 }
 
@@ -231,10 +253,18 @@ export function AnimatedSection({
   margin = SECTION_REVEAL_MARGIN,
   ...rest
 }: AnimatedSectionProps) {
-  const { ref, reduceMotion, isInView, inDone, loopDef, onAnimationComplete } =
-    useScrollEnterLoop(loop, enableLoop, viewportAmount, margin);
+  const {
+    ref,
+    reduceMotion,
+    isInView,
+    inDone,
+    loopDef,
+    onAnimationComplete,
+    skipScrollEnter,
+    isMobileLayout,
+  } = useScrollEnterLoop(loop, enableLoop, viewportAmount, margin);
 
-  if (reduceMotion) {
+  if (reduceMotion || skipScrollEnter) {
     return (
       <section id={id} className={className} {...rest}>
         {children}
@@ -246,7 +276,7 @@ export function AnimatedSection({
     ? enterHiddenProps(false)
     : inDone
       ? { initial: false, animate: loopDef.animate, transition: loopDef.transition }
-      : enterVisibleProps(false);
+      : enterVisibleProps(false, isMobileLayout);
 
   return (
     <motion.section
@@ -285,10 +315,18 @@ export function AnimatedHeader({
   margin = "0px 0px 0px 0px" as InViewMargin,
   ...rest
 }: AnimatedHeaderProps) {
-  const { ref, reduceMotion, isInView, inDone, loopDef, onAnimationComplete } =
-    useScrollEnterLoop(loop, enableLoop, viewportAmount, margin);
+  const {
+    ref,
+    reduceMotion,
+    isInView,
+    inDone,
+    loopDef,
+    onAnimationComplete,
+    skipScrollEnter,
+    isMobileLayout,
+  } = useScrollEnterLoop(loop, enableLoop, viewportAmount, margin);
 
-  if (reduceMotion) {
+  if (reduceMotion || skipScrollEnter) {
     return (
       <header id={id} className={className} {...rest}>
         {children}
@@ -304,7 +342,7 @@ export function AnimatedHeader({
           animate: loopDef.animate,
           transition: loopDef.transition,
         }
-      : (enterVisibleProps(false) as HTMLMotionProps<"header">);
+      : (enterVisibleProps(false, isMobileLayout) as HTMLMotionProps<"header">);
 
   return (
     <motion.header

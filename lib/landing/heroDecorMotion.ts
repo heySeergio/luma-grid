@@ -25,10 +25,15 @@ export const HERO_DECOR_MOTION = {
 
 export const heroDecorEaseOut = [0.22, 1, 0.36, 1] as const
 
+function decorDelay(seconds: number, mobile: boolean) {
+  return mobile ? seconds * 0.35 : seconds
+}
+
 export function heroDecorInnerMotion(
   id: HeroDecorId,
   ready: boolean,
   reduceMotion: boolean,
+  mobile = false,
 ): {
   animate: Record<string, number | number[]>
   transition: Record<string, unknown>
@@ -70,7 +75,7 @@ export function heroDecorInnerMotion(
         animate: { y: [0, -5, 0] },
         transition: {
           y: {
-            delay: HERO_DECOR_MOTION.tablet.loopYAfter,
+            delay: decorDelay(HERO_DECOR_MOTION.tablet.loopYAfter, mobile),
             duration: 4.4,
             repeat: Infinity,
             ease: 'easeInOut',
@@ -86,21 +91,21 @@ export function heroDecorInnerMotion(
         },
         transition: {
           scale: {
-            delay: HERO_DECOR_MOTION.cara.pop.delay,
+            delay: decorDelay(HERO_DECOR_MOTION.cara.pop.delay, mobile),
             type: 'spring',
             stiffness: HERO_DECOR_MOTION.cara.pop.stiffness,
             damping: HERO_DECOR_MOTION.cara.pop.damping,
             mass: HERO_DECOR_MOTION.cara.pop.mass,
           },
           y: {
-            delay: HERO_DECOR_MOTION.cara.pop.delay,
+            delay: decorDelay(HERO_DECOR_MOTION.cara.pop.delay, mobile),
             type: 'spring',
             stiffness: HERO_DECOR_MOTION.cara.pop.stiffness,
             damping: HERO_DECOR_MOTION.cara.pop.damping,
             mass: HERO_DECOR_MOTION.cara.pop.mass,
           },
           rotate: {
-            delay: HERO_DECOR_MOTION.cara.loopRotateAfter,
+            delay: decorDelay(HERO_DECOR_MOTION.cara.loopRotateAfter, mobile),
             duration: 3.6,
             repeat: Infinity,
             ease: 'easeInOut',
@@ -115,12 +120,12 @@ export function heroDecorInnerMotion(
         },
         transition: {
           x: {
-            delay: HERO_DECOR_MOTION.nina.slide.delay,
+            delay: decorDelay(HERO_DECOR_MOTION.nina.slide.delay, mobile),
             duration: HERO_DECOR_MOTION.nina.slide.duration,
             ease: heroDecorEaseOut,
           },
           y: {
-            delay: HERO_DECOR_MOTION.nina.loopYAfter,
+            delay: decorDelay(HERO_DECOR_MOTION.nina.loopYAfter, mobile),
             duration: 6.2,
             repeat: Infinity,
             ease: 'easeInOut',
@@ -136,13 +141,13 @@ export function heroDecorInnerMotion(
         },
         transition: {
           scale: {
-            delay: HERO_DECOR_MOTION.speech.stamp.delay,
+            delay: decorDelay(HERO_DECOR_MOTION.speech.stamp.delay, mobile),
             duration: HERO_DECOR_MOTION.speech.stamp.duration,
             ease: HERO_DECOR_MOTION.speech.stamp.ease,
           },
           y: { duration: 0 },
           rotate: {
-            delay: HERO_DECOR_MOTION.speech.loopRotateAfter,
+            delay: decorDelay(HERO_DECOR_MOTION.speech.loopRotateAfter, mobile),
             duration: 4.1,
             repeat: Infinity,
             ease: 'easeInOut',
@@ -154,7 +159,12 @@ export function heroDecorInnerMotion(
   }
 }
 
-export function heroDecorOuterFade(id: HeroDecorId, ready: boolean, reduceMotion: boolean) {
+export function heroDecorOuterFade(
+  id: HeroDecorId,
+  ready: boolean,
+  reduceMotion: boolean,
+  mobile = false,
+) {
   if (reduceMotion) {
     return {
       animate: { opacity: 1 },
@@ -175,7 +185,7 @@ export function heroDecorOuterFade(id: HeroDecorId, ready: boolean, reduceMotion
     animate: { opacity: ready ? 1 : 0 },
     transition: {
       duration: ready ? cfg.duration : 0,
-      delay: ready ? cfg.delay : 0,
+      delay: ready ? decorDelay(cfg.delay, mobile) : 0,
       ease: heroDecorEaseOut,
     },
   }

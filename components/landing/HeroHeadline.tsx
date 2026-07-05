@@ -38,9 +38,11 @@ function levitationStartAfterFade(fadeDelay: number) {
 function FadeWord({
   children,
   delay,
+  duration = WORD_FADE_DURATION,
 }: {
   children: ReactNode;
   delay: number;
+  duration?: number;
 }) {
   return (
     <motion.span
@@ -48,7 +50,7 @@ function FadeWord({
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: WORD_FADE_DURATION,
+        duration,
         delay,
         ease: easeOut,
       }}
@@ -62,6 +64,7 @@ export function HeroHeadline() {
   const isMobileLayout = useIsMobileLayout();
   const d = (sec: number) => (isMobileLayout ? 0 : sec);
   const letterStagger = isMobileLayout ? 0 : 0.07;
+  const wordFadeDuration = isMobileLayout ? 0.3 : WORD_FADE_DURATION;
   const levitationAfter = (fadeDelay: number) =>
     isMobileLayout ? 0 : levitationStartAfterFade(fadeDelay);
 
@@ -73,7 +76,7 @@ export function HeroHeadline() {
             rotation={-6}
             className="text-[#042D22] text-[clamp(2.5rem,8vw,4.75rem)] leading-[0.95]"
           >
-            <FadeWord delay={d(0)}>
+            <FadeWord delay={d(0)} duration={wordFadeDuration}>
               <LevitatingMessyLetters
                 text="Tu"
                 pattern={[0, 6]}
@@ -81,7 +84,7 @@ export function HeroHeadline() {
                 levitationStartDelay={levitationAfter(0)}
               />
             </FadeWord>
-            <FadeWord delay={d(0.16)}>
+            <FadeWord delay={d(0.16)} duration={wordFadeDuration}>
               <LevitatingMessyLetters
                 text=" voz."
                 pattern={[6, 16, 8, -2]}
@@ -94,7 +97,7 @@ export function HeroHeadline() {
             rotation={5}
             className="text-[#2F69BA] text-[clamp(2.5rem,8vw,4.75rem)] leading-[0.95]"
           >
-            <FadeWord delay={d(0.34)}>
+            <FadeWord delay={d(0.34)} duration={wordFadeDuration}>
               <LevitatingMessyLetters
                 text="Sin"
                 pattern={[-4, 8, -2]}
@@ -108,7 +111,7 @@ export function HeroHeadline() {
           rotation={-2}
           className="text-[#FE6B45] text-[clamp(2.75rem,9vw,5.5rem)] leading-[0.92] max-md:justify-center"
         >
-          <FadeWord delay={d(0.52)}>
+          <FadeWord delay={d(0.52)} duration={wordFadeDuration}>
             <LevitatingMessyLetters
               text="complicaciones."
               pattern={[
