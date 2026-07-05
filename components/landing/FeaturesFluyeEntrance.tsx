@@ -83,10 +83,10 @@ export function FeaturesFluyeEntrance({
   const headlineLine2Delay = isMobileLayout ? 0 : HEADLINE_LINE2_DELAY;
   const listBase = isMobileLayout ? 0 : LIST_BASE_DELAY;
   const listStagger = isMobileLayout ? 0 : LIST_STAGGER;
-  const listLoopDelay = makeListLoopDelay(listBase, listStagger, listEntranceDuration);
-  const driftDelaySec = isMobileLayout ? 0 : DRIFT_DELAY_AFTER_REVEAL_SEC;
   const entranceDuration = isMobileLayout ? 0.3 : ENTRANCE_DURATION;
   const listEntranceDuration = isMobileLayout ? 0.32 : LIST_ENTRANCE_DURATION;
+  const listLoopDelay = makeListLoopDelay(listBase, listStagger, listEntranceDuration);
+  const driftDelaySec = isMobileLayout ? 0 : DRIFT_DELAY_AFTER_REVEAL_SEC;
 
   if (reduceMotion) {
     return (
