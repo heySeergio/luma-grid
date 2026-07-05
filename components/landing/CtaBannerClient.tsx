@@ -9,6 +9,7 @@ import {
   CTA_ENTRANCE_DURATION,
   CTA_GLOBAL_OFFSET_SEC,
 } from '@/components/landing/CtaBannerDecors'
+import { useWaitlistModal } from '@/components/landing/WaitlistModalProvider'
 import { useDelayedSectionReveal } from '@/components/landing/useDelayedSectionReveal'
 import { useIsMobileLayout } from '@/lib/hooks/useIsMobileLayout'
 
@@ -16,15 +17,18 @@ const easeOut = [0.22, 1, 0.36, 1] as const
 
 type CtaBannerClientProps = {
   moverEnabled: boolean
+  comingSoon?: boolean
 }
 
-export function CtaBannerClient({ moverEnabled }: CtaBannerClientProps) {
+export function CtaBannerClient({ moverEnabled, comingSoon = true }: CtaBannerClientProps) {
+  const { openWaitlist } = useWaitlistModal()
   const rootRef = useRef<HTMLDivElement>(null)
 
   const reduceMotion = useReducedMotion()
   const { revealed } = useDelayedSectionReveal(rootRef)
   const isMobileLayout = useIsMobileLayout()
   const ctaEntranceDelay = isMobileLayout ? 0 : CTA_GLOBAL_OFFSET_SEC
+  const ctaEntranceDuration = isMobileLayout ? 0.32 : CTA_ENTRANCE_DURATION
 
   const instant = reduceMotion === true
   const entranceStarted = instant || revealed
@@ -50,7 +54,7 @@ export function CtaBannerClient({ moverEnabled }: CtaBannerClientProps) {
           instant
             ? { duration: 0 }
             : {
-                duration: CTA_ENTRANCE_DURATION,
+                duration: ctaEntranceDuration,
                 ease: easeOut,
                 delay: ctaEntranceDelay,
               }
@@ -60,20 +64,31 @@ export function CtaBannerClient({ moverEnabled }: CtaBannerClientProps) {
           Empieza a comunicarte <span className="text-accent-blue">a tu manera.</span>
         </h2>
         <p className="mt-4 text-base font-medium leading-relaxed text-forest sm:text-lg">
-          Crea tu cuenta gratis en minutos. Sin tarjeta para el plan Libre.
+          Únete a miles de personas que usan Luma Grid para expresarse, aprender y conectar.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-4">
+          {comingSoon ? (
+            <button
+              type="button"
+              onClick={openWaitlist}
+              className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
+              aria-haspopup="dialog"
+            >
+              Únete a la lista de espera
+            </button>
+          ) : (
+            <Link
+              href="/tablero"
+              className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
+            >
+              Entrar al tablero
+            </Link>
+          )}
           <Link
-            href="/register"
-            className="inline-flex rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-900"
-          >
-            Crear cuenta gratis
-          </Link>
-          <Link
-            href="/login"
+            href="/#funciones"
             className="text-sm font-bold text-forest underline-offset-4 transition hover:underline"
           >
-            Ya tengo cuenta →
+            Ver demo →
           </Link>
         </div>
       </motion.div>

@@ -3,7 +3,8 @@
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
-import { sectionRevealInViewOptions } from "@/components/landing/sectionReveal";
+import { sectionRevealInViewOptionsFor } from "@/components/landing/sectionReveal";
+import { useIsMobileLayout } from "@/lib/hooks/useIsMobileLayout";
 
 /** Mismo patrón que `loop="drift"` en `AnimatedSection`, solo para un subárbol. */
 const driftY = [0, -6, 0];
@@ -23,7 +24,8 @@ export function FeaturesDriftShell({
   driftDelaySec?: number;
 }) {
   const ref = useRef(null);
-  const inView = useInView(ref, sectionRevealInViewOptions);
+  const isMobileLayout = useIsMobileLayout();
+  const inView = useInView(ref, sectionRevealInViewOptionsFor(isMobileLayout));
   const reduce = useReducedMotion();
   const [driftOn, setDriftOn] = useState(driftDelaySec <= 0);
 

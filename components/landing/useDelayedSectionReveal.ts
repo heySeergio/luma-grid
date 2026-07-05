@@ -5,7 +5,9 @@ import { useEffect, useState, type RefObject } from "react";
 
 import {
   SECTION_REVEAL_AMOUNT,
+  SECTION_REVEAL_AMOUNT_MOBILE,
   SECTION_REVEAL_MARGIN,
+  SECTION_REVEAL_MARGIN_MOBILE,
   SECTION_REVEAL_NUDGE_MS,
   type SectionRevealMargin,
 } from "@/components/landing/sectionReveal";
@@ -19,10 +21,14 @@ export function useDelayedSectionReveal(
     nudgeMs: number;
   }>,
 ) {
-  const amount = overrides?.amount ?? SECTION_REVEAL_AMOUNT;
-  const margin = overrides?.margin ?? SECTION_REVEAL_MARGIN;
-  const nudgeMs = overrides?.nudgeMs ?? SECTION_REVEAL_NUDGE_MS;
   const isMobileLayout = useIsMobileLayout();
+  const amount =
+    overrides?.amount ??
+    (isMobileLayout ? SECTION_REVEAL_AMOUNT_MOBILE : SECTION_REVEAL_AMOUNT);
+  const margin =
+    overrides?.margin ??
+    (isMobileLayout ? SECTION_REVEAL_MARGIN_MOBILE : SECTION_REVEAL_MARGIN);
+  const nudgeMs = overrides?.nudgeMs ?? SECTION_REVEAL_NUDGE_MS;
 
   const rawInView = useInView(ref, { once: true, amount, margin });
   const reduceMotion = useReducedMotion();

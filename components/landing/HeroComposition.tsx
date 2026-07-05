@@ -13,6 +13,7 @@ import {
   heroDecorOuterFade,
   type HeroDecorId,
 } from '@/lib/landing/heroDecorMotion'
+import { useIsMobileLayout } from '@/lib/hooks/useIsMobileLayout'
 const NINA_SRC = `/images/hero/${encodeURIComponent('Niña.svg')}`
 
 const TABLET_FRAME_MS = [3000, 2000, 2000, 2000, 2000, 5000] as const
@@ -51,17 +52,19 @@ function HeroCompositionDecor({
   id,
   ready,
   reduceMotion,
+  mobile,
   box,
   children,
 }: {
   id: HeroDecorId
   ready: boolean
   reduceMotion: boolean
+  mobile: boolean
   box: { left: number; top: number; width: number }
   children: ReactNode
 }) {
-  const outer = heroDecorOuterFade(id, ready, reduceMotion)
-  const inner = heroDecorInnerMotion(id, ready, reduceMotion)
+  const outer = heroDecorOuterFade(id, ready, reduceMotion, mobile)
+  const inner = heroDecorInnerMotion(id, ready, reduceMotion, mobile)
 
   const style: CSSProperties = {
     position: 'absolute',
@@ -110,6 +113,7 @@ export function HeroComposition({ className }: HeroCompositionProps) {
   const [tabletFrame, setTabletFrame] = useState(0)
   const prefersReducedMotion = useReducedMotion()
   const reduceMotion = Boolean(prefersReducedMotion)
+  const isMobileLayout = useIsMobileLayout()
   const { hostRef, scale } = useCollectiveScale(HERO_COMPOSITION_ARTBOARD.width)
 
   useEffect(() => {
@@ -140,6 +144,7 @@ export function HeroComposition({ className }: HeroCompositionProps) {
           id="tablet"
           ready={ready}
           reduceMotion={reduceMotion}
+          mobile={isMobileLayout}
           box={HERO_COMPOSITION_LAYOUT.tablet}
         >
           <HeroCompositionTablet frame={tabletFrame} reduceMotion={reduceMotion} />
@@ -151,6 +156,7 @@ export function HeroComposition({ className }: HeroCompositionProps) {
             id={item.id}
             ready={ready}
             reduceMotion={reduceMotion}
+            mobile={isMobileLayout}
             box={HERO_COMPOSITION_LAYOUT[item.id]}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

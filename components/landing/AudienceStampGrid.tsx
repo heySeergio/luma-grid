@@ -27,14 +27,7 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
   const containerRef = useRef(null);
   const reduceMotion = useReducedMotion();
   const isMobileLayout = useIsMobileLayout();
-  /** En viewport estrecho el umbral de scroll + margen suele no disparar `inView` y el grid queda invisible (opacity 0). */
-  const showWithoutScrollReveal = Boolean(reduceMotion) || isMobileLayout;
-  const { revealed: isInView } = useDelayedSectionReveal(
-    containerRef,
-    isMobileLayout
-      ? { amount: 0.05, margin: "0px 0px 0px 0px" }
-      : undefined,
-  );
+  const { revealed: isInView } = useDelayedSectionReveal(containerRef);
 
   return (
     <div
@@ -64,16 +57,16 @@ export function AudienceStampGrid({ cards }: AudienceStampGridProps) {
           <motion.article
             key={card.title}
             className="flex flex-col gap-3 sm:gap-4"
-            initial={showWithoutScrollReveal ? visibleState : hiddenState}
+            initial={reduceMotion ? visibleState : hiddenState}
             animate={
-              showWithoutScrollReveal ? visibleState : isInView ? visibleState : hiddenState
+              reduceMotion || isInView ? visibleState : hiddenState
             }
             transition={
-              showWithoutScrollReveal
+              reduceMotion
                 ? { duration: 0 }
                 : {
                     delay: stampDelay,
-                    duration: 0.42,
+                    duration: isMobileLayout ? 0.3 : 0.42,
                     ease: [0.22, 1.1, 0.36, 1],
                   }
             }
