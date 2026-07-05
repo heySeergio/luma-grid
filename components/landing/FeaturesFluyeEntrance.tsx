@@ -55,19 +55,6 @@ function FeaturesFluyeDocsLink({ className }: { className?: string }) {
   );
 }
 
-function FeaturesFluyeDetailButton({ className }: { className?: string }) {
-  return (
-    <a
-      href={DOCS_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-6 py-3.5 text-sm font-bold text-white shadow-[0_4px_14px_-2px_rgba(254,107,69,0.4)] transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FE6B45]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FFF9F2] ${className ?? ""}`}
-    >
-      Ver todas las funciones a detalle
-    </a>
-  );
-}
-
 export type FeaturesFluyeListItem = {
   title: string;
   body: string;
@@ -171,9 +158,6 @@ export function FeaturesFluyeEntrance({
               </li>
             ))}
           </ul>
-          <div className="mt-8 flex justify-center sm:mt-10">
-            <FeaturesFluyeDetailButton />
-          </div>
         </div>
       </div>
     );
@@ -341,18 +325,6 @@ export function FeaturesFluyeEntrance({
             );
           })}
         </ul>
-        <motion.div
-          className="mt-8 flex justify-center sm:mt-10"
-          initial={{ opacity: 0, y: 10 }}
-          animate={reveal ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-          transition={{
-            duration: ENTRANCE_DURATION,
-            ease: easeOut,
-            delay: listBase + featureItems.length * listStagger + 0.12,
-          }}
-        >
-          <FeaturesFluyeDetailButton />
-        </motion.div>
       </div>
     </div>
   );
