@@ -4,7 +4,7 @@ import { getSiteUrl } from '@/lib/seo/siteUrl'
 export function getOgImageAbsoluteUrl(): string {
   const override = process.env.NEXT_PUBLIC_OG_IMAGE_URL?.trim()
   if (override) return override
-  return `${getSiteUrl()}/og/social`
+  return `${getSiteUrl()}/OG.jpg`
 }
 
 export function getOgImageDimensions(): { width: number; height: number } {
