@@ -190,7 +190,6 @@ export default function PrivacyPage() {
   return (
     <MarketingSiteShell comingSoon={isLandingComingSoon()}>
       <LegalPage
-        variant="marketing"
         eyebrow="Privacidad"
         title="Política de privacidad"
         intro="Descripción del tratamiento de datos en Luma Grid: cuenta (correo, contraseña u OAuth Google), tableros y comunicador, opción de compartir uso para predicción AAC, voz, proveedores técnicos y almacenamiento local en el dispositivo."

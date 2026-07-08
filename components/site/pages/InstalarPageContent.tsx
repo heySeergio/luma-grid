@@ -54,18 +54,6 @@ function InstalarFooterSinEnlaces() {
             <NavBrandTitle>Luma Grid</NavBrandTitle>
           </div>
           <p className="mt-2 text-sm font-medium text-forest/65">Comunicación Aumentativa y Alternativa</p>
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-forest/70">Un proyecto de</p>
-            <span className="inline-block w-[2.2rem] shrink-0">
-              <Image
-                src="/casa-numa-logo.png"
-                alt="Casa NUMA"
-                width={895}
-                height={350}
-                className="h-auto w-full object-contain object-left"
-              />
-            </span>
-          </div>
         </div>
         <div
           aria-label="Documentación legal (solo texto)"

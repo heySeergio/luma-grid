@@ -140,7 +140,6 @@ export default function TermsPage() {
   return (
     <MarketingSiteShell comingSoon={isLandingComingSoon()}>
       <LegalPage
-        variant="marketing"
         eyebrow="Términos y condiciones"
         title="Términos y condiciones de uso"
         intro="Estas condiciones regulan el acceso y uso de Luma Grid: comunicador AAC, inicio de sesión con correo o Google, voz (p. ej. ElevenLabs), predicción y opciones de privacidad del aprendizaje, y uso como PWA."

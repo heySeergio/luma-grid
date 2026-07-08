@@ -110,7 +110,6 @@ export default function CookiesPage() {
   return (
     <MarketingSiteShell comingSoon={isLandingComingSoon()}>
       <LegalPage
-        variant="marketing"
         eyebrow="Cookies"
         title="Política de cookies"
         intro="Uso de cookies, sesión NextAuth, almacenamiento local, IndexedDB (cola de sincronización y caché), OAuth Google y PWA con service worker."
