@@ -5,6 +5,7 @@ import { Handshake, Volume2, Wrench, type LucideIcon } from 'lucide-react'
 import { MarketingFooter } from '@/components/landing/MarketingFooter'
 import { FeedbackOpinionCta } from '@/components/sobre-nosotros/FeedbackOpinionCta'
 import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
+import { LUMA_GRID_CONTACT_EMAIL } from '@/lib/site/contactEmail'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
 export const metadata: Metadata = {
@@ -166,10 +167,10 @@ con calma.`}
             <p className="mt-6 text-sm font-semibold text-white/90 sm:text-base">
               ¿Tienes dudas? Escríbenos a{' '}
               <a
-                href="mailto:lumagrid@casanuma.biz"
+                href={`mailto:${LUMA_GRID_CONTACT_EMAIL}`}
                 className="font-extrabold text-[#FCE855] underline-offset-4 transition hover:underline hover:brightness-110"
               >
-                lumagrid@casanuma.biz
+                {LUMA_GRID_CONTACT_EMAIL}
               </a>
             </p>
 

@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { NavBrandTitle } from '@/components/landing/NavBrandTitle'
+import { LUMA_GRID_CONTACT_EMAIL } from '@/lib/site/contactEmail'
 
 /** Pie de la landing comercial (legal). */
 export function MarketingFooter() {
@@ -26,10 +27,10 @@ export function MarketingFooter() {
           <p className="mt-6 max-w-sm text-sm font-medium leading-relaxed text-forest/75">
             ¿Tienes dudas? Escríbenos a{' '}
             <a
-              href="mailto:lumagrid@casanuma.biz"
+              href={`mailto:${LUMA_GRID_CONTACT_EMAIL}`}
               className="font-semibold text-forest underline-offset-4 transition hover:text-coral hover:underline"
             >
-              lumagrid@casanuma.biz
+              {LUMA_GRID_CONTACT_EMAIL}
             </a>
           </p>
         </div>
