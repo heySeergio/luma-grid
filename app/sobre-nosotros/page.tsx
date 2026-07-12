@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Handshake, Volume2, Wrench, type LucideIcon } from 'lucide-react'
 
@@ -8,15 +9,16 @@ import { MarketingSiteShell } from '@/components/site/MarketingSiteShell'
 import { CONTACT_EMAIL } from '@/lib/site/contact'
 import { isLandingComingSoon } from '@/lib/site/comingSoon'
 
+const PAGE_DESCRIPTION =
+  'Luma Grid: comunicación AAC desarrollada por Sergio T. Los derechos de la herramienta están delegados a Casa Numa.'
+
 export const metadata: Metadata = {
   title: 'Sobre nosotros',
-  description:
-    'Luma Grid es un proyecto de Casa Numa: comunicación AAC con voz propia, hecha con educadores y orientada a personas reales.',
+  description: PAGE_DESCRIPTION,
   alternates: { canonical: '/sobre-nosotros' },
   openGraph: {
     title: 'Sobre nosotros · Luma Grid',
-    description:
-      'Luma Grid es un proyecto de Casa Numa: comunicación AAC con voz propia, hecha con educadores y orientada a personas reales.',
+    description: PAGE_DESCRIPTION,
     url: '/sobre-nosotros',
     type: 'website',
     locale: 'es_ES',
@@ -25,8 +27,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary',
     title: 'Sobre nosotros · Luma Grid',
-    description:
-      'Luma Grid es un proyecto de Casa Numa: comunicación AAC con voz propia, hecha con educadores y orientada a personas reales.',
+    description: PAGE_DESCRIPTION,
   },
 }
 
@@ -85,17 +86,54 @@ export default function SobreNosotrosPage() {
             </h1>
 
             <p className="mt-5 max-w-xl text-base font-medium leading-relaxed text-forest/75">
-              En{' '}
-              <a
-                href="https://casanuma.biz"
-                className="font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Casa Numa
-              </a>{' '}
-              pensamos el AAC de otra manera: menos plantilla, más persona.
+              Pensamos el AAC de otra manera: menos plantilla, más persona.
             </p>
+
+            <div className="mt-8 rounded-2xl border border-black/[0.06] bg-[#FFFBF0] p-6 sm:p-7">
+              <p className="text-base leading-relaxed text-forest/88">
+                Esta herramienta ha sido desarrollada por{' '}
+                <a
+                  href="https://sleepyboybold.com"
+                  className="font-bold text-forest underline-offset-4 transition hover:text-coral hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Sergio T.
+                </a>
+                .
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-3">
+                <p className="text-sm font-medium text-forest/75">Los derechos están delegados a</p>
+                <Link
+                  href="https://casanuma.biz"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative inline-block w-[4.5rem] shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest focus-visible:ring-offset-2"
+                >
+                  <Image
+                    src="/casa-numa-logo.png"
+                    alt="Casa NUMA"
+                    width={832}
+                    height={304}
+                    className="relative z-0 h-auto w-full object-contain object-left transition-opacity duration-200 ease-out group-hover:opacity-0"
+                  />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 z-10 bg-[#F45C41] opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+                    style={{
+                      WebkitMaskImage: 'url(/casa-numa-logo.png)',
+                      maskImage: 'url(/casa-numa-logo.png)',
+                      WebkitMaskSize: 'contain',
+                      maskSize: 'contain',
+                      WebkitMaskRepeat: 'no-repeat',
+                      maskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'left center',
+                      maskPosition: 'left center',
+                    }}
+                  />
+                </Link>
+              </div>
+            </div>
           </header>
 
           <div className="mt-10 space-y-5">
@@ -114,7 +152,7 @@ acaba viéndose y sonando demasiado parecida a la anterior.`}
             <div className="rounded-[22px] border border-black/[0.06] bg-[#F3FBF6] p-7 sm:p-8">
               <p className="text-xs font-extrabold uppercase tracking-wider text-[#2d8f52]">Por qué existimos</p>
               <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-forest/88">
-                {`Luma Grid nació en Casa Numa para cambiar ese guion. Para nosotros,
+                {`Luma Grid nació para cambiar ese guion. Para nosotros,
 comunicar no es solo pasar datos: es mostrar quién eres.
 
 Por eso trabajamos para que cada persona tenga su voz, su identidad
@@ -160,8 +198,7 @@ y un tablero que la represente de verdad, no una copia de la de al lado.`}
               {`Vamos poco a poco, y lo decimos con orgullo.
 Cada centro que prueba Luma Grid nos ayuda a mejorar el producto para todos.
 
-Si quieres contarnos algo, escríbenos: en Casa Numa leemos los mensajes
-con calma.`}
+Si quieres contarnos algo, escríbenos: leemos los mensajes con calma.`}
             </p>
 
             <p className="mt-6 text-sm font-semibold text-white/90 sm:text-base">
