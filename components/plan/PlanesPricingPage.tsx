@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
-import { startSubscriptionCheckout } from '@/app/actions/plan'
 import { CONTACT_EMAIL } from '@/lib/site/contact'
 
 type BillingInterval = 'month' | 'year'
@@ -107,7 +106,7 @@ const PLANS: PlanCardConfig[] = [
     ],
     features: [],
     addons: ['Paciente adicional: +6 €/mes', 'Terapeuta adicional: +39 €/mes'],
-    cta: 'Activar Plan Terapeuta',
+    cta: 'Próximamente',
     variant: 'therapist',
   },
 ]
@@ -246,14 +245,10 @@ function PlanPrice({
 function PlanCard({
   plan,
   interval,
-  busy,
-  onPaid,
   onSelectYearly,
 }: {
   plan: PlanCardConfig
   interval: BillingInterval
-  busy: boolean
-  onPaid: (tier: 'voice' | 'identity' | 'therapist', interval: BillingInterval) => void
   onSelectYearly: () => void
 }) {
   const shellClass = cn(
@@ -329,12 +324,7 @@ function PlanCard({
           {plan.variant === 'free' ? plan.cta : 'Registrarse'}
         </Link>
       ) : (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onPaid('therapist', interval)}
-          className={ctaClass}
-        >
+        <button type="button" disabled className={`${ctaClass} cursor-not-allowed opacity-60`}>
           {plan.cta}
         </button>
       )}
@@ -344,8 +334,6 @@ function PlanCard({
 
 export default function PlanesPricingPage() {
   const [interval, setInterval] = useState<BillingInterval>('month')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (window.location.hash !== '#plan-terapeuta') return
@@ -354,18 +342,6 @@ export default function PlanesPricingPage() {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  async function handlePaid(tier: 'voice' | 'identity' | 'therapist', billing: BillingInterval) {
-    setError(null)
-    setBusy(true)
-    const result = await startSubscriptionCheckout(tier, billing)
-    if (!result.ok) {
-      setError(result.message)
-      setBusy(false)
-      return
-    }
-    window.location.href = result.url
-  }
-
   const consumerPlans = PLANS.filter((p) => p.variant !== 'therapist')
   const therapistPlan = PLANS.find((p) => p.variant === 'therapist')
 
@@ -373,9 +349,6 @@ export default function PlanesPricingPage() {
 
   return (
     <div className="space-y-12">
-      {error ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-      ) : null}
       <BillingToggle interval={interval} onChange={setInterval} />
 
       <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
@@ -384,8 +357,6 @@ export default function PlanesPricingPage() {
             key={plan.id}
             plan={plan}
             interval={interval}
-            busy={busy}
-            onPaid={handlePaid}
             onSelectYearly={selectYearly}
           />
         ))}
@@ -396,8 +367,6 @@ export default function PlanesPricingPage() {
           <PlanCard
             plan={therapistPlan}
             interval={interval}
-            busy={busy}
-            onPaid={handlePaid}
             onSelectYearly={selectYearly}
           />
         </div>

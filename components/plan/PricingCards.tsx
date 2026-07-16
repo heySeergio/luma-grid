@@ -290,7 +290,13 @@ export default function PricingCards({
           <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
             Ampliaciones: paciente adicional +6 €/mes · terapeuta adicional +39 €/mes
           </p>
-          {renderPaidCta('therapist', 'Activar Plan Terapeuta', therapistCtaClass)}
+          <button
+            type="button"
+            disabled
+            className={`${therapistCtaClass} cursor-not-allowed opacity-60`}
+          >
+            Próximamente
+          </button>
         </div>
       </article>
     </div>
