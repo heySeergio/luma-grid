@@ -20,7 +20,7 @@ export const runtime = 'nodejs'
 
 const MAX_TEXT_LEN = 8_000
 /** Si ElevenLabs no responde a tiempo, el cliente usa Web Speech. */
-const ELEVENLABS_TTS_TIMEOUT_MS = 7_000
+const ELEVENLABS_TTS_TIMEOUT_MS = 5_000
 
 function isAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError'

@@ -178,7 +178,11 @@ export default function AppInterface({
   const compositionStartedAtRef = useRef<number | null>(null)
   /** Snapshot SSR para omitir la primera recarga; el cleanup restaura en Strict Mode. */
   const tableroBootstrapRef = useRef(tableroInitial)
-  const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>({ ttsMode: 'browser', voiceId: null })
+  const [voicePrefs, setVoicePrefs] = useState<SpeakVoicePrefs>(
+    () => tableroInitial?.voicePrefs ?? { ttsMode: 'browser', voiceId: null },
+  )
+  /** Evita hablar con prefs por defecto (browser) antes de conocer el modo real del usuario. */
+  const [voicePrefsReady, setVoicePrefsReady] = useState(() => tableroInitial?.voicePrefs != null)
   const profileId = profile?.id ?? ''
 
   const shouldUseDefaultGridTemplate = Boolean(profile?.isDemo)
@@ -239,15 +243,19 @@ export default function AppInterface({
   }, [mainOrderedSymbols, profile?.communication_gender])
 
   const speakSelectedWord = useCallback((text: string) => {
-    if (!text.trim()) return
+    if (!text.trim() || !voicePrefsReady) return
     void speakText(text, profile?.id ?? '', voicePrefs).catch(() => { })
-  }, [profile?.id, voicePrefs])
+  }, [profile?.id, voicePrefs, voicePrefsReady])
 
   useEffect(() => {
     const loadVoice = () => {
       void getVoiceSettings().then((s) => {
-        if (!s) return
+        if (!s) {
+          setVoicePrefsReady(true)
+          return
+        }
         setVoicePrefs({ ttsMode: s.ttsMode, voiceId: s.voiceId })
+        setVoicePrefsReady(true)
       })
     }
     loadVoice()
@@ -926,7 +934,7 @@ export default function AppInterface({
 
   const handleQuickPhraseTap = useCallback(
     async (phrase: Phrase) => {
-      if (!profile) return
+      if (!profile || !voicePrefsReady) return
       const t = phrase.text?.trim()
       if (!t) return
       setSelectedSymbols(buildSelectionFromPhrase(phrase))
@@ -956,6 +964,7 @@ export default function AppInterface({
       profile,
       buildSelectionFromPhrase,
       voicePrefs,
+      voicePrefsReady,
       loadFrequentPhrases,
       resetPhraseTracking,
       persistUtterance,
@@ -1013,7 +1022,10 @@ export default function AppInterface({
           onPhraseSaved={loadPinnedPhrases}
           onRemoveSymbol={handleRemoveSymbol}
           onAfterSpeak={handleAfterSpeak}
-          speakPhrase={(phrase) => speakText(phrase, profile?.id ?? '', voicePrefs)}
+          speakPhrase={(phrase) => {
+            if (!voicePrefsReady) return Promise.resolve()
+            return speakText(phrase, profile?.id ?? '', voicePrefs)
+          }}
           externalCompositionReset={phraseCompositionReset}
           restMode={restMode}
           onRestModeToggle={

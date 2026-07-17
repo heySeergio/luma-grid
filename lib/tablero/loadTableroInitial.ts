@@ -6,6 +6,8 @@ import { getAccountSettings } from '@/app/actions/account'
 import { getProfiles } from '@/app/actions/profiles'
 import { getProfileSymbols } from '@/app/actions/symbols'
 import { getFrequentPhrases, getPinnedPhrases } from '@/app/actions/phrases'
+import { getVoiceSettings } from '@/app/actions/voiceSettings'
+import type { TtsMode } from '@/lib/tts/types'
 import type { Phrase, Profile, Symbol } from '@/lib/supabase/types'
 
 /** Perfil activo al cargar /tablero (apertura por defecto o primero). */
@@ -17,6 +19,11 @@ function pickActiveProfileId(
   return (opening ?? profiles[0]).id
 }
 
+export type TableroInitialVoicePrefs = {
+  ttsMode: TtsMode
+  voiceId: string | null
+}
+
 export type TableroInitialPayload = {
   profiles: Profile[]
   activeProfileId: string | null
@@ -24,6 +31,8 @@ export type TableroInitialPayload = {
   pinnedPhrases: Phrase[]
   frequentPhrases: Phrase[]
   accountSettings: PublicAccountSettings | null
+  /** Preferencias TTS reales desde el servidor (evita arrancar en modo browser por defecto). */
+  voicePrefs: TableroInitialVoicePrefs
 }
 
 /**
@@ -36,9 +45,10 @@ export async function loadTableroInitial(
   const session = sessionHint ?? (await getServerSession(authOptions))
   if (!session?.user?.id) return null
 
-  const [profiles, accountSettings] = await Promise.all([
+  const [profiles, accountSettings, voiceSettings] = await Promise.all([
     getProfiles(),
     getAccountSettings(),
+    getVoiceSettings(),
   ])
 
   const activeProfileId = pickActiveProfileId(profiles)
@@ -66,5 +76,9 @@ export async function loadTableroInitial(
     pinnedPhrases,
     frequentPhrases,
     accountSettings,
+    voicePrefs: {
+      ttsMode: voiceSettings?.ttsMode ?? 'browser',
+      voiceId: voiceSettings?.voiceId ?? null,
+    },
   }
 }

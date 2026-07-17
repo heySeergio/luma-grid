@@ -21,13 +21,20 @@ let currentGainContext: AudioContext | null = null
 let speakSessionId = 0
 
 /**
- * Margen por encima del timeout del servidor (/api/tts ~7s a ElevenLabs) para no abortar
- * la petición HTTP antes de recibir 504 + código ELEVENLABS_TIMEOUT.
+ * Si `/api/tts` no responde en este tiempo (modo ElevenLabs), se usa la voz del sistema.
+ * Alineado con el timeout del servidor hacia ElevenLabs.
  */
-const ELEVENLABS_FETCH_TIMEOUT_MS = 20_000
+const ELEVENLABS_FETCH_TIMEOUT_MS = 5_000
 
 function isNaturalTtsMode(prefs: SpeakVoicePrefs): boolean {
   return prefs.ttsMode === 'preset' || prefs.ttsMode === 'custom'
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
+    (err instanceof Error && err.name === 'AbortError')
+  )
 }
 
 function cancelBrowserSpeechOnly(): void {
@@ -91,8 +98,9 @@ export function stopAllTtsPlayback(): void {
 
 /**
  * TTS unificado: navegador (gratis) o audio desde POST /api/tts (ElevenLabs).
- * Con voz natural (preset/custom), la voz del sistema solo se usa si ElevenLabs falla de verdad
- * (respuesta de error, audio que no reproduce, etc.), no por timeout agresivo del cliente.
+ * Con voz natural (preset/custom), la voz del sistema solo se usa si no hay respuesta
+ * de la API en 5s (timeout) o el servidor indica modo navegador / timeout de ElevenLabs.
+ * Otros errores (red, 5xx, audio) no caen a Web Speech.
  */
 export async function speakText(
   text: string,
@@ -130,13 +138,20 @@ export async function speakText(
 
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
-      if (err.code === 'BROWSER_MODE' || err.code === 'ELEVENLABS_TIMEOUT' || res.status === 504) {
+      const allowBrowserFallback =
+        err.code === 'BROWSER_MODE' || err.code === 'ELEVENLABS_TIMEOUT' || res.status === 504
+      if (allowBrowserFallback) {
         if (!stillActive()) return
-        // Solo voz del sistema cuando el servidor indica fallback o timeout real de ElevenLabs.
         await speakWithWebSpeech(trimmed, profileId, stillActive)
         return
       }
-      throw new Error(typeof err.error === 'string' ? err.error : 'Error TTS')
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(
+          '[speakText] Error TTS sin fallback a voz del sistema (modo natural).',
+          err.error ?? res.status,
+        )
+      }
+      return
     }
 
     const blob = await res.blob()
@@ -184,24 +199,19 @@ export async function speakText(
   } catch (err) {
     clearTimeout(timeoutId)
     if (!stillActive()) return
-    const aborted =
-      (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
-      (err instanceof Error && err.name === 'AbortError')
 
-    // Modo natural: no usar voz del sistema solo porque el fetch del cliente hizo abort (timeout local).
-    if (isNaturalTtsMode(prefs) && aborted) {
+    // Único fallback a voz del sistema en modo natural: sin respuesta de /api/tts en 5s.
+    if (isNaturalTtsMode(prefs) && isAbortError(err)) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[speakText] Petición TTS abortada en cliente; modo natural: no se usa voz del sistema.')
+        console.warn('[speakText] Sin respuesta TTS en 5s; usando voz del navegador.')
       }
+      if (!stillActive()) return
+      await speakWithWebSpeech(trimmed, profileId, stillActive)
       return
     }
 
-    if (aborted && process.env.NODE_ENV === 'development') {
-      console.warn('[speakText] TTS ElevenLabs lento o cancelado; usando voz del navegador.')
-    } else if (process.env.NODE_ENV === 'development') {
-      console.warn('[speakText] Fallo TTS (red o API); intentando voz del sistema.', err)
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[speakText] Fallo TTS (red/API/audio); sin fallback a voz del sistema.', err)
     }
-    if (!stillActive()) return
-    await speakWithWebSpeech(trimmed, profileId, stillActive)
   }
 }

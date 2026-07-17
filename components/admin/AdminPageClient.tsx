@@ -8,7 +8,6 @@ import { useTheme } from 'next-themes'
 import { getAccountSettings, updateAccountSettings } from '@/app/actions/account'
 import { parseDefaultTableroTab, type DefaultTableroTab } from '@/lib/account/defaultTableroTab'
 import { getVoiceSettings, updateLumaVoicePreferences } from '@/app/actions/voiceSettings'
-import { ensureVoicePreviewSamples } from '@/app/actions/voicePreviewSamples'
 import { previewLexemeDetection } from '@/app/actions/lexicon'
 import FixedZoneEditIntroModal, {
   FIXED_ZONE_INTRO_STORAGE_KEY,
@@ -935,25 +934,40 @@ export default function AdminPageClient() {
     })
   }, [accountGender, voiceTtsMode])
 
-  const voiceSettingsModalOpen = adminSettingsView === 'account' || adminSettingsView === 'luma'
-
   useEffect(() => {
-    if (!voiceSettingsModalOpen || voiceTtsMode !== 'preset') return
+    // Solo en el modal Luma (no en cuenta) y vía Route Handler para no encolar
+    // el guardado detrás de la generación TTS (Server Actions van en serie).
+    if (adminSettingsView !== 'luma' || voiceTtsMode !== 'preset') return
     let cancelled = false
+    const ac = new AbortController()
     setVoicePreviewError(null)
     setVoicePreviewBusy(true)
-    void ensureVoicePreviewSamples()
-      .then((r) => {
+    void fetch('/api/voice/ensure-previews', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gender: accountGender }),
+      signal: ac.signal,
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
         if (cancelled) return
-        if (!r.ok) setVoicePreviewError(r.error)
+        if (!res.ok || data.ok === false) {
+          setVoicePreviewError(data.error ?? `Error ${res.status}`)
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return
+        setVoicePreviewError('No se pudieron preparar las muestras de audio.')
       })
       .finally(() => {
         if (!cancelled) setVoicePreviewBusy(false)
       })
     return () => {
       cancelled = true
+      ac.abort()
     }
-  }, [voiceSettingsModalOpen, voiceTtsMode])
+  }, [adminSettingsView, voiceTtsMode, accountGender])
 
   const playPresetPreview = useCallback(async (voiceId: string) => {
     try {
@@ -965,17 +979,37 @@ export default function AdminPageClient() {
         previewBlobUrlRef.current = null
       }
       setVoicePreviewError(null)
-      const res = await fetch(`/api/voice/preview/${encodeURIComponent(voiceId)}`, {
-        method: 'GET',
-        credentials: 'same-origin',
-        cache: 'no-store',
-      })
+
+      const fetchPreview = () =>
+        fetch(`/api/voice/preview/${encodeURIComponent(voiceId)}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+        })
+
+      let res = await fetchPreview()
+      if (res.status === 404) {
+        const ensureRes = await fetch('/api/voice/ensure-previews', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voiceId }),
+        })
+        const ensureData = (await ensureRes.json().catch(() => ({}))) as {
+          ok?: boolean
+          error?: string
+        }
+        if (!ensureRes.ok || ensureData.ok === false) {
+          setPreviewPlayingVoiceId(null)
+          setVoicePreviewError(ensureData.error ?? 'No se pudo generar la muestra.')
+          return
+        }
+        res = await fetchPreview()
+      }
       if (!res.ok) {
         const errJson = (await res.json().catch(() => ({}))) as { error?: string }
         setPreviewPlayingVoiceId(null)
-        setVoicePreviewError(
-          errJson.error ?? (res.status === 404 ? 'Muestra aún no generada. Espera a que termine la preparación.' : `Error ${res.status}`),
-        )
+        setVoicePreviewError(errJson.error ?? `Error ${res.status}`)
         return
       }
       const blob = await res.blob()
@@ -3456,7 +3490,7 @@ export default function AdminPageClient() {
                               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                 Se muestran las 5 voces según el género de comunicación del tablero (
                                 {accountGender === 'male' ? 'masculino' : 'femenino'}). Pulsa play para escuchar la
-                                muestra generada una sola vez y guardada en el servidor.
+                                muestra; se genera una sola vez y queda guardada en el servidor.
                               </p>
                             </div>
                             {voicePreviewBusy ? (
