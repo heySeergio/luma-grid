@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 
 import { AnimatedHeader } from '@/components/landing/AnimatedSection'
@@ -26,6 +27,8 @@ function navHref(href: string) {
 }
 
 export function SiteHeader() {
+  const { status } = useSession()
+  const isAuthenticated = status === 'authenticated'
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const closeMobileNav = () => setMobileNavOpen(false)
@@ -63,12 +66,21 @@ export function SiteHeader() {
               <NavBrandTitle>Luma Grid</NavBrandTitle>
             </Link>
             <div className="flex items-center gap-2 sm:hidden">
-              <Link
-                href="/register"
-                className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
-              >
-                Crear cuenta
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  href="/tablero"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  Ir al tablero
+                </Link>
+              ) : (
+                <Link
+                  href="/register"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#FE6B45] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  Crear cuenta
+                </Link>
+              )}
               <button
                 type="button"
                 className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] bg-white text-neutral-800 shadow-sm transition hover:bg-neutral-50"
@@ -106,18 +118,29 @@ export function SiteHeader() {
           </nav>
 
           <div className="hidden shrink-0 items-center gap-2 md:flex">
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
-            >
-              Iniciar sesión
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
-            >
-              Crear cuenta
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/tablero"
+                className="inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+              >
+                Ir al tablero
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-forest shadow-sm transition hover:bg-neutral-50"
+                >
+                  Iniciar sesión
+                </Link>
+                <Link
+                  href="/register"
+                  className="inline-flex items-center justify-center rounded-full bg-[#FE6B45] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  Crear cuenta
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -148,13 +171,23 @@ export function SiteHeader() {
                     </li>
                   ))}
                   <li className="border-t border-black/[0.06]">
-                    <Link
-                      href="/login"
-                      className="block px-5 py-3.5 text-[15px] font-semibold text-neutral-800 transition hover:bg-neutral-50"
-                      onClick={closeMobileNav}
-                    >
-                      Iniciar sesión
-                    </Link>
+                    {isAuthenticated ? (
+                      <Link
+                        href="/tablero"
+                        className="block px-5 py-3.5 text-[15px] font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                        onClick={closeMobileNav}
+                      >
+                        Ir al tablero
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/login"
+                        className="block px-5 py-3.5 text-[15px] font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                        onClick={closeMobileNav}
+                      >
+                        Iniciar sesión
+                      </Link>
+                    )}
                   </li>
                 </ul>
               </div>
