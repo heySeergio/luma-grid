@@ -1446,7 +1446,6 @@ export default function AdminPageClient() {
         )
       }
 
-      exitAdminSettingsView()
       setStatus('✅ Voz y género de comunicación actualizados.')
     } catch (error) {
       console.error(error)
