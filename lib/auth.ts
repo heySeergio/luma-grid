@@ -196,6 +196,42 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   secret: getAuthSecret(),
+  // Comparte la sesión entre lumagrid.app y stats.lumagrid.app
+  ...(process.env.NODE_ENV === 'production'
+    ? {
+        cookies: {
+          sessionToken: {
+            name: `__Secure-next-auth.session-token`,
+            options: {
+              httpOnly: true,
+              sameSite: 'lax' as const,
+              path: '/',
+              secure: true,
+              domain: '.lumagrid.app',
+            },
+          },
+          callbackUrl: {
+            name: `__Secure-next-auth.callback-url`,
+            options: {
+              httpOnly: true,
+              sameSite: 'lax' as const,
+              path: '/',
+              secure: true,
+              domain: '.lumagrid.app',
+            },
+          },
+          csrfToken: {
+            name: `__Host-next-auth.csrf-token`,
+            options: {
+              httpOnly: true,
+              sameSite: 'lax' as const,
+              path: '/',
+              secure: true,
+            },
+          },
+        },
+      }
+    : {}),
   callbacks: {
     async signIn({ account, profile, user }) {
       if (account?.provider === 'credentials' || account?.provider === 'credentials-mfa' || account?.provider === 'passkey') {
@@ -338,7 +374,16 @@ export const authOptions: NextAuthOptions = {
 
       try {
         const targetUrl = new URL(url)
-        if (targetUrl.origin === baseUrl) {
+        const base = new URL(baseUrl)
+        if (targetUrl.origin === base.origin) {
+          return url
+        }
+        const isLuma =
+          targetUrl.hostname === 'lumagrid.app' ||
+          targetUrl.hostname.endsWith('.lumagrid.app')
+        const baseIsLuma =
+          base.hostname === 'lumagrid.app' || base.hostname.endsWith('.lumagrid.app')
+        if (isLuma && baseIsLuma) {
           return url
         }
       } catch {

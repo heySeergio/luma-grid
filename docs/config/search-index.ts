@@ -15,7 +15,7 @@ export const DOCS_SEARCH_INDEX: DocsSearchEntry[] = [
     title: 'Bienvenida y guía Luma Grid',
     section: 'Inicio',
     keywords:
-      'inicio bienvenida caa comunicacion aumentativa alternativa pictos tablero frase voz familia profesional animacion demo funciones principal admin arrastrar ordenar rejilla feedback cpanel',
+      'inicio bienvenida caa comunicacion aumentativa alternativa pictos tablero frase voz familia profesional animacion demo funciones principal admin arrastrar ordenar rejilla feedback stats',
   },
   {
     href: '/empieza-aqui',
@@ -71,7 +71,7 @@ export const DOCS_SEARCH_INDEX: DocsSearchEntry[] = [
     title: 'Preguntas frecuentes',
     section: 'Ayuda',
     keywords:
-      'faq duda instalar navegador pwa voz picto sugerencia ia cuenta lumagrid.app feedback contacto escribir cpanel panel cifrado tls https seguridad privacidad',
+      'faq duda instalar navegador pwa voz picto sugerencia ia cuenta lumagrid.app feedback contacto escribir stats panel cifrado tls https seguridad privacidad',
   },
   {
     href: '/changelog',

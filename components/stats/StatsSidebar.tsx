@@ -2,31 +2,39 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import BrandLockup from '@/components/site/BrandLockup'
 
 const links = [
-  { href: '/intranet', label: 'Overview', exact: true },
-  { href: '/intranet/users', label: 'Usuarios' },
-  { href: '/intranet/revenue', label: 'Ingresos' },
-  { href: '/intranet/feedback', label: 'Feedback' },
-  { href: '/intranet/waitlist', label: 'Waitlist' },
-  { href: '/intranet/analytics', label: 'Uso app' },
-  { href: '/intranet/web', label: 'Tráfico web' },
-  { href: '/intranet/system', label: 'Sistema' },
+  { href: '/stats', label: 'Overview', exact: true },
+  { href: '/stats/web', label: 'Tráfico web' },
+  { href: '/stats/revenue', label: 'Ingresos' },
+  { href: '/stats/feedback', label: 'Feedback' },
+  { href: '/stats/waitlist', label: 'Waitlist' },
 ] as const
 
-export function IntranetSidebar() {
+function publicHref(href: string): string {
+  if (typeof window === 'undefined') return href
+  const host = window.location.hostname.toLowerCase()
+  if (host === 'stats.lumagrid.app' || host.startsWith('stats.')) {
+    if (href === '/stats') return '/'
+    if (href.startsWith('/stats/')) return href.slice('/stats'.length)
+  }
+  return href
+}
+
+export function StatsSidebar() {
   const pathname = usePathname()
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-black/10 bg-white/80 px-3 py-6">
       <div className="mb-8 flex justify-center px-1">
         <BrandLockup
-          href="/intranet"
+          href={publicHref('/stats')}
           iconSize={40}
           priority
           iconClassName="rounded-none shadow-none"
-          subtitle="INTRANET"
+          subtitle="STATS"
         />
       </div>
       <nav className="flex flex-1 flex-col gap-0.5">
@@ -36,7 +44,7 @@ export function IntranetSidebar() {
           return (
             <Link
               key={href}
-              href={href}
+              href={publicHref(href)}
               className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
                   ? 'bg-[#042D22] text-white'
@@ -49,21 +57,18 @@ export function IntranetSidebar() {
         })}
       </nav>
       <div className="mt-4 flex flex-col gap-1">
-        <Link
-          href="/"
+        <a
+          href="https://lumagrid.app"
           className="rounded-xl px-3 py-2 text-xs font-medium text-[#042D22]/50 hover:text-[#042D22]"
         >
           ← Volver al sitio
-        </Link>
+        </a>
         <button
           type="button"
           className="rounded-xl px-3 py-2 text-left text-xs font-medium text-[#042D22]/50 hover:text-[#042D22]"
-          onClick={async () => {
-            await fetch('/api/intranet/logout', { method: 'POST' })
-            window.location.href = '/intranet/login'
-          }}
+          onClick={() => signOut({ callbackUrl: publicHref('/stats/login') })}
         >
-          Cerrar sesión intranet
+          Cerrar sesión
         </button>
       </div>
     </aside>

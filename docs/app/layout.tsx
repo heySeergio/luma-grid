@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://docs.lumagrid.app'),
 }
 
+function DocsUmamiScript() {
+  const websiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID?.trim()
+  const scriptUrl =
+    process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL?.trim() || 'https://cloud.umami.is/script.js'
+  if (!websiteId) return null
+  return <Script defer src={scriptUrl} data-website-id={websiteId} strategy="afterInteractive" />
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -22,6 +30,7 @@ export default function RootLayout({
         <Script id="docs-theme-init" strategy="beforeInteractive">
           {`(function(){try{var k='docs-theme';var t=localStorage.getItem(k);var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('docs-dark');}catch(e){}})();`}
         </Script>
+        <DocsUmamiScript />
         {children}
       </body>
     </html>

@@ -1,3 +1,7 @@
+function isAllowedLumaHostname(hostname: string): boolean {
+  return hostname === 'lumagrid.app' || hostname.endsWith('.lumagrid.app')
+}
+
 export function getSafeCallbackUrl(rawValue: string | null | undefined, fallback = '/tablero') {
   if (!rawValue) {
     return fallback
@@ -7,15 +11,16 @@ export function getSafeCallbackUrl(rawValue: string | null | undefined, fallback
     return rawValue
   }
 
-  if (typeof window !== 'undefined') {
-    try {
-      const url = new URL(rawValue)
-      if (url.origin === window.location.origin) {
-        return `${url.pathname}${url.search}${url.hash}`
-      }
-    } catch {
-      /* ignore malformed URLs */
+  try {
+    const url = new URL(rawValue)
+    if (typeof window !== 'undefined' && url.origin === window.location.origin) {
+      return `${url.pathname}${url.search}${url.hash}`
     }
+    if (isAllowedLumaHostname(url.hostname)) {
+      return url.toString()
+    }
+  } catch {
+    /* ignore malformed URLs */
   }
 
   return fallback
@@ -36,10 +41,13 @@ export function resolveClientSignInRedirect(
 
   try {
     const target = new URL(resUrl, window.location.origin)
-    if (target.origin !== window.location.origin) {
-      return fallback
+    if (target.origin === window.location.origin) {
+      return `${target.pathname}${target.search}${target.hash}`
     }
-    return `${target.pathname}${target.search}${target.hash}`
+    if (isAllowedLumaHostname(target.hostname)) {
+      return target.toString()
+    }
+    return fallback
   } catch {
     return fallback
   }

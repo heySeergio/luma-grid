@@ -74,9 +74,10 @@ export default function PreguntasPage() {
         <h2 id="escribenos-heading">¿Tienes alguna duda?</h2>
         <p>
           Escríbenos con el mismo formulario de <strong>feedback</strong> que usamos en la web principal: tu mensaje se
-          guarda en la base de datos de Luma Grid y quien tenga acceso al <strong>panel interno (cpanel)</strong> en{' '}
-          <Link href="https://lumagrid.app/cpanel" prefetch={false}>
-            lumagrid.app/cpanel
+          guarda en la base de datos de Luma Grid y quien tenga acceso al{' '}
+          <strong>panel de estadísticas</strong> en{' '}
+          <Link href="https://stats.lumagrid.app" prefetch={false}>
+            stats.lumagrid.app
           </Link>{' '}
           podrá leerlo y gestionarlo junto al resto de opiniones.
         </p>

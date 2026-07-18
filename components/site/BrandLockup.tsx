@@ -20,7 +20,8 @@ type BrandLockupProps = {
 }
 
 function isIntranetBadge(subtitle?: string) {
-  return subtitle?.trim().toUpperCase() === 'INTRANET'
+  const value = subtitle?.trim().toUpperCase()
+  return value === 'INTRANET' || value === 'STATS'
 }
 
 export default function BrandLockup({
@@ -33,6 +34,7 @@ export default function BrandLockup({
   iconClassName = 'rounded-none shadow-[0_2px_8px_rgba(0,0,0,0.08)]',
 }: BrandLockupProps) {
   const intranetBadge = isIntranetBadge(subtitle)
+  const badgeLabel = subtitle?.trim().toUpperCase() === 'STATS' ? 'Stats' : 'Intranet'
 
   const rowClass =
     `font-bricolage-heading flex min-w-0 items-center gap-2.5 text-base font-extrabold tracking-tight text-forest dark:text-white sm:text-lg ${className}`.trim()
@@ -56,7 +58,7 @@ export default function BrandLockup({
               aria-hidden
               className="relative top-px shrink-0 rounded-[5px] border border-[#042D22]/10 bg-[#042D22]/[0.05] px-1.5 py-px text-[0.5rem] font-bold uppercase tracking-[0.14em] text-[#042D22]/45 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/45"
             >
-              Intranet
+              {badgeLabel}
             </span>
           </div>
         ) : (

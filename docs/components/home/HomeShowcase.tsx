@@ -57,7 +57,7 @@ const cards = [
   {
     href: '/preguntas',
     title: 'Preguntas frecuentes',
-    desc: 'Respuestas cortas a lo más habitual. ¿Sigues con dudas? Escríbenos con el formulario de feedback; las respuestas se guardan y se revisan en el cpanel de Luma Grid.',
+    desc: 'Respuestas cortas a lo más habitual. ¿Sigues con dudas? Escríbenos con el formulario de feedback; las respuestas se guardan y se revisan en stats.lumagrid.app.',
     emoji: '❓',
   },
 ] as const

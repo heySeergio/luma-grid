@@ -1,12 +1,11 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { cpanelCookieName, verifyCpanelToken } from '@/lib/cpanel-auth'
+import { requireStatsAccess } from '@/lib/stats/access'
 import { prisma } from '@/lib/prisma'
 
 export async function GET() {
-  const token = (await cookies()).get(cpanelCookieName)?.value
-  if (!verifyCpanelToken(token)) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const access = await requireStatsAccess()
+  if (!access.ok) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: access.status })
   }
 
   const [feedback, waitlist] = await Promise.all([

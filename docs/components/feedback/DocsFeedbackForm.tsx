@@ -77,7 +77,7 @@ export function DocsFeedbackForm() {
         </p>
         <p className="docs-feedback-success-hint">
           Las entradas se guardan con el resto de feedback de la web y el equipo las revisa desde el panel interno (
-          <strong>cpanel</strong>) de Luma Grid.
+          <strong>stats.lumagrid.app</strong>) de Luma Grid.
         </p>
       </div>
     )
